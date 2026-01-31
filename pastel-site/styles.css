@@ -191,10 +191,29 @@ body::after {
     padding: 1rem 0;
     backdrop-filter: blur(10px);
     background: rgba(255, 255, 255, 0.95);
+    flex-wrap: nowrap;
 }
 
 body.dark-mode .side-nav {
     background: rgba(36, 36, 36, 0.95);
+}
+
+/* Scroll indicator for mobile */
+@media (max-width: 768px) {
+    .side-nav::after {
+        content: '';
+        position: absolute;
+        right: 0;
+        top: 0;
+        bottom: 0;
+        width: 40px;
+        background: linear-gradient(to left, var(--panel-bg), transparent);
+        pointer-events: none;
+    }
+    
+    body.dark-mode .side-nav::after {
+        background: linear-gradient(to left, rgba(36, 36, 36, 0.95), transparent);
+    }
 }
 
 .nav-tab {
@@ -672,18 +691,88 @@ body.dark-mode .side-nav {
         padding: 2rem 1.5rem;
     }
 
-    .nav-tab {
-        padding: 0.75rem 1rem;
-        font-size: 0.85rem;
-    }
-
+    /* Make navigation horizontally scrollable */
     .side-nav {
         padding: 0.75rem 0;
-        gap: 0;
+        gap: 0.5rem;
+        overflow-x: auto;
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none; /* Firefox */
+        justify-content: flex-start !important;
+        padding-left: 1rem;
+        padding-right: 1rem;
+        scroll-behavior: smooth;
+        position: relative;
+    }
+
+    .side-nav::-webkit-scrollbar {
+        display: none; /* Chrome, Safari */
+    }
+
+    /* Add scroll indicator gradient on right edge */
+    .side-nav::after {
+        content: '';
+        position: absolute;
+        right: 0;
+        top: 0;
+        bottom: 0;
+        width: 40px;
+        background: linear-gradient(to left, var(--panel-bg), transparent);
+        pointer-events: none;
+    }
+
+    body.dark-mode .side-nav::after {
+        background: linear-gradient(to left, rgba(36, 36, 36, 0.95), transparent);
+    }
+
+    .nav-tab {
+        padding: 0.75rem 1.25rem;
+        font-size: 0.85rem;
+        white-space: nowrap;
+        flex-shrink: 0;
+        min-width: fit-content;
     }
 
     .skills-list {
         grid-template-columns: 1fr;
+    }
+
+    .favorites-grid {
+        grid-template-columns: 1fr;
+    }
+
+    /* Adjust content page for mobile */
+    .content-page {
+        max-width: 100%;
+    }
+
+    .content-page h2 {
+        font-size: 2rem;
+    }
+
+    .content-page h3 {
+        font-size: 1.25rem;
+    }
+
+    /* Make contact links stack better */
+    .contact-links {
+        gap: 0.75rem;
+    }
+
+    .contact-link {
+        padding: 0.75rem 1rem;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.25rem;
+    }
+
+    /* Adjust dark mode toggle for mobile */
+    .dark-mode-toggle {
+        top: 15px;
+        right: 15px;
+        width: 45px;
+        height: 45px;
     }
 }
 
@@ -692,12 +781,35 @@ body.dark-mode .side-nav {
         font-size: 2rem;
     }
 
+    .hero h1::after {
+        right: -30px;
+        font-size: 1.2rem;
+    }
+
     .subtitle {
         font-size: 1rem;
     }
 
     .intro {
         font-size: 1rem;
+    }
+
+    .main-content {
+        padding: 5.5rem 1rem 2rem;
+    }
+
+    .content-page h2 {
+        font-size: 1.75rem;
+    }
+
+    .nav-tab {
+        padding: 0.65rem 1rem;
+        font-size: 0.8rem;
+    }
+
+    .side-nav {
+        padding-left: 0.5rem;
+        padding-right: 0.5rem;
     }
 }
 
