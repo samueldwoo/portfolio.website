@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Samuel Woo - Software Engineer</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Crimson+Text:ital,wght@0,400;0,600;1,400&family=Space+Mono:wght@400;700&family=Lora:ital,wght@0,400;0,600;1,400&family=Work+Sans:wght@300;400;600&family=Merriweather:ital,wght@0,300;0,400;0,700;1,400&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="dark-mode">
+    <div class="container">
+        <!-- Dark Mode Toggle -->
+        <button class="dark-mode-toggle" id="dark-mode-toggle" aria-label="Toggle dark mode">
+            <span class="toggle-icon">☀️</span>
+        </button>
+
+        <!-- Navigation -->
+        <nav class="side-nav">
+            <button class="nav-tab active" data-panel="home">Home</button>
+            <button class="nav-tab" data-panel="about">About</button>
+            <button class="nav-tab" data-panel="interests">Interests</button>
+            <button class="nav-tab" data-panel="projects">Projects</button>
+            <button class="nav-tab" data-panel="work">Work</button>
+            <button class="nav-tab" data-panel="contact">Connect</button>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content" id="main-content">
+            <header class="hero">
+                <h1>Samuel Woo</h1>
+                <p class="subtitle">human, software engineer, robotics enthusiast</p>
+            </header>
+
+            <section class="intro">
+                <p>Welcome to my corner of the internet. I write code, build robots, and think about embedded systems. Currently based in Sunnyvale, probably drinking coffee and working on something interesting.</p>
+            </section>
+        </main>
+
+        <!-- Hidden Content Templates -->
+        <template id="home-content">
+            <header class="hero">
+                <h1>Samuel Woo</h1>
+                <p class="subtitle">human, software engineer, robotics enthusiast</p>
+            </header>
+
+            <section class="intro">
+                <p>Welcome to my corner of the internet. I write code, build robots, and think about embedded systems. Currently based in Sunnyvale, probably drinking coffee and working on something interesting.</p>
+            </section>
+        </template>
+
+        <template id="about-content">
+            <div class="content-page">
+                <h2>About Me</h2>
+                <p>Hey, I'm Sam. I spend my mornings at the gym, my days building robots, and my free time on volleyball courts or trying new restaurants. I'm big on self-growth, genuine connections, and finding joy in the everyday.</p>
+                
+                <p>Born and raised in the Bay, studied electrical engineering at UCSD, now working on robotics systems at Amazon. I believe in treating everyone with respect, being intentional with my time, and constantly learning. Also a huge foodie - if you need restaurant recs, I got you.</p>
+
+                <h3>Things I Care About</h3>
+                <ul class="values-list">
+                    <li>Self-growth and intentional living</li>
+                    <li>Building genuine connections with people</li>
+                    <li>Staying active and healthy</li>
+                    <li>Good food and new experiences</li>
+                    <li>Reading and journaling</li>
+                    <li>Being disciplined and accountable</li>
+                </ul>
+
+                <h3>Currently</h3>
+                <p>Reading: <em>101 Essays That Will Change the Way You Think by Brianna Wiest</em></p>
+                <p>Listening to: <em>The Zurkie Show podcast</em></p>
+                <p>Working on: <em>Building better habits, content creation, and catching up on vlog edits</em></p>
+                <p>Thinking about: <em>How to be more intentional with my time and energy</em></p>
+            </div>
+        </template>
+
+        <template id="interests-content">
+            <div class="content-page">
+                <h2>Interests</h2>
+                
+                <div class="interest-section">
+                    <h3>Sports & Staying Active</h3>
+                    <p>Grew up playing basketball and baseball, now I'm all about volleyball and golf. I play volleyball every Monday at the work gym (easily the highlight of my week), and I've been learning golf since last year. I love that golf is all about finesse rather than pure athleticism - can't just whack the ball and expect good results.</p>
+                    <p class="interest-detail">Currently: Hitting the gym at 6am, running on Strava, and looking forward to Mondays</p>
+                </div>
+
+                <div class="interest-section">
+                    <h3>Food & Restaurants</h3>
+                    <p>Huge foodie thanks to my parents introducing me to amazing food growing up. I keep lists of restaurants to try, and when I travel, food is always at the top of my itinerary. You'll find me trying new cafes on weekends and suggesting spots from my list for dinner.</p>
+                    <p class="interest-detail">Favorite: Wolf in the Woods (SD), Double Chicken Please (NYC), Arsicault bakery, San Ho Won, Zareen's, Duc Huong</p>
+                </div>
+
+                <div class="interest-section">
+                    <h3>Content Creation & Self-Growth</h3>
+                    <p>Started making day-in-the-life vlogs as a creative outlet and way to document my journey. Between filming, editing, and voiceovers, it's taught me a ton about storytelling and discipline. Also big on reading, journaling, and using a calendar to be more intentional with my time.</p>
+                    <p class="interest-detail">Goal: Catch up on my vlog backlog and keep posting simple, authentic content</p>
+                </div>
+
+                <h3>Random Favorites</h3>
+                <div class="favorites-grid">
+                    <div class="favorite-item">
+                        <span class="favorite-label">Sport</span>
+                        <span class="favorite-value">Volleyball (Mondays!)</span>
+                    </div>
+                    <div class="favorite-item">
+                        <span class="favorite-label">Workout</span>
+                        <span class="favorite-value">Chest day</span>
+                    </div>
+                    <div class="favorite-item">
+                        <span class="favorite-label">Drink</span>
+                        <span class="favorite-value">Iced Americano</span>
+                    </div>
+                    <div class="favorite-item">
+                        <span class="favorite-label">Restaurant</span>
+                        <span class="favorite-value">Wolf in the Woods</span>
+                    </div>
+                    <div class="favorite-item">
+                        <span class="favorite-label">Podcast</span>
+                        <span class="favorite-value">The Zurkie Show</span>
+                    </div>
+                    <div class="favorite-item">
+                        <span class="favorite-label">Activity</span>
+                        <span class="favorite-value">Running & clearing my head</span>
+                    </div>
+                </div>
+            </div>
+        </template>
+
+        <template id="projects-content">
+            <div class="content-page">
+                <h2>Projects</h2>
+                
+                <p class="work-intro">Things I'm building or want to build. Some are just ideas, some are in progress.</p>
+
+                <h3>Current & Upcoming</h3>
+                
+                <div class="project-item">
+                    <h4>Restaurant Dating App (WIP)</h4>
+                    <p class="project-tech">Concept Stage • Mobile App</p>
+                    <p>A dating app that orchestrates meetups based on restaurant preferences - think Hinge meets Beli/Yelp. Match with people based on your top 3 restaurants or the spots you're dying to try next. Because the best dates happen over good food.</p>
+                    <p class="interest-detail">Potential names: Plate Date, Table for Two, Bite Match, Taste Buds, Fork & Spark, Reservd, Savory, Palate, Morsel, Craving, Simmer, Dishcover, Flavr, Biteful, Munchmate, Feastr, Savorly, Tastely</p>
+                </div>
+
+                <div class="project-item">
+                    <h4>Personal Portfolio Website</h4>
+                    <p class="project-tech">HTML/CSS/JS • In Progress</p>
+                    <p>This website! Building it as a creative outlet and to finally have a personal site. Recent work project got me into frontend dev (building a UI for a navigation orchestrator in sim), so I'm channeling that energy here.</p>
+                    <p class="interest-detail">Status: You're looking at it right now</p>
+                </div>
+
+                <div class="project-item">
+                    <h4>Personal Finance Tracker</h4>
+                    <p class="project-tech">Concept Stage • Full Stack</p>
+                    <p>A Copilot/Mint alternative that aggregates all financial accounts in one place. Parse monthly statements from banks, credit cards, Venmo, Zelle, brokerages - track money in vs. money out, auto-categorize spending (travel, dining, groceries, essentials, etc.), and actually help with budgeting.</p>
+                    <p class="interest-detail">Goal: Build something I'd actually use every day</p>
+                </div>
+
+                <h3>Past Projects</h3>
+                
+                <div class="project-item">
+                    <h4>Navigation Orchestrator UI</h4>
+                    <p class="project-tech">Frontend • Work Project</p>
+                    <p>Built a UI for controlling and visualizing robot navigation in simulation. This project sparked my interest in frontend development and led to building this portfolio site.</p>
+                </div>
+
+                <div class="project-item">
+                    <h4>IMU-based Activity Classification</h4>
+                    <p class="project-tech">Python, Keras, ROS, C++</p>
+                    <p>Trained 10+ CNNs on IMU sensor data achieving 90% accuracy. Implemented real-time classification on device in 1.5 seconds using ROS and TensorFlow Lite.</p>
+                </div>
+            </div>
+        </template>
+
+        <template id="work-content">
+            <div class="content-page">
+                <h2>Work</h2>
+                
+                <p class="work-intro">I build software. Here's the professional stuff if you're into that.</p>
+
+                <h3>What I Do</h3>
+                <p>Currently working as a Software Development Engineer at Amazon Lab126, where I focus on robotics and embedded systems. I work on quadruped robots for package delivery, building robust middleware and behavior systems in ROS2. My background includes camera systems, firmware development, and edge computing.</p>
+
+                <h3>Skills & Tools</h3>
+                <ul class="skills-list">
+                    <li>C++ / Python</li>
+                    <li>ROS2</li>
+                    <li>Behavior Trees (BT.cpp)</li>
+                    <li>Embedded Linux / Firmware</li>
+                    <li>Camera Systems</li>
+                    <li>Edge Computing</li>
+                    <li>PyTorch / Keras</li>
+                    <li>Docker / AWS EC2</li>
+                </ul>
+
+                <h3>Experience</h3>
+                <div class="experience-item">
+                    <h4>Software Development Engineer I</h4>
+                    <p class="company">Amazon Lab126</p>
+                    <p class="date">February 2024 - Present</p>
+                    <p>Working on quadruped robotics systems for package delivery. Building middleware and behavior systems using ROS2, C++, and behavior trees (BT.cpp). Developing edge software in an embedded/firmware environment with focus on reliability and performance.</p>
+                    <p>Previously improved camera system reliability by ~95% reduction in crashes and frame drops, delivered multiple enhancements reducing latency by 80ms and startup time from 1300ms to 1000ms.</p>
+                </div>
+
+                <div class="experience-item">
+                    <h4>Software Development Engineer Intern</h4>
+                    <p class="company">Amazon Lab126</p>
+                    <p class="date">June 2022 - September 2022</p>
+                    <p>Architected and trained 10+ two-branch convolutional neural networks on IMU sensor data, achieving 90% accuracy via device-collected data through Keras' functional API and scikit-learn.</p>
+                    <p>Implemented 4 models onto the device to perform real-time classification in 1.5 seconds at 90% accuracy using ROS (rospy and roscpp) and an internal API that executes .tflite models in C++.</p>
+                </div>
+
+                <div class="experience-item">
+                    <h4>ECE Department Tutor</h4>
+                    <p class="company">UC San Diego, Jacobs School of Engineering</p>
+                    <p class="date">September 2020 - June 2023</p>
+                    <p>Tutored 800+ students with homework and exam preparation over 10 academic quarters across 2 different courses. Achieved 100% recommendation rate from student surveys.</p>
+                </div>
+
+                <p style="margin-top: 2rem;"><a href="./25_Woo_Resume_Software.pdf" class="project-link" target="_blank">Download Resume</a></p>
+            </div>
+        </template>
+
+        <template id="contact-content">
+            <div class="content-page">
+                <h2>Connect</h2>
+                <p>Want to chat about robotics, food, or just say hi? I'd love to hear from you.</p>
+                
+                <h3>Find Me Online</h3>
+                <div class="contact-links">
+                    <a href="mailto:samuel.dw.woo@gmail.com" class="contact-link">
+                        <span class="link-label">Email</span>
+                        <span class="link-value">samuel.dw.woo@gmail.com</span>
+                    </a>
+                    <a href="https://linkedin.com/in/samueldwwoo" class="contact-link" target="_blank">
+                        <span class="link-label">LinkedIn</span>
+                        <span class="link-value">samueldwwoo</span>
+                    </a>
+                    <a href="https://github.com/yourusername" class="contact-link" target="_blank">
+                        <span class="link-label">GitHub</span>
+                        <span class="link-value">@yourusername</span>
+                    </a>
+                </div>
+
+                <div class="contact-form">
+                    <h3>Or Send a Message</h3>
+                    <form action="https://formspree.io/f/YOUR_FORM_ID" method="POST">
+                        <input type="text" name="name" placeholder="Your name" required>
+                        <input type="email" name="email" placeholder="Your email" required>
+                        <textarea name="message" placeholder="What's on your mind?" rows="5" required></textarea>
+                        <button type="submit">Send</button>
+                    </form>
+                </div>
+            </div>
+        </template>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

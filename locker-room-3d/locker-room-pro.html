@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Locker Room - Portfolio</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            overflow: hidden;
+            background: #000;
+            color: white;
+        }
+
+        #canvas { 
+            position: fixed; 
+            top: 0; left: 0; 
+            width: 100%; height: 100%; 
+        }
+
+        /* Loading Screen */
+        .loading-screen {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: linear-gradient(135deg, #0d0906 0%, #1a1510 50%, #0d0906 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            transition: opacity 1s ease, visibility 1s ease;
+        }
+
+        .loading-screen.hidden {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+</style>
+</head>
+<body>
+    <!-- Loading Screen -->
+    <div class="loading-screen" id="loading">
+        <div class="loading-logo">THE LOCKER ROOM</div>
+        <div class="loading-bar-container">
+            <div class="loading-bar" id="loadingBar"></div>
+        </div>
+        <div class="loading-text">Preparing Experience</div>
+        <button class="start-button" id="startBtn">Enter</button>
+    </div>
+
+    <!-- Canvas -->
+    <canvas id="canvas"></canvas>
+
+    <!-- UI Overlay -->
+    <div class="ui-overlay">
+        <div class="title" id="title">
+            <h1>YOUR NAME</h1>
+            <p>Software Engineer • Creator • Builder</p>
+        </div>
+        <div class="hint" id="hint">
+            <span class="hint-icon">◎</span>
+            Click on a locker to explore
+        </div>
+    </div>
+
+    <!-- Locker Label -->
+    <div class="locker-label" id="lockerLabel">
+        <h3 id="labelTitle">About</h3>
+        <p>Click to open</p>
+    </div>
+
+    <!-- Content Panels -->
+    <div class="panel" id="aboutPanel">
+        <button class="panel-close" onclick="closePanel()">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+        </button>
+        <div class="panel-content">
+            <div class="panel-number">01</div>
+            <h2>About</h2>
+            <div class="panel-divider"></div>
+            <p>Welcome to my digital locker room. This is where I keep the things that matter most - my story, my work, and my passions.</p>
+            <p>I'm a software engineer who believes in building things that make a difference. When I'm not coding, you'll find me on the basketball court or exploring new ideas.</p>
+        </div>
+    </div>
+
+    <div class="panel" id="interestsPanel">
+        <button class="panel-close" onclick="closePanel()">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+        </button>
+        <div class="panel-content">
+            <div class="panel-number">02</div>
+            <h2>Interests</h2>
+            <div class="panel-divider"></div>
+            <p>Basketball isn't just a sport - it's a way of thinking. The court teaches you about teamwork, strategy, and performing under pressure.</p>
+            <p>Beyond the game, I'm passionate about design, music, and the intersection of technology and creativity.</p>
+        </div>
+    </div>
+
+    <div class="panel" id="workPanel">
+        <button class="panel-close" onclick="closePanel()">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+        </button>
+        <div class="panel-content">
+            <div class="panel-number">03</div>
+            <h2>Work</h2>
+            <div class="panel-divider"></div>
+            <p>I build software that solves real problems. From scalable backend systems to intuitive user interfaces, I focus on craft and quality.</p>
+            <p>Check out my projects and see what I've been working on.</p>
+        </div>
+    </div>
+
+    <div class="panel" id="contactPanel">
+        <button class="panel-close" onclick="closePanel()">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+        </button>
+        <div class="panel-content">
+            <div class="panel-number">04</div>
+            <h2>Connect</h2>
+            <div class="panel-divider"></div>
+            <p>Let's build something together. Whether you have a project in mind or just want to chat, I'm always open to new connections.</p>
+            <div class="contact-links">
+                <a href="#" class="contact-link">GitHub →</a>
+                <a href="#" class="contact-link">LinkedIn →</a>
+                <a href="#" class="contact-link">Email →</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="locker-room-pro.js"></script>
+
+    <style>
+        .loading-logo {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: clamp(2rem, 8vw, 5rem);
+            letter-spacing: 0.3em;
+            color: #d4af37;
+            text-shadow: 0 0 60px rgba(212, 175, 55, 0.3);
+            margin-bottom: 3rem;
+        }
+
+        .loading-bar-container {
+            width: min(300px, 80vw);
+            height: 2px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 1px;
+            overflow: hidden;
+        }
+
+        .loading-bar {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #d4af37, #8b6914);
+            transition: width 0.2s ease;
+        }
+
+        .loading-text {
+            margin-top: 1.5rem;
+            font-size: 0.7rem;
+            font-weight: 300;
+            letter-spacing: 0.4em;
+            color: rgba(255,255,255,0.3);
+            text-transform: uppercase;
+        }
+
+        .start-button {
+            margin-top: 3rem;
+            padding: 1.2rem 4rem;
+            background: transparent;
+            border: 1px solid rgba(212, 175, 55, 0.5);
+            color: #d4af37;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1.2rem;
+            letter-spacing: 0.4em;
+            cursor: pointer;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(20px);
+        }
+
+        .start-button.visible {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+
+        .start-button:hover {
+            background: #d4af37;
+            color: #0d0906;
+            box-shadow: 0 0 40px rgba(212, 175, 55, 0.3);
+        }
+
+        /* UI Overlay */
+        .ui-overlay {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .title {
+            position: absolute;
+            top: 2.5rem;
+            left: 50%;
+            transform: translateX(-50%);
+            text-align: center;
+            opacity: 0;
+            transition: opacity 1.2s ease;
+        }
+
+        .title.visible { opacity: 1; }
+
+        .title h1 {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: clamp(1.5rem, 4vw, 2.5rem);
+            letter-spacing: 0.4em;
+            color: #d4af37;
+            text-shadow: 0 0 30px rgba(212, 175, 55, 0.2);
+        }
+
+        .title p {
+            font-size: 0.65rem;
+            font-weight: 300;
+            letter-spacing: 0.3em;
+            color: rgba(255,255,255,0.4);
+            margin-top: 0.5rem;
+            text-transform: uppercase;
+        }
+
+        .hint {
+            position: absolute;
+            bottom: 2.5rem;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            font-size: 0.7rem;
+            font-weight: 300;
+            letter-spacing: 0.2em;
+            color: rgba(255,255,255,0.35);
+            text-transform: uppercase;
+            opacity: 0;
+            transition: opacity 1s ease;
+        }
+
+        .hint.visible { opacity: 1; }
+
+        .hint-icon {
+            font-size: 1rem;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 0.4; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.1); }
+        }
+</style>
+
+<style>
+        /* Locker Label */
+        .locker-label {
+            position: fixed;
+            padding: 1rem 1.5rem;
+            background: rgba(13, 9, 6, 0.9);
+            border: 1px solid rgba(212, 175, 55, 0.2);
+            backdrop-filter: blur(20px);
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+            z-index: 20;
+        }
+
+        .locker-label.visible { opacity: 1; }
+
+        .locker-label h3 {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1.1rem;
+            letter-spacing: 0.3em;
+            color: #d4af37;
+        }
+
+        .locker-label p {
+            font-size: 0.6rem;
+            font-weight: 300;
+            letter-spacing: 0.2em;
+            color: rgba(255,255,255,0.4);
+            margin-top: 0.2rem;
+            text-transform: uppercase;
+        }
+
+        /* Content Panel */
+        .panel {
+            position: fixed;
+            top: 0; right: 0;
+            width: min(600px, 100%);
+            height: 100%;
+            background: linear-gradient(135deg, rgba(26, 21, 16, 0.97), rgba(13, 10, 8, 0.98));
+            backdrop-filter: blur(30px);
+            border-left: 1px solid rgba(212, 175, 55, 0.15);
+            transform: translateX(100%);
+            transition: transform 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 100;
+            overflow-y: auto;
+            pointer-events: auto;
+        }
+
+        .panel.active { transform: translateX(0); }
+
+        .panel-close {
+            position: absolute;
+            top: 2rem; right: 2rem;
+            width: 48px; height: 48px;
+            background: transparent;
+            border: 1px solid rgba(212, 175, 55, 0.2);
+            color: #d4af37;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .panel-close:hover {
+            background: rgba(212, 175, 55, 0.1);
+            border-color: rgba(212, 175, 55, 0.4);
+        }
+
+        .panel-content {
+            padding: 6rem 4rem 4rem;
+        }
+
+        .panel-number {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 4rem;
+            color: rgba(212, 175, 55, 0.15);
+            line-height: 1;
+            margin-bottom: -1rem;
+        }
+
+        .panel-content h2 {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: clamp(2rem, 5vw, 3.5rem);
+            letter-spacing: 0.2em;
+            color: #d4af37;
+            margin-bottom: 1rem;
+        }
+
+        .panel-divider {
+            width: 60px;
+            height: 1px;
+            background: linear-gradient(90deg, #d4af37, transparent);
+            margin-bottom: 2rem;
+        }
+
+        .panel-content p {
+            font-size: 1rem;
+            font-weight: 300;
+            line-height: 1.9;
+            color: rgba(255,255,255,0.7);
+            margin-bottom: 1.5rem;
+        }
+
+        .contact-links {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            margin-top: 2rem;
+        }
+
+        .contact-link {
+            display: inline-block;
+            color: #d4af37;
+            text-decoration: none;
+            font-size: 0.9rem;
+            letter-spacing: 0.1em;
+            padding: 0.8rem 0;
+            border-bottom: 1px solid rgba(212, 175, 55, 0.2);
+            transition: all 0.3s ease;
+        }
+
+        .contact-link:hover {
+            padding-left: 1rem;
+            border-color: rgba(212, 175, 55, 0.5);
+        }
+
+        @media (max-width: 768px) {
+            .panel-content { padding: 5rem 2rem 3rem; }
+            .panel-number { font-size: 3rem; }
+        }
+    </style>
+</body>
+</html>

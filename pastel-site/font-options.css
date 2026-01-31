@@ -1,0 +1,55 @@
+/* 
+   FONT OPTIONS - Copy one of these into styles.css body section
+   Current: Georgia (Classic Serif)
+*/
+
+/* OPTION 1: Georgia (Current - Classic Serif) */
+body {
+    font-family: 'Georgia', 'Times New Roman', serif;
+}
+
+/* OPTION 2: Inter (Modern Sans-Serif - Clean & Professional) */
+body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-weight: 400;
+}
+
+/* OPTION 3: Crimson Text (Elegant Serif - Book-like) */
+body {
+    font-family: 'Crimson Text', Georgia, serif;
+}
+
+/* OPTION 4: Space Mono (Monospace - Techy/Developer Vibe) */
+body {
+    font-family: 'Space Mono', 'Courier New', monospace;
+    letter-spacing: -0.02em;
+}
+
+/* OPTION 5: Lora (Warm Serif - Friendly & Readable) */
+body {
+    font-family: 'Lora', Georgia, serif;
+}
+
+/* OPTION 6: Work Sans (Modern Sans - Geometric & Clean) */
+body {
+    font-family: 'Work Sans', -apple-system, sans-serif;
+    font-weight: 400;
+}
+
+/* OPTION 7: Merriweather (Traditional Serif - Newspaper Style) */
+body {
+    font-family: 'Merriweather', Georgia, serif;
+    font-weight: 300;
+}
+
+/* OPTION 8: System Fonts (Native - Super Fast & Clean) */
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+}
+
+/* 
+   TO CHANGE FONT:
+   1. Copy the body section from your chosen option above
+   2. Replace the body font-family in styles.css (around line 38)
+   3. Refresh your browser
+*/
