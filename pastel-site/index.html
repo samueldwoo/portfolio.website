@@ -13,6 +13,10 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body class="dark-mode">
+    <!-- Floating background blobs -->
+    <div class="floating-blob blob-1"></div>
+    <div class="floating-blob blob-2"></div>
+    
     <div class="container">
         <!-- Dark Mode Toggle -->
         <button class="dark-mode-toggle" id="dark-mode-toggle" aria-label="Toggle dark mode">
@@ -32,25 +36,35 @@
         <!-- Main Content -->
         <main class="main-content" id="main-content">
             <header class="hero">
-                <h1>Samuel Woo</h1>
-                <p class="subtitle">human, software engineer, robotics enthusiast</p>
+                <h1 id="interactive-name">Samuel Woo</h1>
+                <p class="subtitle" id="rotating-subtitle">human, software engineer, robotics enthusiast</p>
             </header>
 
             <section class="intro">
                 <p>Welcome to my corner of the internet. I write code, build robots, and think about embedded systems. Currently based in Sunnyvale, probably drinking coffee and working on something interesting.</p>
             </section>
+            
+            <div class="cta-explore" data-next-section="about">
+                <span class="explore-text">Explore</span>
+                <span class="explore-arrow">↓</span>
+            </div>
         </main>
 
         <!-- Hidden Content Templates -->
         <template id="home-content">
             <header class="hero">
-                <h1>Samuel Woo</h1>
-                <p class="subtitle">human, software engineer, robotics enthusiast</p>
+                <h1 id="interactive-name">Samuel Woo</h1>
+                <p class="subtitle" id="rotating-subtitle">human, software engineer, robotics enthusiast</p>
             </header>
 
             <section class="intro">
                 <p>Welcome to my corner of the internet. I write code, build robots, and think about embedded systems. Currently based in Sunnyvale, probably drinking coffee and working on something interesting.</p>
             </section>
+            
+            <div class="cta-explore" data-next-section="about">
+                <span class="explore-text">Explore</span>
+                <span class="explore-arrow">↓</span>
+            </div>
         </template>
 
         <template id="about-content">
@@ -75,6 +89,10 @@
                 <p>Listening to: <em>The Zurkie Show podcast</em></p>
                 <p>Working on: <em>Building better habits, content creation, and catching up on vlog edits</em></p>
                 <p>Thinking about: <em>How to be more intentional with my time and energy</em></p>
+                
+                <div class="cta-explore" data-next-section="interests">
+                    <span class="explore-arrow">↓</span>
+                </div>
             </div>
         </template>
 
@@ -127,6 +145,10 @@
                         <span class="favorite-value">Running & clearing my head</span>
                     </div>
                 </div>
+                
+                <div class="cta-explore" data-next-section="projects">
+                    <span class="explore-arrow">↓</span>
+                </div>
             </div>
         </template>
 
@@ -171,6 +193,10 @@
                     <h4>IMU-based Activity Classification</h4>
                     <p class="project-tech">Python, Keras, ROS, C++</p>
                     <p>Trained 10+ CNNs on IMU sensor data achieving 90% accuracy. Implemented real-time classification on device in 1.5 seconds using ROS and TensorFlow Lite.</p>
+                </div>
+                
+                <div class="cta-explore" data-next-section="work">
+                    <span class="explore-arrow">↓</span>
                 </div>
             </div>
         </template>
@@ -221,6 +247,10 @@
                 </div>
 
                 <p style="margin-top: 2rem;"><a href="./25_Woo_Resume_Software.pdf" class="project-link" target="_blank">Download Resume</a></p>
+                
+                <div class="cta-explore" data-next-section="contact">
+                    <span class="explore-arrow">↓</span>
+                </div>
             </div>
         </template>
 
@@ -239,9 +269,9 @@
                         <span class="link-label">LinkedIn</span>
                         <span class="link-value">samueldwwoo</span>
                     </a>
-                    <a href="https://github.com/yourusername" class="contact-link" target="_blank">
+                    <a href="https://github.com/samueldwoo" class="contact-link" target="_blank">
                         <span class="link-label">GitHub</span>
-                        <span class="link-value">@yourusername</span>
+                        <span class="link-value">samueldwoo</span>
                     </a>
                 </div>
 
