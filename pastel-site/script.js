@@ -18,7 +18,7 @@ navTabs.forEach(tab => {
 });
 
 // Function to show content
-function showContent(sectionId) {
+function showContent(sectionId, animationType = 'fade') {
     // Update active tab
     navTabs.forEach(tab => tab.classList.remove('active'));
     const activeTab = document.querySelector(`[data-panel="${sectionId}"]`);
@@ -30,25 +30,63 @@ function showContent(sectionId) {
     const template = document.getElementById(`${sectionId}-content`);
     if (!template) return;
     
-    // Update content with fade effect
-    mainContent.style.opacity = '0';
-    mainContent.style.transform = 'translateY(20px)';
-    
-    setTimeout(() => {
-        mainContent.innerHTML = '';
-        const content = template.content.cloneNode(true);
-        mainContent.appendChild(content);
-        mainContent.style.opacity = '1';
-        mainContent.style.transform = 'translateY(0)';
+    if (animationType === 'slide-down') {
+        // Faster slide down animation
+        mainContent.style.transition = 'transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease';
+        mainContent.style.transform = 'translateY(100vh)';
+        mainContent.style.opacity = '0';
         
-        // Add magnetic effect to interactive elements
-        addMagneticEffects();
-    }, 300);
+        setTimeout(() => {
+            mainContent.innerHTML = '';
+            const content = template.content.cloneNode(true);
+            mainContent.appendChild(content);
+            
+            // Scroll to top of page
+            window.scrollTo(0, 0);
+            
+            // Start from above, slide down into view
+            mainContent.style.transform = 'translateY(-100vh)';
+            mainContent.style.opacity = '0';
+            
+            setTimeout(() => {
+                mainContent.style.transform = 'translateY(0)';
+                mainContent.style.opacity = '1';
+                
+                // Reset transition after animation
+                setTimeout(() => {
+                    mainContent.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
+                }, 400);
+                
+                addMagneticEffects();
+                initInteractiveElements();
+            }, 50);
+        }, 400);
+    } else {
+        // Default fade animation
+        mainContent.style.opacity = '0';
+        mainContent.style.transform = 'translateY(20px)';
+        
+        setTimeout(() => {
+            mainContent.innerHTML = '';
+            const content = template.content.cloneNode(true);
+            mainContent.appendChild(content);
+            
+            // Force reflow to restart animations
+            void mainContent.offsetWidth;
+            
+            mainContent.style.opacity = '1';
+            mainContent.style.transform = 'translateY(0)';
+            
+            // Add magnetic effect to interactive elements
+            addMagneticEffects();
+            initInteractiveElements();
+        }, 300);
+    }
 }
 
 // Add magnetic effect to links and cards
 function addMagneticEffects() {
-    const magneticElements = document.querySelectorAll('.contact-link, .skill-tag, .project-card, .work-item');
+    const magneticElements = document.querySelectorAll('.contact-link, .skills-list li');
     
     magneticElements.forEach(el => {
         el.addEventListener('mousemove', (e) => {
@@ -129,9 +167,12 @@ function animateParallax() {
     currentX += (mouseX - currentX) * 0.1;
     currentY += (mouseY - currentY) * 0.1;
     
-    const blobs = document.querySelectorAll('body::before, body::after');
-    document.body.style.setProperty('--mouse-x', `${currentX}px`);
-    document.body.style.setProperty('--mouse-y', `${currentY}px`);
+    // Move floating blobs
+    const blobs = document.querySelectorAll('.floating-blob');
+    blobs.forEach((blob, index) => {
+        const speed = (index + 1) * 0.5;
+        blob.style.transform = `translate(${currentX * speed}px, ${currentY * speed}px)`;
+    });
     
     requestAnimationFrame(animateParallax);
 }
@@ -148,3 +189,66 @@ document.addEventListener('click', (e) => {
     
     setTimeout(() => ripple.remove(), 600);
 });
+
+// Interactive name - shake on click
+function initInteractiveName() {
+    const name = document.getElementById('interactive-name');
+    if (name) {
+        name.addEventListener('click', () => {
+            name.classList.add('shake');
+            setTimeout(() => name.classList.remove('shake'), 500);
+        });
+    }
+}
+
+// Rotating subtitle
+const subtitles = [
+    'human, software engineer, robotics enthusiast',
+    'volleyball player, foodie, vlogger',
+    'gym rat, coffee drinker, Bay Area native',
+    'builder of robots, writer of code, lover of good food'
+];
+let currentSubtitleIndex = 0;
+
+function rotateSubtitle() {
+    const subtitleEl = document.getElementById('rotating-subtitle');
+    if (!subtitleEl) return;
+    
+    subtitleEl.classList.add('fade-out');
+    
+    setTimeout(() => {
+        currentSubtitleIndex = (currentSubtitleIndex + 1) % subtitles.length;
+        subtitleEl.textContent = subtitles[currentSubtitleIndex];
+        subtitleEl.classList.remove('fade-out');
+    }, 300);
+}
+
+// Start rotating subtitle every 4 seconds
+setInterval(rotateSubtitle, 4000);
+
+// CTA Explore - animate transition with slide-down
+function initCTAExplore() {
+    const ctas = document.querySelectorAll('.cta-explore');
+    ctas.forEach(cta => {
+        const nextSection = cta.getAttribute('data-next-section');
+        if (nextSection) {
+            cta.addEventListener('click', () => {
+                showContent(nextSection, 'slide-down');
+            });
+        }
+    });
+}
+
+// Initialize interactive elements on page load and content change
+function initInteractiveElements() {
+    initInteractiveName();
+    initCTAExplore();
+}
+
+// Call on page load
+document.addEventListener('DOMContentLoaded', () => {
+    initInteractiveElements();
+});
+
+// Remove the wrapper that was breaking things
+// Just call initInteractiveElements after showContent
