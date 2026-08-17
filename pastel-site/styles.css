@@ -340,15 +340,13 @@ a { color: inherit; text-decoration: none; }
 .prose p:last-child { margin-bottom: 0; }
 .prose-lead p { font-size: 1.16rem; line-height: 1.7; }
 
-/* Drop cap on the About lead paragraph */
+/* Subtle first-letter accent on the About lead paragraph — a gentle sage
+   emphasis rather than an oversized floated drop cap (reads more naturally). */
 .drop-cap::first-letter {
     font-family: var(--display);
-    font-weight: 700;
-    font-size: 3.2em;
-    line-height: .82;
-    float: left;
-    margin: 8px 14px 0 0;
-    color: var(--sage);
+    font-weight: 600;
+    font-size: 1.15em;
+    color: var(--sage-deep);
 }
 
 /* Pull quote */
@@ -693,6 +691,44 @@ a { color: inherit; text-decoration: none; }
 }
 .skills-list li:hover { border-color: var(--sage); transform: translateY(-2px); background: #dfe6d1; }
 
+/* Watchlist tickers — minimal stacked list (mono ticker + soft note) */
+.ticker-list {
+    list-style: none;
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.ticker-list li {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--line);
+}
+.ticker-list li:last-child { border-bottom: none; padding-bottom: 0; }
+.ticker-list .ticker {
+    font-family: var(--mono);
+    font-size: .82rem;
+    font-weight: 500;
+    letter-spacing: .06em;
+    color: var(--sage-deep);
+    background: var(--sage-soft);
+    border: 1px solid transparent;
+    border-radius: var(--r-sm);
+    padding: 3px 9px;
+    flex: 0 0 auto;
+    min-width: 4.5ch;
+    text-align: center;
+    transition: border-color .18s ease, background .18s ease;
+}
+a.ticker:hover { border-color: var(--sage); background: #dfe6d1; }
+.ticker-list .ticker-note {
+    font-size: .92rem;
+    color: var(--mut);
+    line-height: 1.4;
+}
+
 /* ---------- Experience timeline ---------- */
 .timeline {
     position: relative;
@@ -960,7 +996,6 @@ html.js-anim .reveal:not(.is-visible) { opacity: 0; }
 
     .favorites-grid { grid-template-columns: 1fr; }
     .exp-head { flex-direction: column; }
-    .drop-cap::first-letter { font-size: 3em; }
 }
 
 @media (max-width: 420px) {
