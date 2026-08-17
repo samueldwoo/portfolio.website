@@ -1,254 +1,335 @@
-// Get all navigation tabs
-const navTabs = document.querySelectorAll('.nav-tab');
-const mainContent = document.getElementById('main-content');
+/* ============================================================
+   Samuel Woo — portfolio interactions (light sage, top-bar nav)
+   Vanilla JS + one local dependency (anime.min.js).
+   - Scroll-spy top-bar links (IntersectionObserver)
+   - Mobile hamburger menu (aria-expanded, esc to close)
+   - Scroll-progress line under the top bar
+   - anime.js staggered reveals on scroll (falls back to CSS)
+   - Hero name entrance + signature line-draw motif
+   - Ambient drifting background shapes (pause when tab hidden)
+   - Pointer-follow spotlight on cards (rAF-throttled)
+   - Count-up kicker numerals on enter
+   - Rotating hero subtitle
+   - Smooth-scroll nav + in-page links
+   All motion guarded by prefers-reduced-motion.
+   ============================================================ */
+(function () {
+    "use strict";
 
-// Magnetic effect for nav tabs
-navTabs.forEach(tab => {
-    tab.addEventListener('mousemove', (e) => {
-        const rect = tab.getBoundingClientRect();
-        const x = e.clientX - rect.left - rect.width / 2;
-        const y = e.clientY - rect.top - rect.height / 2;
-        
-        tab.style.transform = `translate(${x * 0.2}px, ${y * 0.2}px) scale(1.05)`;
-    });
-    
-    tab.addEventListener('mouseleave', () => {
-        tab.style.transform = '';
-    });
-});
+    var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    var hasAnime = typeof window.anime === "function";
+    var animate = hasAnime && !reduceMotion;
 
-// Function to show content
-function showContent(sectionId, animationType = 'fade') {
-    // Update active tab
-    navTabs.forEach(tab => tab.classList.remove('active'));
-    const activeTab = document.querySelector(`[data-panel="${sectionId}"]`);
-    if (activeTab) {
-        activeTab.classList.add('active');
+    if (animate) document.documentElement.classList.add("js-anim");
+
+    /* ---------- Footer year ---------- */
+    var yearEl = document.getElementById("year");
+    if (yearEl) yearEl.textContent = String(new Date().getFullYear());
+
+    /* ---------- Scroll-spy: highlight active top-bar link ---------- */
+    var navLinks = Array.prototype.slice.call(document.querySelectorAll(".nav-link, .nav-cta"));
+    var sections = Array.prototype.slice.call(document.querySelectorAll(".band"));
+
+    function setActive(id) {
+        navLinks.forEach(function (link) {
+            var isActive = link.getAttribute("data-nav") === id;
+            link.classList.toggle("is-active", isActive);
+            if (isActive) {
+                link.setAttribute("aria-current", "true");
+            } else {
+                link.removeAttribute("aria-current");
+            }
+        });
     }
-    
-    // Get template content
-    const template = document.getElementById(`${sectionId}-content`);
-    if (!template) return;
-    
-    if (animationType === 'slide-down') {
-        // Faster slide down animation
-        mainContent.style.transition = 'transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease';
-        mainContent.style.transform = 'translateY(100vh)';
-        mainContent.style.opacity = '0';
-        
-        setTimeout(() => {
-            mainContent.innerHTML = '';
-            const content = template.content.cloneNode(true);
-            mainContent.appendChild(content);
-            
-            // Scroll to top of page
-            window.scrollTo(0, 0);
-            
-            // Start from above, slide down into view
-            mainContent.style.transform = 'translateY(-100vh)';
-            mainContent.style.opacity = '0';
-            
-            setTimeout(() => {
-                mainContent.style.transform = 'translateY(0)';
-                mainContent.style.opacity = '1';
-                
-                // Reset transition after animation
-                setTimeout(() => {
-                    mainContent.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
-                }, 400);
-                
-                addMagneticEffects();
-                initInteractiveElements();
-            }, 50);
-        }, 400);
+
+    if (sections.length) {
+        // Scroll-spy by PROXIMITY, not intersection ratio: a tall section yields a
+        // smaller self-relative ratio than a short one at the same scroll position,
+        // which mislabeled adjacent sections. Instead, pick the section whose top
+        // edge is closest to a reading line just below the sticky top bar.
+        var updateSpy = function () {
+            var line = (parseFloat(getComputedStyle(document.documentElement)
+                .getPropertyValue("--topbar-h")) || 68) + 24;
+            var best = sections[0].id, bestDist = Infinity;
+            sections.forEach(function (sec) {
+                var top = sec.getBoundingClientRect().top;
+                // prefer the last section whose top has passed the reading line
+                var dist = top <= line ? line - top : (top - line) * 4; // penalize sections still below
+                if (dist < bestDist) { bestDist = dist; best = sec.id; }
+            });
+            // bottom-of-page guard: if scrolled to the very bottom, force last section
+            if (window.innerHeight + window.scrollY >= document.body.scrollHeight - 2) {
+                best = sections[sections.length - 1].id;
+            }
+            setActive(best);
+        };
+        var spyScheduled = false;
+        var onScrollSpy = function () {
+            if (spyScheduled) return;
+            spyScheduled = true;
+            requestAnimationFrame(function () { spyScheduled = false; updateSpy(); });
+        };
+        window.addEventListener("scroll", onScrollSpy, { passive: true });
+        window.addEventListener("resize", onScrollSpy, { passive: true });
+        updateSpy();
+    }
+
+    /* ---------- Mobile hamburger menu ---------- */
+    var navToggle = document.getElementById("nav-toggle");
+    var navMenu = document.getElementById("nav-links");
+    function closeMenu() {
+        if (!navToggle || !navMenu) return;
+        navMenu.classList.remove("is-open");
+        navToggle.setAttribute("aria-expanded", "false");
+        navToggle.setAttribute("aria-label", "Open menu");
+    }
+    function openMenu() {
+        if (!navToggle || !navMenu) return;
+        navMenu.classList.add("is-open");
+        navToggle.setAttribute("aria-expanded", "true");
+        navToggle.setAttribute("aria-label", "Close menu");
+    }
+    if (navToggle && navMenu) {
+        navToggle.addEventListener("click", function () {
+            if (navMenu.classList.contains("is-open")) closeMenu(); else openMenu();
+        });
+        navMenu.addEventListener("click", function (e) {
+            if (e.target.closest("a")) closeMenu();
+        });
+        document.addEventListener("keydown", function (e) {
+            if (e.key === "Escape" && navMenu.classList.contains("is-open")) {
+                closeMenu();
+                navToggle.focus();
+            }
+        });
+        // Reset menu state if resized back to desktop.
+        window.matchMedia("(min-width: 761px)").addEventListener("change", function (ev) {
+            if (ev.matches) closeMenu();
+        });
+    }
+
+    /* ---------- Scroll-progress line under the top bar ---------- */
+    var progressEl = document.getElementById("scroll-progress");
+    if (progressEl && !reduceMotion) {
+        var ticking = false;
+        var updateProgress = function () {
+            var h = document.documentElement;
+            var max = h.scrollHeight - h.clientHeight;
+            var pct = max > 0 ? (h.scrollTop || window.pageYOffset) / max : 0;
+            progressEl.style.width = Math.max(0, Math.min(1, pct)) * 100 + "%";
+            ticking = false;
+        };
+        window.addEventListener("scroll", function () {
+            if (!ticking) { window.requestAnimationFrame(updateProgress); ticking = true; }
+        }, { passive: true });
+        window.addEventListener("resize", updateProgress);
+        updateProgress();
+    }
+
+    /* ---------- Smooth-scroll for nav + in-page links ---------- */
+    document.querySelectorAll('a[href^="#"]').forEach(function (link) {
+        link.addEventListener("click", function (e) {
+            var id = link.getAttribute("href");
+            if (id.length < 2) return;
+            var target = document.querySelector(id);
+            if (!target) return;
+            e.preventDefault();
+            target.scrollIntoView({
+                behavior: reduceMotion ? "auto" : "smooth",
+                block: "start"
+            });
+            target.setAttribute("tabindex", "-1");
+            target.focus({ preventScroll: true });
+        });
+    });
+
+    /* ---------- Reveals ---------- */
+    var reveals = Array.prototype.slice.call(document.querySelectorAll(".reveal"));
+
+    function showAll() {
+        reveals.forEach(function (el) { el.classList.add("is-visible"); });
+    }
+
+    if (reduceMotion || !("IntersectionObserver" in window)) {
+        showAll();
+    } else if (animate) {
+        var revObserver = new IntersectionObserver(function (entries, obs) {
+            var groups = {};
+            entries.forEach(function (entry) {
+                if (!entry.isIntersecting) return;
+                var el = entry.target;
+                obs.unobserve(el);
+                var parent = el.parentElement;
+                var key = parent ? (parent.__revId || (parent.__revId = "g" + (++showAll.__n || (showAll.__n = 1)))) : "root";
+                (groups[key] = groups[key] || []).push(el);
+            });
+            Object.keys(groups).forEach(function (k) {
+                var els = groups[k];
+                var clips = els.filter(function (e) { return e.classList.contains("reveal-clip"); });
+                var blocks = els.filter(function (e) { return !e.classList.contains("reveal-clip"); });
+                clips.forEach(function (e, i) {
+                    e.style.setProperty("--reveal-delay", (i * 90) + "ms");
+                    e.classList.add("is-visible");
+                });
+                if (blocks.length) {
+                    blocks.forEach(function (e) { e.classList.add("is-visible"); });
+                    window.anime({
+                        targets: blocks,
+                        translateY: [22, 0],
+                        opacity: [0, 1],
+                        duration: 720,
+                        delay: window.anime.stagger(80, { start: 40 }),
+                        easing: "easeOutElastic(1, .85)"
+                    });
+                }
+            });
+        }, { rootMargin: "0px 0px -8% 0px", threshold: 0.12 });
+        reveals.forEach(function (el) { revObserver.observe(el); });
     } else {
-        // Default fade animation
-        mainContent.style.opacity = '0';
-        mainContent.style.transform = 'translateY(20px)';
-        
-        setTimeout(() => {
-            mainContent.innerHTML = '';
-            const content = template.content.cloneNode(true);
-            mainContent.appendChild(content);
-            
-            // Force reflow to restart animations
-            void mainContent.offsetWidth;
-            
-            mainContent.style.opacity = '1';
-            mainContent.style.transform = 'translateY(0)';
-            
-            // Add magnetic effect to interactive elements
-            addMagneticEffects();
-            initInteractiveElements();
-        }, 300);
+        var cssObs = new IntersectionObserver(function (entries, obs) {
+            entries.forEach(function (entry) {
+                if (!entry.isIntersecting) return;
+                var el = entry.target;
+                var parent = el.parentElement;
+                var siblings = parent ? Array.prototype.slice.call(parent.querySelectorAll(":scope > .reveal")) : [el];
+                var idx = siblings.indexOf(el);
+                var delay = idx > 0 ? Math.min(idx, 8) * 80 : 0;
+                el.style.setProperty("--reveal-delay", delay + "ms");
+                el.classList.add("is-visible");
+                obs.unobserve(el);
+            });
+        }, { rootMargin: "0px 0px -8% 0px", threshold: 0.12 });
+        reveals.forEach(function (el) { cssObs.observe(el); });
     }
-}
 
-// Add magnetic effect to links and cards
-function addMagneticEffects() {
-    const magneticElements = document.querySelectorAll('.contact-link, .skills-list li');
-    
-    magneticElements.forEach(el => {
-        el.addEventListener('mousemove', (e) => {
-            const rect = el.getBoundingClientRect();
-            const x = e.clientX - rect.left - rect.width / 2;
-            const y = e.clientY - rect.top - rect.height / 2;
-            
-            el.style.transform = `translate(${x * 0.15}px, ${y * 0.15}px) scale(1.02)`;
+    /* ---------- Hero name + signature motif entrance (on load) ---------- */
+    if (animate) {
+        var heroLines = document.querySelectorAll(".hero-name .hero-line");
+        heroLines.forEach(function (line) {
+            var accent = line.querySelector(".hero-accent");
+            var host = accent || line;
+            var text = host.textContent;
+            host.textContent = "";
+            for (var i = 0; i < text.length; i++) {
+                var ch = document.createElement("span");
+                ch.className = "hero-char";
+                ch.style.display = "inline-block";
+                ch.style.willChange = "transform, opacity";
+                ch.textContent = text[i];
+                host.appendChild(ch);
+            }
         });
-        
-        el.addEventListener('mouseleave', () => {
-            el.style.transform = '';
+        window.anime({
+            targets: ".hero-name .hero-char",
+            translateY: [{ value: ["1.05em", "0em"] }],
+            opacity: [0, 1],
+            duration: 900,
+            delay: window.anime.stagger(45, { start: 220 }),
+            easing: "easeOutExpo"
         });
-    });
-}
 
-// Add click event to navigation tabs
-navTabs.forEach(tab => {
-    tab.addEventListener('click', () => {
-        const sectionId = tab.getAttribute('data-panel');
-        showContent(sectionId);
-    });
-});
-
-// Initialize magnetic effects on page load
-document.addEventListener('DOMContentLoaded', () => {
-    addMagneticEffects();
-});
-
-// Close on Escape key - show home
-document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-        showContent('home');
-    }
-});
-
-// Dark Mode Toggle
-const darkModeToggle = document.getElementById('dark-mode-toggle');
-const toggleIcon = darkModeToggle.querySelector('.toggle-icon');
-const body = document.body;
-
-// Load saved theme preference (default to dark)
-const savedTheme = localStorage.getItem('theme') || 'dark';
-if (savedTheme === 'dark') {
-    body.classList.add('dark-mode');
-    toggleIcon.textContent = '☀️';
-} else {
-    body.classList.remove('dark-mode');
-    toggleIcon.textContent = '🌙';
-}
-
-// Handle theme toggle
-darkModeToggle.addEventListener('click', () => {
-    body.classList.toggle('dark-mode');
-    
-    // Update icon
-    if (body.classList.contains('dark-mode')) {
-        toggleIcon.textContent = '☀️';
-        localStorage.setItem('theme', 'dark');
-    } else {
-        toggleIcon.textContent = '🌙';
-        localStorage.setItem('theme', 'light');
-    }
-});
-
-// Subtle parallax effect on mouse move
-let mouseX = 0;
-let mouseY = 0;
-let currentX = 0;
-let currentY = 0;
-
-document.addEventListener('mousemove', (e) => {
-    mouseX = (e.clientX / window.innerWidth - 0.5) * 20;
-    mouseY = (e.clientY / window.innerHeight - 0.5) * 20;
-});
-
-function animateParallax() {
-    currentX += (mouseX - currentX) * 0.1;
-    currentY += (mouseY - currentY) * 0.1;
-    
-    // Move floating blobs
-    const blobs = document.querySelectorAll('.floating-blob');
-    blobs.forEach((blob, index) => {
-        const speed = (index + 1) * 0.5;
-        blob.style.transform = `translate(${currentX * speed}px, ${currentY * speed}px)`;
-    });
-    
-    requestAnimationFrame(animateParallax);
-}
-
-animateParallax();
-
-// Add ripple effect on click
-document.addEventListener('click', (e) => {
-    const ripple = document.createElement('div');
-    ripple.className = 'ripple';
-    ripple.style.left = e.clientX + 'px';
-    ripple.style.top = e.clientY + 'px';
-    document.body.appendChild(ripple);
-    
-    setTimeout(() => ripple.remove(), 600);
-});
-
-// Interactive name - shake on click
-function initInteractiveName() {
-    const name = document.getElementById('interactive-name');
-    if (name) {
-        name.addEventListener('click', () => {
-            name.classList.add('shake');
-            setTimeout(() => name.classList.remove('shake'), 500);
+        var motif = document.querySelectorAll(".hero-motif .motif-draw");
+        motif.forEach(function (el) {
+            var len = 0;
+            try { len = el.getTotalLength(); } catch (e) { len = 400; }
+            el.style.strokeDasharray = len;
+            el.style.strokeDashoffset = len;
+        });
+        window.anime({
+            targets: ".hero-motif .motif-draw",
+            strokeDashoffset: [window.anime.setDashoffset, 0],
+            duration: 2200,
+            delay: window.anime.stagger(260, { start: 400 }),
+            easing: "easeInOutSine"
         });
     }
-}
 
-// Rotating subtitle
-const subtitles = [
-    'human, software engineer, robotics enthusiast',
-    'volleyball player, foodie, vlogger',
-    'gym rat, coffee drinker, Bay Area native',
-    'builder of robots, writer of code, lover of good food'
-];
-let currentSubtitleIndex = 0;
+    /* ---------- Count-up kicker numerals on enter ---------- */
+    if (animate) {
+        var kickerNums = Array.prototype.slice.call(document.querySelectorAll(".kicker-num"));
+        var numObs = new IntersectionObserver(function (entries, obs) {
+            entries.forEach(function (entry) {
+                if (!entry.isIntersecting) return;
+                var el = entry.target;
+                obs.unobserve(el);
+                var target = parseInt(el.textContent, 10);
+                if (isNaN(target)) return;
+                var pad = el.textContent.length;
+                var obj = { v: 0 };
+                window.anime({
+                    targets: obj,
+                    v: target,
+                    duration: 900,
+                    easing: "easeOutCubic",
+                    round: 1,
+                    update: function () {
+                        el.textContent = String(Math.round(obj.v)).padStart(pad, "0");
+                    }
+                });
+            });
+        }, { rootMargin: "0px 0px -20% 0px", threshold: 0.4 });
+        kickerNums.forEach(function (el) { numObs.observe(el); });
+    }
 
-function rotateSubtitle() {
-    const subtitleEl = document.getElementById('rotating-subtitle');
-    if (!subtitleEl) return;
-    
-    subtitleEl.classList.add('fade-out');
-    
-    setTimeout(() => {
-        currentSubtitleIndex = (currentSubtitleIndex + 1) % subtitles.length;
-        subtitleEl.textContent = subtitles[currentSubtitleIndex];
-        subtitleEl.classList.remove('fade-out');
-    }, 300);
-}
+    /* ---------- Pointer-follow spotlight on cards (rAF-throttled) ---------- */
+    if (!reduceMotion && window.matchMedia("(hover: hover)").matches) {
+        var spotCards = Array.prototype.slice.call(document.querySelectorAll(".card.spotlight"));
+        spotCards.forEach(function (card) {
+            var frame = null, mx = 0, my = 0;
+            card.addEventListener("mousemove", function (e) {
+                var rect = card.getBoundingClientRect();
+                mx = e.clientX - rect.left;
+                my = e.clientY - rect.top;
+                if (frame) return;
+                frame = window.requestAnimationFrame(function () {
+                    card.style.setProperty("--mx", mx + "px");
+                    card.style.setProperty("--my", my + "px");
+                    frame = null;
+                });
+            }, { passive: true });
+        });
+    }
 
-// Start rotating subtitle every 4 seconds
-setInterval(rotateSubtitle, 4000);
-
-// CTA Explore - animate transition with slide-down
-function initCTAExplore() {
-    const ctas = document.querySelectorAll('.cta-explore');
-    ctas.forEach(cta => {
-        const nextSection = cta.getAttribute('data-next-section');
-        if (nextSection) {
-            cta.addEventListener('click', () => {
-                showContent(nextSection, 'slide-down');
+    /* ---------- Ambient drifting background shapes ---------- */
+    if (animate) {
+        var bgShapes = document.querySelectorAll(".bg-shapes .bg-shape");
+        var drift = null;
+        if (bgShapes.length) {
+            drift = window.anime({
+                targets: ".bg-shapes .bg-shape",
+                translateX: function () { return [window.anime.random(-16, 16), window.anime.random(-16, 16)]; },
+                translateY: function () { return [window.anime.random(-12, 12), window.anime.random(-12, 12)]; },
+                opacity: [{ value: [0.04, 0.10] }, { value: 0.06 }],
+                duration: function () { return window.anime.random(15000, 24000); },
+                direction: "alternate",
+                loop: true,
+                easing: "easeInOutSine",
+                delay: window.anime.stagger(1400)
             });
         }
-    });
-}
+        document.addEventListener("visibilitychange", function () {
+            if (!drift) return;
+            if (document.hidden) drift.pause(); else drift.play();
+        });
+    }
 
-// Initialize interactive elements on page load and content change
-function initInteractiveElements() {
-    initInteractiveName();
-    initCTAExplore();
-}
-
-// Call on page load
-document.addEventListener('DOMContentLoaded', () => {
-    initInteractiveElements();
-});
-
-// Remove the wrapper that was breaking things
-// Just call initInteractiveElements after showContent
+    /* ---------- Rotating hero subtitle ---------- */
+    var subtitles = [
+        "human, software engineer, robotics enthusiast",
+        "volleyball player, foodie, vlogger",
+        "gym rat, coffee drinker, Bay Area native",
+        "builder of robots, writer of code, lover of good food"
+    ];
+    var subtitleEl = document.getElementById("rotating-subtitle");
+    if (subtitleEl && !reduceMotion) {
+        var idx2 = 0;
+        setInterval(function () {
+            subtitleEl.classList.add("fade-out");
+            setTimeout(function () {
+                idx2 = (idx2 + 1) % subtitles.length;
+                subtitleEl.textContent = subtitles[idx2];
+                subtitleEl.classList.remove("fade-out");
+            }, 300);
+        }, 4000);
+    }
+})();
