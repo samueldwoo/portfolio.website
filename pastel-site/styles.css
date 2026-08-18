@@ -18,7 +18,7 @@
     /* Text ramp — near-black on light */
     --ink:   #141712;
     --ink2:  #3f453a;
-    --mut:   #6b7263;   /* verified 4.58:1 on --bg */
+    --mut:   #5f6459;   /* darkened from #6b7263 for AA headroom (~5.6:1 on --bg), esp. sub-11px footer */
 
     /* Accent — sage / olive */
     --sage:      #5f7a4f;   /* links, kickers, active nav, index nums (>=4.5:1 on --bg / white) */
@@ -1217,6 +1217,13 @@ html.js-anim .reveal:not(.is-visible) { opacity: 0; }
 
     .favorites-grid { grid-template-columns: 1fr; }
     .exp-head { flex-direction: column; }
+    /* Case studies keep two columns down to here, then collapse (#7) */
+    .case-body { grid-template-columns: 1fr; gap: 28px; }
+
+    /* Comfortable 44px touch targets on mobile */
+    .explore-cue { padding-top: 10px; padding-bottom: 10px; }
+    .nav-toggle { width: 44px; height: 44px; }
+    .brand { padding: 8px 0; }
 }
 
 @media (max-width: 420px) {
