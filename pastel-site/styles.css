@@ -338,32 +338,6 @@ a { color: inherit; text-decoration: none; }
 
 .prose p { max-width: 66ch; margin-bottom: 18px; color: var(--ink2); }
 .prose p:last-child { margin-bottom: 0; }
-.prose-lead p { font-size: 1.16rem; line-height: 1.7; }
-
-/* Subtle first-letter accent on the About lead paragraph — a gentle sage
-   emphasis rather than an oversized floated drop cap (reads more naturally). */
-.drop-cap::first-letter {
-    font-family: var(--display);
-    font-weight: 600;
-    font-size: 1.15em;
-    color: var(--sage-deep);
-}
-
-/* Pull quote */
-.pull-quote {
-    margin: 44px 0;
-    padding: 8px 0 8px 28px;
-    border-left: 3px solid var(--sage);
-    max-width: 34ch;
-}
-.pull-quote p {
-    font-family: var(--display);
-    font-weight: 500;
-    font-size: clamp(1.5rem, 2.6vw, 2rem);
-    line-height: 1.22;
-    letter-spacing: -0.02em;
-    color: var(--ink);
-}
 
 /* ---------- HOME ---------- */
 .band-home {
@@ -480,61 +454,6 @@ a { color: inherit; text-decoration: none; }
     50% { transform: translateY(6px); }
 }
 
-/* ---------- About split ---------- */
-.about-split {
-    display: grid;
-    grid-template-columns: 1.1fr .9fr;
-    gap: 48px;
-    margin-top: 8px;
-}
-.currently-panel {
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: var(--r-lg);
-    padding: 26px 28px;
-    box-shadow: var(--shadow-card);
-    align-self: start;
-}
-
-/* ---------- Values list ---------- */
-.values-list {
-    list-style: none;
-    display: grid;
-    gap: 2px;
-}
-.values-list li {
-    position: relative;
-    padding: 12px 0 12px 26px;
-    border-bottom: 1px solid var(--line);
-    color: var(--ink2);
-}
-.values-list li:last-child { border-bottom: none; }
-.values-list li::before {
-    content: "→";
-    position: absolute;
-    left: 0;
-    color: var(--sage);
-}
-
-/* ---------- Currently (definition list) ---------- */
-.currently { display: grid; gap: 2px; }
-.currently-row {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 4px;
-    padding: 14px 0;
-    border-bottom: 1px solid var(--line);
-}
-.currently-row:last-child { border-bottom: none; padding-bottom: 0; }
-.currently dt {
-    font-family: var(--mono);
-    font-size: .64rem;
-    letter-spacing: .14em;
-    text-transform: uppercase;
-    color: var(--sage-deep);
-}
-.currently dd { color: var(--ink2); }
-
 /* ---------- Cards (shared) ---------- */
 .card {
     position: relative;
@@ -586,33 +505,120 @@ a { color: inherit; text-decoration: none; }
 .card p { color: var(--ink2); margin-bottom: 12px; }
 .card p:last-child { margin-bottom: 0; }
 
-/* ---------- Interests (bento) ---------- */
-.interest-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 20px;
+/* ---------- Interests (editorial, de-carded) ---------- */
+.interests-editorial {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
 }
-.interest-card:hover { transform: translateY(-5px); border-color: var(--line2); box-shadow: var(--shadow-lift); }
-.interest-feature { grid-column: 1 / -1; }
-.interest-feature .card-title { font-size: 1.7rem; }
+.interest-block { position: relative; }
 
-.interest-detail {
-    font-size: .95rem;
-    color: var(--mut);
-    margin-top: 10px;
+/* Lead block: full-width statement, oversized heading, thin sage rule under */
+.interest-block--lead {
+    padding-bottom: 40px;
+    margin-bottom: 44px;
+    border-bottom: 1px solid var(--line);
 }
-.detail-tag {
+.interest-lead-head {
+    display: flex;
+    align-items: baseline;
+    gap: 20px;
+    margin-bottom: 16px;
+}
+.interest-block--lead .interest-heading {
+    font-size: clamp(1.9rem, 3.4vw, 2.6rem);
+}
+.interest-block--lead .interest-copy {
+    font-size: 1.16rem;
+    line-height: 1.65;
+    max-width: 62ch;
+    color: var(--ink2);
+}
+
+/* Two open columns separated by a thin sage divider */
+.interest-columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: clamp(32px, 5vw, 64px);
+    position: relative;
+}
+.interest-columns::before {
+    content: "";
+    position: absolute;
+    top: 6px; bottom: 6px;
+    left: 50%;
+    width: 1px;
+    background: linear-gradient(180deg, transparent, var(--line2) 12%, var(--line2) 88%, transparent);
+    pointer-events: none;
+}
+
+.interest-index {
     display: inline-block;
     font-family: var(--mono);
-    font-size: .62rem;
-    letter-spacing: .14em;
-    text-transform: uppercase;
+    font-size: .9rem;
+    letter-spacing: .08em;
+    color: var(--sage);
+    font-variant-numeric: tabular-nums;
+    margin-bottom: 8px;
+}
+.interest-block--lead .interest-index {
+    font-size: 1.2rem;
+    margin-bottom: 0;
+    transform: translateY(-.1em);
+}
+.interest-heading {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 1.5rem;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    margin-bottom: 12px;
+}
+.interest-copy {
+    color: var(--ink2);
+    max-width: 46ch;
+}
+
+/* ---------- Bubbles (enlarged pills — restaurants + tickers rhyme) ---------- */
+.bubble-list {
+    list-style: none;
+    margin-top: 22px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+.bubble {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 46px;
+    padding: 12px 22px;
+    font-family: var(--sans);
+    font-size: 1rem;
+    font-weight: 500;
+    line-height: 1.2;
     color: var(--sage-deep);
     background: var(--sage-soft);
-    padding: 3px 9px;
+    border: 1px solid transparent;
     border-radius: var(--r-pill);
-    margin-right: 8px;
+    transition: border-color .2s ease, background .2s ease, transform .2s ease;
 }
+/* Tickers: same pill size as the restaurant bubbles, mono, with a link affordance.
+   Wrap-flow row so they sit at consistent widths (no full-column stretch). */
+.bubble.ticker {
+    gap: 10px;
+    font-family: var(--mono);
+    letter-spacing: .1em;
+}
+.bubble.ticker::after {
+    content: "↗";
+    font-size: .85em;
+    color: var(--sage);
+    opacity: .7;
+    transition: transform .2s ease, opacity .2s ease;
+}
+a.bubble:hover { border-color: var(--sage); background: #dfe6d1; transform: translateY(-2px); }
+a.bubble.ticker:hover::after { transform: translate(2px, -2px); opacity: 1; }
 
 /* ---------- Random favorites ---------- */
 .favorites-grid {
@@ -620,17 +626,19 @@ a { color: inherit; text-decoration: none; }
     grid-template-columns: repeat(3, 1fr);
     gap: 14px;
 }
+/* Tiles — bordered rounded cards. */
 .favorite-item {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
     padding: 18px 20px;
     background: var(--panel);
     border: 1px solid var(--line);
     border-radius: var(--r-sm);
-    transition: border-color .25s ease, transform .25s ease, box-shadow .25s ease;
+    box-shadow: var(--shadow-card);
+    transition: transform .25s ease, border-color .25s ease, box-shadow .25s ease;
 }
-.favorite-item:hover { border-color: var(--line2); transform: translateY(-3px); box-shadow: var(--shadow-card); }
+.favorite-item:hover { transform: translateY(-2px); border-color: var(--line2); box-shadow: var(--shadow-lift); }
 .favorite-label {
     font-family: var(--mono);
     font-size: .64rem;
@@ -640,16 +648,27 @@ a { color: inherit; text-decoration: none; }
 }
 .favorite-value { color: var(--ink); font-weight: 500; }
 
-/* ---------- Projects ---------- */
+/* ---------- Projects (asymmetric — feature dominates, two smaller stack) ---------- */
 .project-grid {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: 1.5fr 1fr;
+    grid-auto-rows: 1fr;
     gap: 20px;
 }
 .project-card { padding-top: 30px; }
 .project-card:hover { transform: translateY(-5px); border-color: var(--line2); box-shadow: var(--shadow-lift); }
-.project-feature { grid-column: 1 / -1; }
-.project-feature .card-title { font-size: 1.75rem; }
+/* Feature spans the full-height left column; the two smaller cards stack right */
+.project-feature {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: 40px 38px;
+    background: linear-gradient(160deg, var(--panel) 60%, var(--sage-soft));
+}
+.project-feature .card-title { font-size: 2rem; }
+.project-feature .project-index { font-size: 2.4rem; margin-bottom: auto; }
 .project-index {
     display: block;
     font-family: var(--mono);
@@ -660,7 +679,32 @@ a { color: inherit; text-decoration: none; }
     font-variant-numeric: tabular-nums;
 }
 .project-feature .project-index { color: var(--sage-deep); }
-.project-grid-past { grid-template-columns: repeat(2, 1fr); }
+
+/* Past projects — lighter divider-separated list, not full cards */
+.past-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    border-top: 1px solid var(--line);
+}
+.past-item {
+    display: grid;
+    grid-template-columns: minmax(0, 34ch) 1fr;
+    gap: 12px 48px;
+    padding: 26px 4px;
+    border-bottom: 1px solid var(--line);
+    transition: padding-left .25s ease;
+}
+.past-item:hover { padding-left: 14px; }
+.past-title {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 1.24rem;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    margin-bottom: 8px;
+}
+.past-desc { color: var(--ink2); max-width: 60ch; }
 .project-tech {
     font-family: var(--mono);
     font-size: .72rem;
@@ -679,55 +723,17 @@ a { color: inherit; text-decoration: none; }
 }
 .skills-list li {
     font-family: var(--mono);
-    font-size: .74rem;
+    font-size: .82rem;
     letter-spacing: .08em;
     text-transform: uppercase;
     color: var(--sage-deep);
     background: var(--sage-soft);
     border: 1px solid transparent;
     border-radius: var(--r-pill);
-    padding: 9px 16px;
+    padding: 12px 22px;
     transition: border-color .22s ease, transform .22s ease, background .22s ease;
 }
 .skills-list li:hover { border-color: var(--sage); transform: translateY(-2px); background: #dfe6d1; }
-
-/* Watchlist tickers — minimal stacked list (mono ticker + soft note) */
-.ticker-list {
-    list-style: none;
-    margin-top: 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-.ticker-list li {
-    display: flex;
-    align-items: baseline;
-    gap: 12px;
-    padding-bottom: 8px;
-    border-bottom: 1px solid var(--line);
-}
-.ticker-list li:last-child { border-bottom: none; padding-bottom: 0; }
-.ticker-list .ticker {
-    font-family: var(--mono);
-    font-size: .82rem;
-    font-weight: 500;
-    letter-spacing: .06em;
-    color: var(--sage-deep);
-    background: var(--sage-soft);
-    border: 1px solid transparent;
-    border-radius: var(--r-sm);
-    padding: 3px 9px;
-    flex: 0 0 auto;
-    min-width: 4.5ch;
-    text-align: center;
-    transition: border-color .18s ease, background .18s ease;
-}
-a.ticker:hover { border-color: var(--sage); background: #dfe6d1; }
-.ticker-list .ticker-note {
-    font-size: .92rem;
-    color: var(--mut);
-    line-height: 1.4;
-}
 
 /* ---------- Experience timeline ---------- */
 .timeline {
@@ -935,14 +941,14 @@ html.js-anim .reveal:not(.is-visible) { opacity: 0; }
 }
 
 @media (max-width: 900px) {
-    .about-split,
     .connect-split { grid-template-columns: 1fr; gap: 32px; }
-    .interest-grid { grid-template-columns: 1fr; }
-    .interest-feature { grid-column: auto; }
+    .interest-columns { grid-template-columns: 1fr; gap: 40px; }
+    .interest-columns::before { display: none; }
+    .interest-block:not(.interest-block--lead) { padding-bottom: 4px; }
     .favorites-grid { grid-template-columns: repeat(2, 1fr); }
-    .project-grid,
-    .project-grid-past { grid-template-columns: 1fr; }
-    .project-feature { grid-column: auto; }
+    .project-grid { grid-template-columns: 1fr; }
+    .project-feature { grid-row: auto; }
+    .past-item { grid-template-columns: 1fr; gap: 8px; }
     .hero-lower { grid-template-columns: 1fr; align-items: start; gap: 28px; }
     .hero-motif { display: none; }
 }
@@ -1015,6 +1021,7 @@ html.js-anim .reveal:not(.is-visible) { opacity: 0; }
     .explore-arrow, .type-caret { animation: none !important; }
     .type-caret { opacity: 1 !important; }
     .card, .nav-link, .nav-cta, .favorite-item, .skills-list li,
+    .bubble, .past-item, .interest-block,
     .contact-form input, .contact-form textarea,
     .btn-resume, .contact-form button, .nav-links { transition: none !important; }
     .card.spotlight::before { display: none !important; }
