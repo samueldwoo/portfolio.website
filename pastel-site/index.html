@@ -41,6 +41,7 @@
                 <a href="#interests" class="nav-link" data-nav="interests">Interests</a>
                 <a href="#projects" class="nav-link" data-nav="projects">Projects</a>
                 <a href="#work" class="nav-link" data-nav="work">Work</a>
+                <!-- Projects link points to the on-page teaser; the teaser links out to projects.html -->
                 <a href="#connect" class="nav-cta" data-nav="connect">Connect</a>
             </nav>
 
@@ -173,51 +174,40 @@
                 <div class="section-head">
                     <p class="kicker reveal reveal-clip"><span class="kicker-num">02</span> — Projects</p>
                     <h2 id="projects-title" class="section-title reveal reveal-clip">Projects</h2>
-                    <p class="section-intro reveal">Things I'm building, or want to build.</p>
+                    <p class="section-intro reveal">A couple I've written up, plus a few still on the bench.</p>
                 </div>
 
                 <div class="section-body">
-                    <h3 class="subhead subhead-flush reveal">Current &amp; Upcoming</h3>
                     <div class="project-grid">
-                        <article class="card project-card project-feature reveal spotlight">
+                        <a class="card project-card project-feature reveal spotlight" href="projects.html#cs-finance-title">
                             <span class="project-index" aria-hidden="true">01</span>
-                            <h4 class="card-title">Restaurant Dating App (WIP)</h4>
-                            <p class="project-tech">Concept Stage · Mobile App</p>
-                            <p>Matching people on their taste in restaurants instead of the usual profile — think Hinge meets Beli. The best first dates happen over good food anyway.</p>
-                        </article>
+                            <ul class="feature-chips" aria-hidden="true">
+                                <li>Runs 100% locally</li>
+                                <li>Multi-format parsing</li>
+                                <li>Cash-flow Sankey</li>
+                            </ul>
+                            <h4 class="card-title">Ka-ching — Finance Dashboard</h4>
+                            <p class="project-tech">Python · JavaScript</p>
+                            <p>A local Mint alternative that turns a pile of bank statements into one honest picture of where the money went — no subscriptions, no linked logins, runs entirely on my machine.</p>
+                            <span class="card-cta">Read case study <span aria-hidden="true">→</span></span>
+                        </a>
 
-                        <article class="card project-card reveal spotlight">
+                        <a class="card project-card reveal spotlight" href="projects.html#cs-site-title">
                             <span class="project-index" aria-hidden="true">02</span>
-                            <h4 class="card-title">Personal Portfolio Website</h4>
-                            <p class="project-tech">HTML/CSS/JS · In Progress</p>
-                            <p>A personal site to collect the things that don't fit on a résumé. You're looking at it.</p>
-                        </article>
+                            <h4 class="card-title">This Website</h4>
+                            <p class="project-tech">HTML/CSS/JS</p>
+                            <p>Hand-written, no framework, reduced-motion aware. You're looking at it.</p>
+                            <span class="card-cta">Read case study <span aria-hidden="true">→</span></span>
+                        </a>
 
-                        <article class="card project-card reveal spotlight">
-                            <span class="project-index" aria-hidden="true">03</span>
-                            <h4 class="card-title">Personal Finance Tracker</h4>
-                            <p class="project-tech">Concept Stage · Full Stack</p>
-                            <p>A Mint/Copilot alternative that pulls every account into one place and sorts out where the money actually went — something I'd genuinely use.</p>
-                        </article>
+                        <a class="card project-card reveal spotlight" href="projects.html">
+                            <span class="project-index" aria-hidden="true">→</span>
+                            <h4 class="card-title">See all projects</h4>
+                            <p class="project-tech">Full case studies + what's cooking</p>
+                            <p>The dating-app idea, the robot-nav UI, and the ML project that started it all.</p>
+                            <span class="card-cta">Browse all <span aria-hidden="true">→</span></span>
+                        </a>
                     </div>
-
-                    <h3 class="subhead reveal">Past Projects</h3>
-                    <ul class="past-list">
-                        <li class="past-item reveal">
-                            <div class="past-item-head">
-                                <h4 class="past-title">Navigation Orchestrator UI</h4>
-                                <p class="project-tech">Frontend · Work Project</p>
-                            </div>
-                            <p class="past-desc">Built a UI for controlling and visualizing robot navigation in simulation. This project sparked my interest in frontend development and led to building this portfolio site.</p>
-                        </li>
-                        <li class="past-item reveal">
-                            <div class="past-item-head">
-                                <h4 class="past-title">IMU-based Activity Classification</h4>
-                                <p class="project-tech">Python, Keras, ROS, C++</p>
-                            </div>
-                            <p class="past-desc">Trained 10+ CNNs on IMU sensor data achieving 90% accuracy. Implemented real-time classification on device in 1.5 seconds using ROS and TensorFlow Lite.</p>
-                        </li>
-                    </ul>
                 </div>
             </div>
         </section>

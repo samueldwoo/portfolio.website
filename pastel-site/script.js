@@ -228,7 +228,7 @@
             easing: "easeOutExpo"
         });
 
-        var motif = document.querySelectorAll(".hero-motif .motif-draw");
+        var motif = document.querySelectorAll(".hero-motif .motif-draw, .projects-motif .motif-draw");
         motif.forEach(function (el) {
             var len = 0;
             try { len = el.getTotalLength(); } catch (e) { len = 400; }
@@ -236,7 +236,7 @@
             el.style.strokeDashoffset = len;
         });
         window.anime({
-            targets: ".hero-motif .motif-draw",
+            targets: ".hero-motif .motif-draw, .projects-motif .motif-draw",
             strokeDashoffset: [window.anime.setDashoffset, 0],
             duration: 2200,
             delay: window.anime.stagger(260, { start: 400 }),

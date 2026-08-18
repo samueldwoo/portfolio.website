@@ -668,7 +668,26 @@ a.bubble.ticker:hover::after { transform: translate(2px, -2px); opacity: 1; }
     background: linear-gradient(160deg, var(--panel) 60%, var(--sage-soft));
 }
 .project-feature .card-title { font-size: 2rem; }
-.project-feature .project-index { font-size: 2.4rem; margin-bottom: auto; }
+.project-feature .project-index { font-size: 2.4rem; margin-bottom: 0; }
+/* Highlight chips fill the feature card's mid-space so it frames content, not void */
+.feature-chips {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    margin: 26px 0 auto;      /* auto-bottom pushes title to the lower edge */
+}
+.feature-chips li {
+    font-family: var(--mono);
+    font-size: .74rem;
+    letter-spacing: .06em;
+    color: var(--sage-deep);
+    padding: 7px 14px;
+    background: rgba(255,255,255,.6);
+    border: 1px solid var(--line);
+    border-radius: var(--r-pill);
+}
 .project-index {
     display: block;
     font-family: var(--mono);
@@ -713,6 +732,24 @@ a.bubble.ticker:hover::after { transform: translate(2px, -2px); opacity: 1; }
     color: var(--sage-deep);
     margin-bottom: 14px !important;
 }
+
+/* Clear "this card is clickable" action cue */
+.card-cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 16px;
+    font-family: var(--mono);
+    font-size: .74rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--sage-deep);
+    font-weight: 500;
+}
+.card-cta span { transition: transform .22s ease; }
+.project-card:hover .card-cta { color: var(--sage); }
+.project-card:hover .card-cta span { transform: translateX(4px); }
+.project-feature .card-cta { margin-top: 20px; font-size: .8rem; }
 
 /* ---------- Skills chips ---------- */
 .skills-list {
@@ -910,6 +947,169 @@ a.bubble.ticker:hover::after { transform: translate(2px, -2px); opacity: 1; }
 }
 
 /* ============================================================
+   Projects page — hero, case studies, back-link
+   ============================================================ */
+.back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--mono);
+    font-size: .72rem;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--sage-deep);
+    margin-bottom: 26px;
+    transition: gap .22s ease, color .22s ease;
+}
+.back-link:hover { gap: 14px; color: var(--sage); }
+.foot-link { color: var(--sage-deep); }
+.foot-link:hover { color: var(--sage); }
+
+/* Projects hero band — taller presence to rhyme with the home hero, with a
+   right-side motif so the negative space is shaped (not accidental dead air). */
+.band-projects-hero {
+    min-height: min(62vh, 560px);
+    display: flex;
+    align-items: center;
+    padding-top: clamp(64px, 8vw, 104px);
+    padding-bottom: clamp(56px, 7vw, 88px);
+    overflow: hidden;
+}
+.band-projects-hero .band-inner { position: relative; }
+.band-projects-hero .section-title { max-width: 16ch; }
+.band-projects-hero .section-intro { max-width: 54ch; margin-top: 4px; }
+
+/* Line-draw motif echoing the home hero, anchored right */
+.projects-motif {
+    position: absolute;
+    top: 50%;
+    right: clamp(-30px, 1vw, 20px);
+    transform: translateY(-50%);
+    width: min(38vw, 420px);
+    height: auto;
+    pointer-events: none;
+    z-index: 0;
+    opacity: .9;
+}
+.projects-motif path,
+.projects-motif circle {
+    fill: none;
+    stroke: var(--sage);
+    stroke-width: 1.4;
+    opacity: .26;
+}
+.band-projects-hero .back-link,
+.band-projects-hero .kicker,
+.band-projects-hero .section-title,
+.band-projects-hero .section-intro { position: relative; z-index: 1; }
+
+@media (max-width: 900px) {
+    .projects-motif { opacity: .5; width: min(52vw, 340px); }
+}
+@media (max-width: 640px) {
+    .projects-motif { display: none; }
+    .band-projects-hero { min-height: 0; }
+}
+
+/* Case study block */
+.case-study { border-bottom: 1px solid var(--line); }
+.case-head {
+    display: flex;
+    align-items: baseline;
+    gap: clamp(16px, 3vw, 30px);
+    margin-bottom: 30px;
+}
+.case-index {
+    font-family: var(--mono);
+    font-size: clamp(1.6rem, 3vw, 2.4rem);
+    font-weight: 500;
+    color: var(--sage);
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    flex-shrink: 0;
+}
+.case-title {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: clamp(1.8rem, 4vw, 2.9rem);
+    line-height: 1.05;
+    letter-spacing: -0.03em;
+    color: var(--ink);
+    margin-bottom: 12px;
+}
+.case-tagline {
+    font-size: 1.12rem;
+    color: var(--mut);
+    max-width: 60ch;
+    line-height: 1.6;
+}
+
+/* Meta strip: role / stack / status */
+.case-meta {
+    list-style: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 14px;
+    margin-bottom: 44px;
+    padding-bottom: 4px;
+}
+.case-meta li {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 14px 20px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--r-sm);
+    box-shadow: var(--shadow-card);
+    min-width: 0;
+}
+.case-meta-k {
+    font-family: var(--mono);
+    font-size: .62rem;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--sage-deep);
+}
+.case-meta-v { color: var(--ink); font-weight: 500; }
+
+/* Body: two-column editorial write-up */
+.case-body {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 36px clamp(40px, 6vw, 72px);
+    margin-bottom: 40px;
+}
+.case-sub {
+    font-family: var(--mono);
+    font-size: .72rem;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--sage-deep);
+    margin-bottom: 12px;
+}
+.case-block p { color: var(--ink2); max-width: 60ch; line-height: 1.7; }
+.case-tags { margin-top: 0; }
+
+/* Even project grid variant (teasers, three cards).
+   Subtle vertical stagger + alternating fills so it isn't a rigid uniform grid
+   (keeps the "no copy-paste cards" design language on the projects page too). */
+.project-grid--even {
+    grid-template-columns: repeat(3, 1fr);
+    align-items: start;
+}
+.project-grid--even .project-card { grid-column: auto; grid-row: auto; }
+.project-grid--even .project-card:nth-child(2) { margin-top: clamp(20px, 3vw, 40px); }
+.project-grid--even .project-card:nth-child(3) { margin-top: clamp(40px, 6vw, 80px); }
+.project-grid--even .project-card:nth-child(2) {
+    background: linear-gradient(165deg, var(--panel) 62%, var(--sage-soft));
+}
+@media (max-width: 900px) {
+    .project-grid--even .project-card:nth-child(2),
+    .project-grid--even .project-card:nth-child(3) { margin-top: 0; }
+}
+
+/* ============================================================
    Reveal-on-scroll
    ============================================================ */
 .reveal {
@@ -947,6 +1147,7 @@ html.js-anim .reveal:not(.is-visible) { opacity: 0; }
     .interest-block:not(.interest-block--lead) { padding-bottom: 4px; }
     .favorites-grid { grid-template-columns: repeat(2, 1fr); }
     .project-grid { grid-template-columns: 1fr; }
+    .project-grid--even { grid-template-columns: 1fr; }
     .project-feature { grid-row: auto; }
     .past-item { grid-template-columns: 1fr; gap: 8px; }
     .hero-lower { grid-template-columns: 1fr; align-items: start; gap: 28px; }

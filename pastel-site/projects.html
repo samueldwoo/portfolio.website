@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light">
+    <meta name="description" content="Projects by Samuel Woo — things I'm building, with a few write-ups on how they came together.">
+    <title>Projects — Samuel Woo</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23eceee6'/%3E%3Ctext x='16' y='23' font-family='Verdana,Geneva,sans-serif' font-size='20' font-weight='700' text-anchor='middle' fill='%235f7a4f'%3ES%3C/text%3E%3C/svg%3E">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="atmosphere" aria-hidden="true">
+        <div class="glow glow-sage"></div>
+        <div class="glow glow-olive"></div>
+    </div>
+    <a class="skip-link" href="#projects">Skip to content</a>
+
+    <!-- Sticky top navigation bar -->
+    <header class="topbar" aria-label="Primary">
+        <div class="topbar-inner">
+            <a class="brand" href="index.html#home">
+                Samuel Woo<span class="brand-dot" aria-hidden="true">.</span>
+            </a>
+
+            <nav class="nav-links" id="nav-links" aria-label="Sections">
+                <a href="index.html#interests" class="nav-link">Interests</a>
+                <a href="projects.html" class="nav-link is-active" data-nav="projects" aria-current="true">Projects</a>
+                <a href="index.html#work" class="nav-link">Work</a>
+                <a href="index.html#connect" class="nav-cta">Connect</a>
+            </nav>
+
+            <button class="nav-toggle" id="nav-toggle" aria-expanded="false" aria-controls="nav-links" aria-label="Open menu">
+                <span class="nav-toggle-bar" aria-hidden="true"></span>
+                <span class="nav-toggle-bar" aria-hidden="true"></span>
+                <span class="nav-toggle-bar" aria-hidden="true"></span>
+            </button>
+        </div>
+        <div class="scroll-progress" id="scroll-progress" aria-hidden="true"></div>
+    </header>
+
+    <main class="content">
+
+        <!-- PROJECTS HERO -->
+        <section id="projects" class="band band-projects-hero" aria-labelledby="projects-title">
+            <div class="band-inner">
+                <!-- Line-draw motif echoing the home hero — shapes the right-side space -->
+                <svg class="projects-motif" viewBox="0 0 400 300" fill="none" aria-hidden="true">
+                    <path class="motif-draw" d="M60 150 C 120 60, 200 60, 220 150 C 240 240, 320 240, 340 150" />
+                    <path class="motif-draw" d="M40 210 L 360 210" />
+                    <circle class="motif-draw" cx="220" cy="90" r="8" />
+                    <path class="motif-draw" d="M300 70 L 330 100 M330 70 L 300 100" />
+                </svg>
+                <a class="back-link reveal" href="index.html#projects">
+                    <span aria-hidden="true">←</span> Back home
+                </a>
+                <p class="kicker reveal reveal-clip">Projects</p>
+                <h1 id="projects-title" class="section-title reveal reveal-clip">Things I'm building</h1>
+                <p class="section-intro reveal">A running list of what I'm working on outside of work — some shipped, some barely past a napkin sketch. A couple have write-ups on how they came together; the rest are still cooking.</p>
+            </div>
+        </section>
+
+        <!-- CASE STUDY 01 — Finance dashboard -->
+        <section class="band case-study" aria-labelledby="cs-finance-title">
+            <div class="band-inner">
+                <div class="case-head reveal">
+                    <span class="case-index" aria-hidden="true">01</span>
+                    <div class="case-head-main">
+                        <h2 id="cs-finance-title" class="case-title">Ka-ching — Personal Finance Dashboard</h2>
+                        <p class="case-tagline">A local Mint/Monarch alternative that turns a pile of bank statements into one honest picture of where the money went.</p>
+                    </div>
+                </div>
+
+                <ul class="case-meta reveal">
+                    <li><span class="case-meta-k">Role</span><span class="case-meta-v">Solo — design &amp; build</span></li>
+                    <li><span class="case-meta-k">Stack</span><span class="case-meta-v">Python · Vanilla JS · HTML/CSS</span></li>
+                    <li><span class="case-meta-k">Status</span><span class="case-meta-v">Working &amp; in daily use</span></li>
+                </ul>
+
+                <div class="case-body">
+                    <div class="case-block reveal">
+                        <h3 class="case-sub">Why I built it</h3>
+                        <p>Mint shut down, the alternatives all want a subscription and a linked login to every account I own, and none of them ever categorized my spending the way I actually think about it. I wanted the full picture — cash flow, trends, trips, a budget that talks to my auto-invest plan — without handing my credentials to anyone. So I built it to run entirely on my own machine.</p>
+                    </div>
+
+                    <div class="case-block reveal">
+                        <h3 class="case-sub">How it works</h3>
+                        <p>You drop statements into a folder and it figures out the rest. Content-detected parsers read Chase checking, Chase Sapphire Preferred, Capital One Venture X, and Venmo, and normalize all of them into one ledger — so a coffee is a coffee whether it came from a PDF, a CSV, or an OFX export. Every transaction gets categorized by a rules engine I can teach, and the dashboard renders spending, a cash-flow Sankey, trends, per-trip breakdowns, and a coupled budget + auto-invest planner.</p>
+                    </div>
+
+                    <div class="case-block reveal">
+                        <h3 class="case-sub">The part I'm proud of</h3>
+                        <p>The parsing. Bank statements are gloriously inconsistent, and getting a PDF, a CSV, and an OFX file to agree on what a transaction <em>is</em> took more care than the whole front end. It content-detects the source instead of trusting file names, falls back through a few PDF extractors when the nice one isn't installed, and has a reconcile step that catches when an import double-counts. It's the least glamorous part and the reason I actually trust the numbers.</p>
+                    </div>
+
+                    <div class="case-block reveal">
+                        <h3 class="case-sub">What I'd do next</h3>
+                        <p>More parsers, mostly — every new account is a new statement format to teach it. And I keep eyeing a proper import-review UI so adding a new bank doesn't mean reading my own code six months later.</p>
+                    </div>
+                </div>
+
+                <ul class="bubble-list case-tags reveal" aria-label="Highlights">
+                    <li class="bubble">Runs 100% locally</li>
+                    <li class="bubble">Multi-format parsing</li>
+                    <li class="bubble">Cash-flow Sankey</li>
+                    <li class="bubble">Budget + auto-invest</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- CASE STUDY 02 — Portfolio site -->
+        <section class="band case-study" aria-labelledby="cs-site-title">
+            <div class="band-inner">
+                <div class="case-head reveal">
+                    <span class="case-index" aria-hidden="true">02</span>
+                    <div class="case-head-main">
+                        <h2 id="cs-site-title" class="case-title">This Website</h2>
+                        <p class="case-tagline">A personal site for the stuff that doesn't fit on a résumé — and an excuse to actually enjoy front-end for once.</p>
+                    </div>
+                </div>
+
+                <ul class="case-meta reveal">
+                    <li><span class="case-meta-k">Role</span><span class="case-meta-v">Solo — design &amp; build</span></li>
+                    <li><span class="case-meta-k">Stack</span><span class="case-meta-v">Hand-written HTML · CSS · JS</span></li>
+                    <li><span class="case-meta-k">Status</span><span class="case-meta-v">Live — you're on it</span></li>
+                </ul>
+
+                <div class="case-body">
+                    <div class="case-block reveal">
+                        <h3 class="case-sub">Why I built it</h3>
+                        <p>Most of my day is spent deep in robotics middleware where nobody sees the interface. A UI I built for visualizing robot navigation reminded me how much I like the front-end side of things, so I wanted a small space that was entirely mine to design — no framework, no product manager, no ticket.</p>
+                    </div>
+
+                    <div class="case-block reveal">
+                        <h3 class="case-sub">How it's built</h3>
+                        <p>Deliberately from scratch. No React, no build step, no component library — just hand-written HTML, CSS, and a single small JS file, with one vendored animation library. I wanted to actually understand every line rather than lean on a starter template, so the whole thing is a few files you could read in a sitting.</p>
+                    </div>
+
+                    <div class="case-block reveal">
+                        <h3 class="case-sub">The details I cared about</h3>
+                        <p>The motion is all there to serve the content, not show off — scroll reveals, a signature line-draw in the hero, a soft spotlight that tracks your cursor — and every bit of it is switched off cleanly when a visitor prefers reduced motion. I held it to real accessibility standards: keyboard-navigable, AA color contrast, focus states you can actually see. The look leans on a calm sage palette because I wanted it to feel like a gallery, not a landing page.</p>
+                    </div>
+
+                    <div class="case-block reveal">
+                        <h3 class="case-sub">What I'd do next</h3>
+                        <p>Keep it alive. It's the kind of project that's never really finished — a new section here, a nicer transition there, whenever I've got a free evening and an idea.</p>
+                    </div>
+                </div>
+
+                <ul class="bubble-list case-tags reveal" aria-label="Highlights">
+                    <li class="bubble">No framework</li>
+                    <li class="bubble">Reduced-motion aware</li>
+                    <li class="bubble">WCAG AA contrast</li>
+                    <li class="bubble">Hand-written CSS</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- STILL COOKING (teasers) -->
+        <section class="band" aria-labelledby="cooking-title">
+            <div class="band-inner">
+                <div class="section-head">
+                    <p class="kicker reveal reveal-clip">Also on the bench</p>
+                    <h2 id="cooking-title" class="section-title reveal reveal-clip">Still cooking</h2>
+                    <p class="section-intro reveal">Ideas I'm poking at. No write-ups yet — check back.</p>
+                </div>
+
+                <div class="section-body">
+                    <div class="project-grid project-grid--even">
+                        <article class="card project-card reveal spotlight">
+                            <span class="project-index" aria-hidden="true">03</span>
+                            <h3 class="card-title">Restaurant Dating App</h3>
+                            <p class="project-tech">Concept · Mobile App</p>
+                            <p>Matching people on their taste in restaurants instead of the usual profile — think Hinge meets Beli. The best first dates happen over good food anyway.</p>
+                        </article>
+
+                        <article class="card project-card reveal spotlight">
+                            <span class="project-index" aria-hidden="true">04</span>
+                            <h3 class="card-title">Navigation Orchestrator UI</h3>
+                            <p class="project-tech">Frontend · Work Project</p>
+                            <p>A UI for controlling and visualizing robot navigation in simulation. The project that reminded me I actually like front-end — and the reason this site exists.</p>
+                        </article>
+
+                        <article class="card project-card reveal spotlight">
+                            <span class="project-index" aria-hidden="true">05</span>
+                            <h3 class="card-title">IMU Activity Classification</h3>
+                            <p class="project-tech">Python · Keras · ROS · C++</p>
+                            <p>Trained 10+ CNNs on IMU sensor data to 90% accuracy, then ran real-time classification on-device in about a second and a half. My first taste of ML on real hardware.</p>
+                        </article>
+                    </div>
+                </div>
+
+                <footer class="site-foot">
+                    <span>© <span id="year">2026</span> Samuel Woo</span>
+                    <span><a href="index.html#home" class="foot-link">Back home ↗</a></span>
+                </footer>
+            </div>
+        </section>
+    </main>
+
+    <script src="anime.min.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
