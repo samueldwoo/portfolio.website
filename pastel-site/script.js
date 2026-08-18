@@ -315,10 +315,7 @@
 
     /* ---------- Rotating hero subtitle ---------- */
     var subtitles = [
-        "human, software engineer, robotics enthusiast",
-        "volleyball player, foodie, vlogger",
-        "gym rat, coffee drinker, Bay Area native",
-        "builder of robots, writer of code, lover of good food"
+        "software engineer, part-time robot wrangler"
     ];
     var subtitleEl = document.getElementById("rotating-subtitle");
     if (subtitleEl && !reduceMotion) {
