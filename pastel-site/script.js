@@ -80,12 +80,14 @@
     function closeMenu() {
         if (!navToggle || !navMenu) return;
         navMenu.classList.remove("is-open");
+        document.body.classList.remove("nav-open");
         navToggle.setAttribute("aria-expanded", "false");
         navToggle.setAttribute("aria-label", "Open menu");
     }
     function openMenu() {
         if (!navToggle || !navMenu) return;
         navMenu.classList.add("is-open");
+        document.body.classList.add("nav-open");
         navToggle.setAttribute("aria-expanded", "true");
         navToggle.setAttribute("aria-label", "Close menu");
     }

@@ -1162,15 +1162,14 @@ html.js-anim .reveal:not(.is-visible) { opacity: 0; }
         position: fixed;
         top: var(--topbar-h);
         left: 0; right: 0;
+        z-index: 210;              /* above hero content; topbar is 200 */
         flex-direction: column;
         align-items: stretch;
         gap: 4px;
         padding: 14px clamp(20px, 5vw, 32px) 22px;
-        background: rgba(245,246,242,.97);
-        -webkit-backdrop-filter: blur(14px);
-                backdrop-filter: blur(14px);
-        border-bottom: 1px solid var(--line);
-        box-shadow: var(--shadow-card);
+        background: var(--bg);     /* solid — was rgba(...,.97); hero text ghosted through */
+        border-bottom: 1px solid var(--line2);
+        box-shadow: var(--shadow-lift);
         transform: translateY(-12px);
         opacity: 0;
         visibility: hidden;
@@ -1183,6 +1182,21 @@ html.js-anim .reveal:not(.is-visible) { opacity: 0; }
         visibility: visible;
         pointer-events: auto;
     }
+    /* Scrim behind the open panel so it reads as a distinct surface over content */
+    .nav-links.is-open::before {
+        content: "";
+        position: fixed;
+        left: 0; right: 0;
+        top: 100%;
+        height: 100vh;
+        background: rgba(20, 23, 18, .28);
+        -webkit-backdrop-filter: blur(2px);
+                backdrop-filter: blur(2px);
+        z-index: -1;
+        pointer-events: none;
+    }
+    /* Lock body scroll while the mobile menu is open */
+    body.nav-open { overflow: hidden; }
     .nav-link, .nav-cta {
         font-size: .82rem;
         padding: 14px 12px;
