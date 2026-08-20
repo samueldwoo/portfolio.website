@@ -201,7 +201,13 @@ import HeroCanvas from '../components/HeroCanvas.tsx';
         </section>
 
         <!-- WORK -->
-        <section id="work" class="band" aria-labelledby="work-title">
+        <!-- The one inverted band on the site. `#work` is the substantive middle
+             of the scroll, so making it a dark plate gives the page a centre of
+             gravity and turns the light sections above and below into a
+             deliberate frame rather than an unbroken sheet. All the colour
+             inversion lives in `.band--dark` in styles.css (local custom-property
+             overrides — no filters), so the content markup is untouched. -->
+        <section id="work" class="band band--dark" aria-labelledby="work-title">
             <div class="band-inner">
                 <div class="section-head">
                     <p class="kicker reveal reveal-clip"><span class="kicker-num">03</span> — Work</p>
