@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light">
+    <meta name="description" content="Places Samuel Woo has traveled — a wall of boarding passes.">
+    <title>Travel — Samuel Woo</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23eceee6'/%3E%3Ctext x='16' y='23' font-family='Verdana,Geneva,sans-serif' font-size='20' font-weight='700' text-anchor='middle' fill='%235f7a4f'%3ES%3C/text%3E%3C/svg%3E">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <!-- Airline-wordmark approximations: script (Alaska/Hawaiian), condensed grotesk (Korean/Air Canada/Zip), geometric sans weights cover the rest -->
+    <link href="https://fonts.googleapis.com/css2?family=Kaushan+Script&family=Oswald:wght@500;600;700&family=Archivo:wght@600;700;800&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="atmosphere" aria-hidden="true">
+        <div class="glow glow-sage"></div>
+        <div class="glow glow-olive"></div>
+    </div>
+
+    <a class="skip-link" href="#travel">Skip to content</a>
+
+    <!-- Sticky top navigation bar -->
+    <header class="topbar" aria-label="Primary">
+        <div class="topbar-inner">
+            <a class="brand" href="index.html#home">
+                Samuel Woo<span class="brand-dot" aria-hidden="true">.</span>
+            </a>
+
+            <nav class="nav-links" id="nav-links" aria-label="Sections">
+                <a href="index.html#interests" class="nav-link">Interests</a>
+                <a href="projects.html" class="nav-link">Projects</a>
+                <a href="travel.html" class="nav-link is-active" aria-current="true">Travel</a>
+                <a href="index.html#work" class="nav-link">Work</a>
+                <a href="index.html#connect" class="nav-cta">Connect</a>
+            </nav>
+
+            <button class="nav-toggle" id="nav-toggle" aria-expanded="false" aria-controls="nav-links" aria-label="Open menu">
+                <span class="nav-toggle-bar" aria-hidden="true"></span>
+                <span class="nav-toggle-bar" aria-hidden="true"></span>
+                <span class="nav-toggle-bar" aria-hidden="true"></span>
+            </button>
+        </div>
+        <div class="scroll-progress" id="scroll-progress" aria-hidden="true"></div>
+    </header>
+
+    <main class="content">
+
+        <!-- TRAVEL HERO -->
+        <section id="travel" class="band band-travel-hero" aria-labelledby="travel-title">
+            <div class="band-inner">
+                <a class="back-link reveal" href="index.html#home">
+                    <span aria-hidden="true">←</span> Back home
+                </a>
+                <p class="kicker reveal reveal-clip">Travel</p>
+                <h1 id="travel-title" class="section-title reveal reveal-clip">Where I've been</h1>
+                <p class="section-intro reveal">I plan trips around meals and mostly regret nothing. Every stub below is a real one — pulled straight from the places my card statements say I actually went.</p>
+            </div>
+        </section>
+
+        <!-- BOARDING PASS WALL -->
+        <section class="band band-flush-top" aria-label="Boarding passes">
+            <div class="band-inner">
+                <div class="pass-wall">
+
+                    <!-- 01 Tokyo -->
+                    <article class="pass pass--zipair reveal">
+                        <div class="pass-main">
+                            <div class="pass-head">
+                                <span class="pass-logoband"><img class="pass-logo pass-logo--white" src="assets/airlines/zipair-t-c.png" alt="Zip Air"></span>
+                                <span class="pass-date"><span class="pass-k">Date</span>Sep 2025</span>
+                            </div>
+                            <div class="pass-cities"><span>San Jose</span><span>Tokyo</span></div>
+                            <div class="pass-route">
+                                <span class="pass-code">SJC</span>
+                                <svg class="pass-plane" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12h16m0 0l-4-4m4 4l-4 4M20 6v12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                <span class="pass-code">NRT</span>
+                            </div>
+                            <div class="pass-foot">
+                                <span class="pass-dest"><span class="pass-k">Destination</span><span class="pass-destv">Japan</span></span>
+                                <span class="pass-spent"><span class="pass-k">Spent on</span><span class="pass-v">Travel</span></span>
+                            </div>
+                        </div>
+                        <div class="pass-stub" aria-hidden="true">
+                            <span class="pass-idx">01</span>
+                            <span class="pass-barcode"></span>
+                        </div>
+                    </article>
+
+                    <!-- 02 Seoul -->
+                    <article class="pass pass--korean reveal">
+                        <div class="pass-main">
+                            <div class="pass-head">
+                                <span class="pass-logoband"><img class="pass-logo pass-logo--white" src="assets/airlines/korean-c.png" alt="Korean Air"></span>
+                                <span class="pass-date"><span class="pass-k">Date</span>Sep 2025</span>
+                            </div>
+                            <div class="pass-cities"><span>Osaka</span><span>Seoul</span></div>
+                            <div class="pass-route">
+                                <span class="pass-code">KIX</span>
+                                <svg class="pass-plane" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12h16m0 0l-4-4m4 4l-4 4M20 6v12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                <span class="pass-code">ICN</span>
+                            </div>
+                            <div class="pass-foot">
+                                <span class="pass-dest"><span class="pass-k">Destination</span><span class="pass-destv">Korea</span></span>
+                                <span class="pass-spent"><span class="pass-k">Spent on</span><span class="pass-v">Travel</span></span>
+                            </div>
+                        </div>
+                        <div class="pass-stub" aria-hidden="true">
+                            <span class="pass-idx">02</span>
+                            <span class="pass-barcode"></span>
+                        </div>
+                    </article>
+
+                    <!-- 03 Mexico City -->
+                    <article class="pass pass--aeromexico reveal">
+                        <div class="pass-main">
+                            <div class="pass-head">
+                                <span class="pass-logoband"><img class="pass-logo pass-logo--white" src="assets/airlines/aeromexico-c.png" alt="Aeroméxico"></span>
+                                <span class="pass-date"><span class="pass-k">Date</span>Apr 2026</span>
+                            </div>
+                            <div class="pass-cities"><span>San Jose</span><span>Mexico City</span></div>
+                            <div class="pass-route">
+                                <span class="pass-code">SJC</span>
+                                <svg class="pass-plane" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12h16m0 0l-4-4m4 4l-4 4M20 6v12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                <span class="pass-code">MEX</span>
+                            </div>
+                            <div class="pass-foot">
+                                <span class="pass-dest"><span class="pass-k">Destination</span><span class="pass-destv">Mexico</span></span>
+                                <span class="pass-spent"><span class="pass-k">Spent on</span><span class="pass-v">Dining</span></span>
+                            </div>
+                        </div>
+                        <div class="pass-stub" aria-hidden="true">
+                            <span class="pass-idx">03</span>
+                            <span class="pass-barcode"></span>
+                        </div>
+                    </article>
+
+                    <!-- 04 Hawaii -->
+                    <article class="pass pass--hawaiian reveal">
+                        <div class="pass-main">
+                            <div class="pass-head">
+                                <span class="pass-logoband"><img class="pass-logo pass-logo--white" src="assets/airlines/hawaiian-t-c.png" alt="Hawaiian Airlines"></span>
+                                <span class="pass-date"><span class="pass-k">Date</span>May 2026</span>
+                            </div>
+                            <div class="pass-cities"><span>San Jose</span><span>Honolulu</span></div>
+                            <div class="pass-route">
+                                <span class="pass-code">SJC</span>
+                                <svg class="pass-plane" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12h16m0 0l-4-4m4 4l-4 4M20 6v12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                <span class="pass-code">HNL</span>
+                            </div>
+                            <div class="pass-foot">
+                                <span class="pass-dest"><span class="pass-k">Destination</span><span class="pass-destv">Hawaii</span></span>
+                                <span class="pass-spent"><span class="pass-k">Spent on</span><span class="pass-v">Travel</span></span>
+                            </div>
+                        </div>
+                        <div class="pass-stub" aria-hidden="true">
+                            <span class="pass-idx">04</span>
+                            <span class="pass-barcode"></span>
+                        </div>
+                    </article>
+
+                    <!-- 05 New York -->
+                    <article class="pass pass--jetblue reveal">
+                        <div class="pass-main">
+                            <div class="pass-head">
+                                <span class="pass-logoband"><img class="pass-logo pass-logo--white" src="assets/airlines/jetblue-c.png" alt="JetBlue"></span>
+                                <span class="pass-date"><span class="pass-k">Date</span>Oct 2025</span>
+                            </div>
+                            <div class="pass-cities"><span>San Jose</span><span>New York</span></div>
+                            <div class="pass-route">
+                                <span class="pass-code">SJC</span>
+                                <svg class="pass-plane" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12h16m0 0l-4-4m4 4l-4 4M20 6v12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                <span class="pass-code">JFK</span>
+                            </div>
+                            <div class="pass-foot">
+                                <span class="pass-dest"><span class="pass-k">Destination</span><span class="pass-destv">New York</span></span>
+                                <span class="pass-spent"><span class="pass-k">Spent on</span><span class="pass-v">Dining</span></span>
+                            </div>
+                        </div>
+                        <div class="pass-stub" aria-hidden="true">
+                            <span class="pass-idx">05</span>
+                            <span class="pass-barcode"></span>
+                        </div>
+                    </article>
+
+                    <!-- 06 Vancouver -->
+                    <article class="pass pass--aircanada reveal">
+                        <div class="pass-main">
+                            <div class="pass-head">
+                                <span class="pass-logoband"><img class="pass-logo pass-logo--white" src="assets/airlines/aircanada-t-c.png" alt="Air Canada"></span>
+                                <span class="pass-date"><span class="pass-k">Date</span>Jul 2026</span>
+                            </div>
+                            <div class="pass-cities"><span>San Jose</span><span>Vancouver</span></div>
+                            <div class="pass-route">
+                                <span class="pass-code">SJC</span>
+                                <svg class="pass-plane" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12h16m0 0l-4-4m4 4l-4 4M20 6v12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                <span class="pass-code">YVR</span>
+                            </div>
+                            <div class="pass-foot">
+                                <span class="pass-dest"><span class="pass-k">Destination</span><span class="pass-destv">Canada</span></span>
+                                <span class="pass-spent"><span class="pass-k">Spent on</span><span class="pass-v">Dining</span></span>
+                            </div>
+                        </div>
+                        <div class="pass-stub" aria-hidden="true">
+                            <span class="pass-idx">06</span>
+                            <span class="pass-barcode"></span>
+                        </div>
+                    </article>
+
+                    <!-- 07 Seattle -->
+                    <article class="pass pass--alaska reveal">
+                        <div class="pass-main">
+                            <div class="pass-head">
+                                <span class="pass-logoband"><img class="pass-logo pass-logo--white" src="assets/airlines/alaska-c.png" alt="Alaska Airlines"></span>
+                                <span class="pass-date"><span class="pass-k">Date</span>Jun 2026</span>
+                            </div>
+                            <div class="pass-cities"><span>San Jose</span><span>Seattle</span></div>
+                            <div class="pass-route">
+                                <span class="pass-code">SJC</span>
+                                <svg class="pass-plane" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12h16m0 0l-4-4m4 4l-4 4M20 6v12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                <span class="pass-code">SEA</span>
+                            </div>
+                            <div class="pass-foot">
+                                <span class="pass-dest"><span class="pass-k">Destination</span><span class="pass-destv">Seattle</span></span>
+                                <span class="pass-spent"><span class="pass-k">Spent on</span><span class="pass-v">Travel</span></span>
+                            </div>
+                        </div>
+                        <div class="pass-stub" aria-hidden="true">
+                            <span class="pass-idx">07</span>
+                            <span class="pass-barcode"></span>
+                        </div>
+                    </article>
+
+                    <!-- 08 Detroit -->
+                    <article class="pass pass--alaska reveal">
+                        <div class="pass-main">
+                            <div class="pass-head">
+                                <span class="pass-logoband"><img class="pass-logo pass-logo--white" src="assets/airlines/alaska-c.png" alt="Alaska Airlines"></span>
+                                <span class="pass-date"><span class="pass-k">Date</span>Jul 2026</span>
+                            </div>
+                            <div class="pass-cities"><span>San Jose</span><span>Detroit</span></div>
+                            <div class="pass-route">
+                                <span class="pass-code">SJC</span>
+                                <svg class="pass-plane" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12h16m0 0l-4-4m4 4l-4 4M20 6v12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                <span class="pass-code">DTW</span>
+                            </div>
+                            <div class="pass-foot">
+                                <span class="pass-dest"><span class="pass-k">Destination</span><span class="pass-destv">Detroit</span></span>
+                                <span class="pass-spent"><span class="pass-k">Spent on</span><span class="pass-v">Travel</span></span>
+                            </div>
+                        </div>
+                        <div class="pass-stub" aria-hidden="true">
+                            <span class="pass-idx">08</span>
+                            <span class="pass-barcode"></span>
+                        </div>
+                    </article>
+
+                    <!-- 09 San Diego (May 2026) -->
+                    <article class="pass pass--frontier reveal">
+                        <div class="pass-main">
+                            <div class="pass-head">
+                                <span class="pass-logoband"><img class="pass-logo pass-logo--white" src="assets/airlines/frontier-c.png" alt="Frontier Airlines"></span>
+                                <span class="pass-date"><span class="pass-k">Date</span>May 2026</span>
+                            </div>
+                            <div class="pass-cities"><span>San Jose</span><span>San Diego</span></div>
+                            <div class="pass-route">
+                                <span class="pass-code">SJC</span>
+                                <svg class="pass-plane" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12h16m0 0l-4-4m4 4l-4 4M20 6v12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                <span class="pass-code">SAN</span>
+                            </div>
+                            <div class="pass-foot">
+                                <span class="pass-dest"><span class="pass-k">Destination</span><span class="pass-destv">San Diego</span></span>
+                                <span class="pass-spent"><span class="pass-k">Spent on</span><span class="pass-v">Dining</span></span>
+                            </div>
+                        </div>
+                        <div class="pass-stub" aria-hidden="true">
+                            <span class="pass-idx">09</span>
+                            <span class="pass-barcode"></span>
+                        </div>
+                    </article>
+
+                    <!-- 10 San Diego (Dec 2025) -->
+                    <article class="pass pass--alaska reveal">
+                        <div class="pass-main">
+                            <div class="pass-head">
+                                <span class="pass-logoband"><img class="pass-logo pass-logo--white" src="assets/airlines/alaska-c.png" alt="Alaska Airlines"></span>
+                                <span class="pass-date"><span class="pass-k">Date</span>Dec 2025</span>
+                            </div>
+                            <div class="pass-cities"><span>San Jose</span><span>San Diego</span></div>
+                            <div class="pass-route">
+                                <span class="pass-code">SJC</span>
+                                <svg class="pass-plane" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12h16m0 0l-4-4m4 4l-4 4M20 6v12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                <span class="pass-code">SAN</span>
+                            </div>
+                            <div class="pass-foot">
+                                <span class="pass-dest"><span class="pass-k">Destination</span><span class="pass-destv">San Diego</span></span>
+                                <span class="pass-spent"><span class="pass-k">Spent on</span><span class="pass-v">Dining</span></span>
+                            </div>
+                        </div>
+                        <div class="pass-stub" aria-hidden="true">
+                            <span class="pass-idx">10</span>
+                            <span class="pass-barcode"></span>
+                        </div>
+                    </article>
+
+                    <!-- 11 Tahoe (road trip) -->
+                    <article class="pass pass--roadtrip reveal">
+                        <div class="pass-main">
+                            <div class="pass-head">
+                                <span class="pass-airline">Road Trip</span>
+                                <span class="pass-date"><span class="pass-k">Date</span>Jul 2026</span>
+                            </div>
+                            <div class="pass-cities"><span>Sunnyvale</span><span>Lake Tahoe</span></div>
+                            <div class="pass-route">
+                                <span class="pass-code pass-code--sm">BAY</span>
+                                <svg class="pass-plane" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 13l2-5a2 2 0 0 1 1.9-1.3h10.2A2 2 0 0 1 21 8l2 5m-20 0h20m-20 0v4h2m16-4v4h-2m-12 0h8M6.5 15.5h.01M17.5 15.5h.01" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                <span class="pass-code pass-code--sm">TAHOE</span>
+                            </div>
+                            <div class="pass-foot">
+                                <span class="pass-dest"><span class="pass-k">Destination</span><span class="pass-destv">Lake Tahoe</span></span>
+                                <span class="pass-spent"><span class="pass-k">Spent on</span><span class="pass-v">Dining</span></span>
+                            </div>
+                        </div>
+                        <div class="pass-stub" aria-hidden="true">
+                            <span class="pass-idx">11</span>
+                            <span class="pass-barcode"></span>
+                        </div>
+                    </article>
+
+                </div>
+
+                <footer class="site-foot">
+                    <span>© <span id="year">2026</span> Samuel Woo</span>
+                    <span><a href="index.html#home" class="foot-link">Back home ↗</a></span>
+                </footer>
+            </div>
+        </section>
+    </main>
+
+    <script src="anime.min.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>

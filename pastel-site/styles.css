@@ -1110,6 +1110,231 @@ a.bubble.ticker:hover::after { transform: translate(2px, -2px); opacity: 1; }
 }
 
 /* ============================================================
+   Travel page — boarding-pass wall
+   ============================================================ */
+.band-travel-hero {
+    min-height: min(46vh, 400px);
+    display: flex;
+    align-items: center;
+    padding-top: clamp(64px, 8vw, 104px);
+    padding-bottom: clamp(40px, 5vw, 64px);
+}
+.band-travel-hero .section-title { max-width: 16ch; }
+.band-travel-hero .section-intro { max-width: 56ch; margin-top: 4px; }
+/* pull the pass wall up under the hero without a double gap */
+.band-flush-top { padding-top: clamp(20px, 3vw, 36px); }
+
+.pass-wall {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 22px;
+}
+
+/* A single boarding pass: colored main body + perforated tear-off stub */
+.pass {
+    --pass-bg: #4e6640;
+    --pass-ink: #ffffff;
+    display: flex;
+    align-items: stretch;
+    border-radius: 16px;
+    overflow: hidden;
+    color: var(--pass-ink);
+    box-shadow: var(--shadow-card);
+    transition: transform .3s cubic-bezier(.2,.7,.2,1), box-shadow .3s ease;
+    min-height: 190px;
+}
+.pass:hover { transform: translateY(-5px); box-shadow: var(--shadow-lift); }
+
+.pass-main {
+    flex: 1 1 auto;
+    background: var(--pass-bg);
+    padding: 18px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-width: 0;
+}
+
+/* Head row: logo band (left) + flight date (right) */
+.pass-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+/* Fixed-height band: every logo shares the SAME vertical envelope regardless
+   of its width/aspect, so the top/bottom margin matches on every card. */
+.pass-logoband {
+    height: 30px;
+    display: flex;
+    align-items: center;
+    min-width: 0;
+}
+.pass-airline {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 1.06rem;
+    letter-spacing: .02em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+/* Airline logo: fill the band height, capped in width, contained + centered. */
+.pass-logo {
+    display: block;
+    max-height: 100%;
+    height: auto;
+    width: auto;
+    max-width: 132px;
+    object-fit: contain;
+    object-position: left center;
+}
+.pass-logo--white { filter: brightness(0) invert(1); }
+.pass-date {
+    font-family: var(--mono);
+    font-size: .64rem;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    text-align: right;
+    opacity: .85;
+    white-space: nowrap;
+}
+
+/* City-name labels sitting just above the airport codes (prasjain-style) */
+.pass-cities {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    font-family: var(--mono);
+    font-size: .6rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    opacity: .78;
+}
+.pass-cities span:last-child { text-align: right; }
+
+/* Middle: ORIGIN ✈ DEST code pair */
+.pass-route {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin: -2px 0 2px;
+}
+.pass-code {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: clamp(1.7rem, 3.4vw, 2.3rem);
+    letter-spacing: -0.02em;
+    line-height: 1;
+}
+.pass-code--sm { font-size: clamp(1.15rem, 2.4vw, 1.5rem); }
+.pass-plane {
+    width: 34px;
+    height: 34px;
+    flex-shrink: 0;
+    opacity: .9;
+}
+
+/* Bottom row: big destination place-name (left) + spent-on field (right) */
+.pass-foot {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 14px;
+    margin-top: auto;
+}
+.pass-k {
+    display: block;
+    font-family: var(--mono);
+    font-size: .56rem;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    opacity: .72;
+    margin-bottom: 3px;
+}
+.pass-dest .pass-destv {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 1.15rem;
+    letter-spacing: -0.01em;
+    text-transform: uppercase;
+    line-height: 1;
+}
+.pass-spent { text-align: right; flex-shrink: 0; }
+.pass-v { font-size: .84rem; font-weight: 500; white-space: nowrap; }
+
+/* Perforated tear-off stub */
+.pass-stub {
+    position: relative;
+    flex: 0 0 46px;
+    background: var(--pass-bg);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 0;
+    filter: brightness(.9);
+}
+/* dashed perforation between main and stub */
+.pass-stub::before {
+    content: "";
+    position: absolute;
+    left: 0; top: 8px; bottom: 8px;
+    border-left: 2px dashed rgba(255,255,255,.5);
+}
+/* notches top & bottom to sell the tear */
+.pass-stub::after {
+    content: "";
+    position: absolute;
+    left: -7px; top: 50%;
+    width: 14px; height: 14px;
+    background: var(--bg);
+    border-radius: 50%;
+    transform: translateY(-50%);
+}
+.pass-idx {
+    font-family: var(--mono);
+    font-size: .8rem;
+    font-weight: 500;
+    writing-mode: vertical-rl;
+    letter-spacing: .12em;
+    opacity: .8;
+}
+.pass-barcode {
+    width: 20px;
+    height: 60px;
+    background-image: repeating-linear-gradient(
+        90deg,
+        currentColor 0, currentColor 1px,
+        transparent 1px, transparent 3px,
+        currentColor 3px, currentColor 4px,
+        transparent 4px, transparent 6px);
+    opacity: .6;
+}
+
+/* ---- Airline color themes (approximate brand tones) ---- */
+.pass--zipair     { --pass-bg: #17171a; }
+.pass--korean     { --pass-bg: #6ba3d6; --pass-ink: #0b2a44; }
+.pass--aeromexico { --pass-bg: #0a2a5e; }
+.pass--hawaiian   { --pass-bg: #4b2e83; }
+.pass--jetblue    { --pass-bg: #12285c; }
+.pass--aircanada  { --pass-bg: #b01e2e; }
+.pass--alaska     { --pass-bg: #0e2c47; }
+.pass--frontier   { --pass-bg: #0a7d3f; }
+.pass--roadtrip   { --pass-bg: #7a5a34; }
+/* Korean is a light card — dim the stub differently + darker perforation */
+.pass--korean .pass-stub::before { border-left-color: rgba(11,42,68,.4); }
+
+@media (max-width: 900px) {
+    .pass-wall { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 560px) {
+    .pass-wall { grid-template-columns: 1fr; }
+}
+
+/* ============================================================
    Reveal-on-scroll
    ============================================================ */
 .reveal {
