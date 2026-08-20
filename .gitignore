@@ -50,3 +50,4 @@ yarn-error.log*
 # Local-only handoff / working notes (not part of the site)
 HANDOFF.md
 PERSONAL_SITE_DESIGN_HANDOFF.md
+HANDOFF-ASTRO.md
