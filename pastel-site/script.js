@@ -12,6 +12,14 @@
    - Rotating hero subtitle
    - Smooth-scroll nav + in-page links
    All motion guarded by prefers-reduced-motion.
+
+   Coexistence with gsap-motion.js: GSAP loads FIRST and, if it is
+   both present and allowed to animate, sets `html.gsap-on`. When that
+   flag is up we hand every `.gsap-reveal` element over to GSAP and
+   leave it strictly alone, so the two libraries never tween the same
+   node. If GSAP is missing or reduced motion is on, the flag is
+   absent and those elements are revealed here exactly like any other
+   `.reveal` — they can never be left stranded invisible.
    ============================================================ */
 (function () {
     "use strict";
@@ -146,7 +154,11 @@
     });
 
     /* ---------- Reveals ---------- */
-    var reveals = Array.prototype.slice.call(document.querySelectorAll(".reveal"));
+    // `.gsap-reveal` nodes belong to gsap-motion.js when it signalled
+    // that it took ownership; otherwise they fall through to us.
+    var gsapOwns = document.documentElement.classList.contains("gsap-on");
+    var revealSelector = gsapOwns ? ".reveal:not(.gsap-reveal)" : ".reveal";
+    var reveals = Array.prototype.slice.call(document.querySelectorAll(revealSelector));
 
     function showAll() {
         reveals.forEach(function (el) { el.classList.add("is-visible"); });

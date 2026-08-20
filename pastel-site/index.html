@@ -62,10 +62,14 @@
             <div class="band-inner home-inner">
                 <!-- Fauna-style abstract line-draw motif: draws in on load -->
                 <svg class="hero-motif" viewBox="0 0 400 300" fill="none" aria-hidden="true">
-                    <path class="motif-draw" d="M60 210 C 60 150, 120 120, 180 150 C 240 180, 260 120, 210 90 C 160 60, 120 90, 150 140 C 190 205, 300 190, 340 110" />
-                    <circle class="motif-draw" cx="340" cy="110" r="10" />
-                    <path class="motif-draw" d="M40 250 L 360 250" />
-                    <path class="motif-draw" d="M300 40 L 340 80 M340 40 L 300 80" />
+                    <!-- Inner <g> exists purely so GSAP can parallax the motif in SVG
+                         user units; anime.js still owns the .motif-draw stroke draw. -->
+                    <g class="motif-parallax">
+                        <path class="motif-draw" d="M60 210 C 60 150, 120 120, 180 150 C 240 180, 260 120, 210 90 C 160 60, 120 90, 150 140 C 190 205, 300 190, 340 110" />
+                        <circle class="motif-draw" cx="340" cy="110" r="10" />
+                        <path class="motif-draw" d="M40 250 L 360 250" />
+                        <path class="motif-draw" d="M300 40 L 340 80 M340 40 L 300 80" />
+                    </g>
                 </svg>
                 <p class="hero-meta reveal reveal-clip">
                     <span>Sunnyvale</span>
@@ -90,7 +94,22 @@
         </section>
 
         <!-- INTERESTS -->
-        <section id="interests" class="band" aria-labelledby="interests-title">
+        <section id="interests" class="band band--shapes" aria-labelledby="interests-title">
+            <!-- Decorative line-art field: draws itself in on enter, then drifts.
+                 Same sage stroke register as the hero signature motif. -->
+            <svg class="shape-field shape-field--interests" viewBox="0 0 260 260" fill="none" aria-hidden="true">
+                <g class="shape-drift">
+                    <circle class="shape-ring" cx="132" cy="120" r="86" />
+                    <circle class="shape-ring" cx="132" cy="120" r="58" />
+                    <path class="shape-line" d="M46 120 C 90 40, 174 40, 218 120" />
+                    <path class="shape-line" d="M46 120 C 90 200, 174 200, 218 120" />
+                    <path class="shape-line" d="M132 34 L 132 206" />
+                    <circle class="shape-dot" cx="132" cy="34" r="4.5" />
+                    <circle class="shape-dot shape-dot--soft" cx="218" cy="120" r="4" />
+                    <circle class="shape-dot shape-dot--soft" cx="46" cy="120" r="4" />
+                    <path class="shape-tick" d="M24 236 L 40 236 M52 236 L 68 236 M80 236 L 96 236 M108 236 L 124 236 M136 236 L 152 236 M164 236 L 180 236" />
+                </g>
+            </svg>
             <div class="band-inner">
                 <div class="section-head">
                     <p class="kicker reveal reveal-clip"><span class="kicker-num">01</span> — Interests</p>
@@ -169,7 +188,17 @@
         </section>
 
         <!-- PROJECTS -->
-        <section id="projects" class="band" aria-labelledby="projects-title">
+        <section id="projects" class="band band--shapes" aria-labelledby="projects-title">
+            <!-- Stacked-cards / layered-sheet abstraction, in line-art -->
+            <svg class="shape-field shape-field--projects" viewBox="0 0 240 240" fill="none" aria-hidden="true">
+                <g class="shape-drift">
+                    <path class="shape-line" d="M30 88 L 120 44 L 210 88 L 120 132 Z" />
+                    <path class="shape-line" d="M30 128 L 120 84 L 210 128 L 120 172 Z" />
+                    <path class="shape-line" d="M30 168 L 120 124 L 210 168 L 120 212 Z" />
+                    <circle class="shape-dot" cx="120" cy="44" r="4.5" />
+                    <circle class="shape-dot shape-dot--soft" cx="120" cy="212" r="4" />
+                </g>
+            </svg>
             <div class="band-inner">
                 <div class="section-head">
                     <p class="kicker reveal reveal-clip"><span class="kicker-num">02</span> — Projects</p>
@@ -244,6 +273,9 @@
 
                     <h3 class="subhead reveal">Experience</h3>
                     <div class="timeline">
+                        <!-- Read-progress rail: scrubs from 0 to full as the
+                             timeline scrolls past. Rests filled with motion off. -->
+                        <span class="timeline-rail" aria-hidden="true"></span>
                         <article class="exp-item reveal">
                             <div class="exp-head">
                                 <h4 class="exp-title">Software Development Engineer II</h4>
@@ -280,7 +312,21 @@
         </section>
 
         <!-- CONNECT -->
-        <section id="connect" class="band" aria-labelledby="connect-title">
+        <section id="connect" class="band band--shapes" aria-labelledby="connect-title">
+            <!-- Signal / node-graph abstraction — "reach out" in line-art -->
+            <svg class="shape-field shape-field--connect" viewBox="0 0 240 240" fill="none" aria-hidden="true">
+                <g class="shape-drift">
+                    <circle class="shape-ring" cx="120" cy="120" r="34" />
+                    <circle class="shape-ring" cx="120" cy="120" r="66" />
+                    <circle class="shape-ring" cx="120" cy="120" r="98" />
+                    <path class="shape-line" d="M120 120 L 214 66" />
+                    <path class="shape-line" d="M120 120 L 40 174" />
+                    <path class="shape-line" d="M120 120 L 168 208" />
+                    <circle class="shape-dot" cx="214" cy="66" r="5" />
+                    <circle class="shape-dot shape-dot--soft" cx="40" cy="174" r="4.5" />
+                    <circle class="shape-dot shape-dot--soft" cx="168" cy="208" r="4" />
+                </g>
+            </svg>
             <div class="band-inner">
                 <div class="section-head">
                     <p class="kicker reveal reveal-clip"><span class="kicker-num">04</span> — Connect</p>
@@ -337,6 +383,11 @@
         </section>
     </main>
 
+    <!-- GSAP is vendored locally (no CDN, no build step) and loaded BEFORE
+         script.js so it can claim its elements via html.gsap-on first. -->
+    <script src="gsap.min.js"></script>
+    <script src="ScrollTrigger.min.js"></script>
+    <script src="gsap-motion.js"></script>
     <script src="anime.min.js"></script>
     <script src="script.js"></script>
 </body>
