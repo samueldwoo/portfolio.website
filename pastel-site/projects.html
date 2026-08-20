@@ -58,10 +58,14 @@
             <div class="band-inner">
                 <!-- Line-draw motif echoing the home hero — shapes the right-side space -->
                 <svg class="projects-motif" viewBox="0 0 400 300" fill="none" aria-hidden="true">
-                    <path class="motif-draw" d="M60 150 C 120 60, 200 60, 220 150 C 240 240, 320 240, 340 150" />
-                    <path class="motif-draw" d="M40 210 L 360 210" />
-                    <circle class="motif-draw" cx="220" cy="90" r="8" />
-                    <path class="motif-draw" d="M300 70 L 330 100 M330 70 L 300 100" />
+                    <!-- Inner <g> is the GSAP parallax handle; anime.js still draws
+                         the .motif-draw strokes. Two libraries, two properties. -->
+                    <g class="motif-parallax">
+                        <path class="motif-draw" d="M60 150 C 120 60, 200 60, 220 150 C 240 240, 320 240, 340 150" />
+                        <path class="motif-draw" d="M40 210 L 360 210" />
+                        <circle class="motif-draw" cx="220" cy="90" r="8" />
+                        <path class="motif-draw" d="M300 70 L 330 100 M330 70 L 300 100" />
+                    </g>
                 </svg>
                 <a class="back-link reveal" href="index.html#projects">
                     <span aria-hidden="true">←</span> Back home
@@ -83,6 +87,10 @@
                     </div>
                 </div>
 
+                <!-- Read-progress hairline: scrubs 0->100% across this case study.
+                     Rests filled under reduced motion (it's a divider either way). -->
+                <div class="case-rail" aria-hidden="true"><span class="case-rail-fill"></span></div>
+
                 <ul class="case-meta reveal">
                     <li><span class="case-meta-k">Role</span><span class="case-meta-v">Solo — design &amp; build</span></li>
                     <li><span class="case-meta-k">Stack</span><span class="case-meta-v">Python · Vanilla JS · HTML/CSS</span></li>
@@ -90,22 +98,22 @@
                 </ul>
 
                 <div class="case-body">
-                    <div class="case-block reveal">
+                    <div class="case-block reveal gsap-reveal">
                         <h3 class="case-sub">Why I built it</h3>
                         <p>Mint shut down, the alternatives all want a subscription and a linked login to every account I own, and none of them ever categorized my spending the way I actually think about it. I wanted the full picture — cash flow, trends, trips, a budget that talks to my auto-invest plan — without handing my credentials to anyone. So I built it to run entirely on my own machine.</p>
                     </div>
 
-                    <div class="case-block reveal">
+                    <div class="case-block reveal gsap-reveal">
                         <h3 class="case-sub">How it works</h3>
                         <p>You drop statements into a folder and it figures out the rest. Content-detected parsers read Chase checking, Chase Sapphire Preferred, Capital One Venture X, and Venmo, and normalize all of them into one ledger — so a coffee is a coffee whether it came from a PDF, a CSV, or an OFX export. Every transaction gets categorized by a rules engine I can teach, and the dashboard renders spending, a cash-flow Sankey, trends, per-trip breakdowns, and a coupled budget + auto-invest planner.</p>
                     </div>
 
-                    <div class="case-block reveal">
+                    <div class="case-block reveal gsap-reveal">
                         <h3 class="case-sub">The part I'm proud of</h3>
                         <p>The parsing. Bank statements are gloriously inconsistent, and getting a PDF, a CSV, and an OFX file to agree on what a transaction <em>is</em> took more care than the whole front end. It content-detects the source instead of trusting file names, falls back through a few PDF extractors when the nice one isn't installed, and has a reconcile step that catches when an import double-counts. It's the least glamorous part and the reason I actually trust the numbers.</p>
                     </div>
 
-                    <div class="case-block reveal">
+                    <div class="case-block reveal gsap-reveal">
                         <h3 class="case-sub">What I'd do next</h3>
                         <p>More parsers, mostly — every new account is a new statement format to teach it. And I keep eyeing a proper import-review UI so adding a new bank doesn't mean reading my own code six months later.</p>
                     </div>
@@ -131,6 +139,10 @@
                     </div>
                 </div>
 
+                <!-- Read-progress hairline: scrubs 0->100% across this case study.
+                     Rests filled under reduced motion (it's a divider either way). -->
+                <div class="case-rail" aria-hidden="true"><span class="case-rail-fill"></span></div>
+
                 <ul class="case-meta reveal">
                     <li><span class="case-meta-k">Role</span><span class="case-meta-v">Solo — design &amp; build</span></li>
                     <li><span class="case-meta-k">Stack</span><span class="case-meta-v">Hand-written HTML · CSS · JS</span></li>
@@ -138,22 +150,22 @@
                 </ul>
 
                 <div class="case-body">
-                    <div class="case-block reveal">
+                    <div class="case-block reveal gsap-reveal">
                         <h3 class="case-sub">Why I built it</h3>
                         <p>Most of my day is spent deep in robotics middleware where nobody sees the interface. A UI I built for visualizing robot navigation reminded me how much I like the front-end side of things, so I wanted a small space that was entirely mine to design — no framework, no product manager, no ticket.</p>
                     </div>
 
-                    <div class="case-block reveal">
+                    <div class="case-block reveal gsap-reveal">
                         <h3 class="case-sub">How it's built</h3>
                         <p>Deliberately from scratch. No React, no build step, no component library — just hand-written HTML, CSS, and a single small JS file, with one vendored animation library. I wanted to actually understand every line rather than lean on a starter template, so the whole thing is a few files you could read in a sitting.</p>
                     </div>
 
-                    <div class="case-block reveal">
+                    <div class="case-block reveal gsap-reveal">
                         <h3 class="case-sub">The details I cared about</h3>
                         <p>The motion is all there to serve the content, not show off — scroll reveals, a signature line-draw in the hero, a soft spotlight that tracks your cursor — and every bit of it is switched off cleanly when a visitor prefers reduced motion. I held it to real accessibility standards: keyboard-navigable, AA color contrast, focus states you can actually see. The look leans on a calm sage palette because I wanted it to feel like a gallery, not a landing page.</p>
                     </div>
 
-                    <div class="case-block reveal">
+                    <div class="case-block reveal gsap-reveal">
                         <h3 class="case-sub">What I'd do next</h3>
                         <p>Keep it alive. It's the kind of project that's never really finished — a new section here, a nicer transition there, whenever I've got a free evening and an idea.</p>
                     </div>
@@ -169,7 +181,18 @@
         </section>
 
         <!-- STILL COOKING (teasers) -->
-        <section class="band" aria-labelledby="cooking-title">
+        <section class="band band--shapes" aria-labelledby="cooking-title">
+            <!-- Line-art "simmering pot" abstraction for the still-cooking band -->
+            <svg class="shape-field shape-field--cooking" viewBox="0 0 240 240" fill="none" aria-hidden="true">
+                <g class="shape-drift">
+                    <path class="shape-line" d="M56 128 L 184 128 L 172 208 L 68 208 Z" />
+                    <path class="shape-line" d="M40 128 L 200 128" />
+                    <path class="shape-line" d="M96 106 C 96 84, 78 80, 88 58 C 96 42, 84 34, 84 24" />
+                    <path class="shape-line" d="M144 106 C 144 82, 162 78, 152 56 C 144 40, 156 32, 156 22" />
+                    <circle class="shape-dot" cx="84" cy="24" r="4" />
+                    <circle class="shape-dot shape-dot--soft" cx="156" cy="22" r="4.5" />
+                </g>
+            </svg>
             <div class="band-inner">
                 <div class="section-head">
                     <p class="kicker reveal reveal-clip">Also on the bench</p>
@@ -210,6 +233,11 @@
         </section>
     </main>
 
+    <!-- GSAP vendored locally (no CDN, no build step); loads before script.js
+         so it can claim its elements via html.gsap-on first. -->
+    <script src="gsap.min.js"></script>
+    <script src="ScrollTrigger.min.js"></script>
+    <script src="gsap-motion.js"></script>
     <script src="anime.min.js"></script>
     <script src="script.js"></script>
 </body>

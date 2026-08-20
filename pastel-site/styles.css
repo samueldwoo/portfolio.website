@@ -1364,6 +1364,106 @@ a.bubble.ticker:hover::after { transform: translate(2px, -2px); opacity: 1; }
 }
 
 /* ============================================================
+   GSAP motion layer — decorative shape fields & progress rails
+   (animated by gsap-motion.js)
+
+   Everything here is authored so its RESTING state is the finished,
+   fully visible state. gsap-motion.js bails out before touching the
+   DOM under prefers-reduced-motion, so "no JS ran" must look correct
+   on its own — hence no opacity:0 / scale:0 / zero-area starts live
+   in this stylesheet. GSAP supplies those from-states at runtime.
+   ============================================================ */
+
+/* Bands hosting a shape field clip it, so a field that reaches past
+   the content column can never create horizontal overflow. */
+.band--shapes { overflow: hidden; }
+
+/* Abstract sage line-art layer. Sits behind content in the same
+   register as the existing .hero-motif signature. */
+.shape-field {
+    position: absolute;
+    pointer-events: none;
+    z-index: 0;
+    height: auto;
+    overflow: visible;
+}
+.shape-field .shape-line,
+.shape-field .shape-ring,
+.shape-field .shape-tick {
+    fill: none;
+    stroke: var(--sage);
+    stroke-width: 1.3;
+    stroke-linecap: round;
+    opacity: .24;
+}
+.shape-field .shape-ring { opacity: .18; }
+.shape-field .shape-tick { stroke-width: 1.1; opacity: .2; }
+.shape-field .shape-dot {
+    fill: var(--sage);
+    stroke: none;
+    opacity: .3;
+}
+.shape-field .shape-dot--soft { fill: var(--olive); opacity: .22; }
+
+/* Per-placement geometry. Kept off the small breakpoints entirely —
+   decoration is the first thing to go when space is tight. */
+.shape-field--interests { top: 4%;  right: -6%;  width: min(30vw, 340px); }
+.shape-field--projects  { bottom: 2%; left: -7%;  width: min(26vw, 300px); }
+.shape-field--connect   { top: 10%; right: -4%;  width: min(24vw, 280px); }
+.shape-field--cooking   { top: 0;   right: -5%;  width: min(24vw, 280px); }
+.shape-field--travel    { top: 50%; right: -2%;  width: min(34vw, 400px); transform: translateY(-50%); }
+
+@media (max-width: 1080px) {
+    .shape-field { opacity: .6; }
+}
+@media (max-width: 820px) {
+    .shape-field { display: none; }
+}
+
+/* Experience timeline: a sage rail that fills as you read the
+   section. The static 2px border on .timeline stays as the track;
+   this is the overlay. Rests at full height (scaleY 1). */
+.timeline-rail {
+    position: absolute;
+    top: 0;
+    left: -2px;
+    width: 2px;
+    height: 100%;
+    background: linear-gradient(180deg, var(--sage), var(--sage-hi));
+    transform-origin: 50% 0%;
+    border-radius: 2px;
+    pointer-events: none;
+}
+
+/* Case-study read-progress hairline under the case head. */
+.case-rail {
+    position: relative;
+    height: 2px;
+    margin-bottom: 30px;
+    border-radius: 2px;
+    background: var(--line);
+    overflow: hidden;
+}
+.case-rail-fill {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, var(--sage), var(--olive));
+    transform-origin: 0% 50%;
+}
+
+/* GSAP owns the brand wave once it has loaded — retire the CSS
+   keyframes so the two never rock the wrist at the same time. */
+html.gsap-on .brand:hover .brand-wave,
+html.gsap-on .brand:focus-visible .brand-wave { animation: none; }
+
+/* While GSAP is mid-tween, suppress the element's own CSS transitions:
+   a .3s transition on `transform` chasing a per-frame inline transform
+   makes the tween look mushy and laggy. gsap-motion.js adds .gsap-busy
+   on start and removes it on complete, so :hover transitions (the .pass
+   lift, .bubble nudge) behave normally again once motion settles. */
+html.gsap-on .gsap-busy { transition: none !important; }
+
+/* ============================================================
    Reveal-on-scroll
    ============================================================ */
 .reveal {
@@ -1503,4 +1603,28 @@ html.js-anim .reveal:not(.is-visible) { opacity: 0; }
     .card.spotlight::before { display: none !important; }
     .bg-shapes { display: none !important; }
     .hero-motif { opacity: .28 !important; }
+
+    /* --- GSAP layer safety belts ---
+       gsap-motion.js returns before it touches the DOM under reduced
+       motion, so these are belt-and-braces: they guarantee the
+       decorative layer reads as finished static artwork even if some
+       from-state ever leaked in. Never `display:none` the rails or
+       .gsap-reveal content — they must remain visible, not hidden. */
+    .shape-field { opacity: .5 !important; transform: none !important; }
+    .shape-field--travel { transform: translateY(-50%) !important; }
+    .shape-field .shape-line,
+    .shape-field .shape-ring,
+    .shape-field .shape-tick {
+        stroke-dasharray: none !important;
+        stroke-dashoffset: 0 !important;
+    }
+    .shape-field .shape-dot { opacity: .3 !important; }
+    .timeline-rail, .case-rail-fill {
+        opacity: 1 !important;
+        transform: none !important;   /* rails sit filled, as design elements */
+    }
+    .gsap-reveal { opacity: 1 !important; transform: none !important; }
+    .bubble-list > *, .skills-list > *, .feature-chips > * {
+        opacity: 1 !important; transform: none !important;
+    }
 }

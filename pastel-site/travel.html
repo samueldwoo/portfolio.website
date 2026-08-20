@@ -57,7 +57,20 @@
     <main class="content">
 
         <!-- TRAVEL HERO -->
-        <section id="travel" class="band band-travel-hero" aria-labelledby="travel-title">
+        <section id="travel" class="band band-travel-hero band--shapes" aria-labelledby="travel-title">
+            <!-- Flight-path line art: the arc draws itself in, then a sage dot
+                 flies it on a loop. Static (arc drawn, dot parked) with motion off. -->
+            <svg class="shape-field shape-field--travel" viewBox="0 0 320 220" fill="none" aria-hidden="true">
+                <g class="shape-drift">
+                    <circle class="shape-ring" cx="160" cy="150" r="104" />
+                    <path class="shape-line flight-arc" d="M42 168 C 92 44, 228 44, 278 168" />
+                    <path class="shape-line" d="M20 190 L 300 190" />
+                    <circle class="shape-dot" cx="42" cy="168" r="4.5" />
+                    <circle class="shape-dot" cx="278" cy="168" r="4.5" />
+                    <circle class="shape-dot shape-dot--soft flight-dot" cx="42" cy="168" r="5.5" />
+                    <path class="shape-tick" d="M34 202 L 34 210 M90 202 L 90 210 M146 202 L 146 210 M202 202 L 202 210 M258 202 L 258 210" />
+                </g>
+            </svg>
             <div class="band-inner">
                 <a class="back-link reveal" href="index.html#home">
                     <span aria-hidden="true">←</span> Back home
@@ -74,7 +87,7 @@
                 <div class="pass-wall">
 
                     <!-- 01 Tokyo -->
-                    <article class="pass pass--zipair reveal">
+                    <article class="pass pass--zipair reveal gsap-reveal">
                         <div class="pass-main">
                             <div class="pass-head">
                                 <span class="pass-logoband"><img class="pass-logo pass-logo--white" src="assets/airlines/zipair-t-c.png" alt="Zip Air"></span>
@@ -98,7 +111,7 @@
                     </article>
 
                     <!-- 02 Seoul -->
-                    <article class="pass pass--korean reveal">
+                    <article class="pass pass--korean reveal gsap-reveal">
                         <div class="pass-main">
                             <div class="pass-head">
                                 <span class="pass-logoband"><img class="pass-logo pass-logo--white" src="assets/airlines/korean-c.png" alt="Korean Air"></span>
@@ -122,7 +135,7 @@
                     </article>
 
                     <!-- 03 Mexico City -->
-                    <article class="pass pass--aeromexico reveal">
+                    <article class="pass pass--aeromexico reveal gsap-reveal">
                         <div class="pass-main">
                             <div class="pass-head">
                                 <span class="pass-logoband"><img class="pass-logo pass-logo--white" src="assets/airlines/aeromexico-c.png" alt="Aeroméxico"></span>
@@ -146,7 +159,7 @@
                     </article>
 
                     <!-- 04 Hawaii -->
-                    <article class="pass pass--hawaiian reveal">
+                    <article class="pass pass--hawaiian reveal gsap-reveal">
                         <div class="pass-main">
                             <div class="pass-head">
                                 <span class="pass-logoband"><img class="pass-logo pass-logo--white" src="assets/airlines/hawaiian-t-c.png" alt="Hawaiian Airlines"></span>
@@ -170,7 +183,7 @@
                     </article>
 
                     <!-- 05 New York -->
-                    <article class="pass pass--jetblue reveal">
+                    <article class="pass pass--jetblue reveal gsap-reveal">
                         <div class="pass-main">
                             <div class="pass-head">
                                 <span class="pass-logoband"><img class="pass-logo pass-logo--white" src="assets/airlines/jetblue-c.png" alt="JetBlue"></span>
@@ -194,7 +207,7 @@
                     </article>
 
                     <!-- 06 Vancouver -->
-                    <article class="pass pass--aircanada reveal">
+                    <article class="pass pass--aircanada reveal gsap-reveal">
                         <div class="pass-main">
                             <div class="pass-head">
                                 <span class="pass-logoband"><img class="pass-logo pass-logo--white" src="assets/airlines/aircanada-t-c.png" alt="Air Canada"></span>
@@ -218,7 +231,7 @@
                     </article>
 
                     <!-- 07 Seattle -->
-                    <article class="pass pass--alaska reveal">
+                    <article class="pass pass--alaska reveal gsap-reveal">
                         <div class="pass-main">
                             <div class="pass-head">
                                 <span class="pass-logoband"><img class="pass-logo pass-logo--white" src="assets/airlines/alaska-c.png" alt="Alaska Airlines"></span>
@@ -242,7 +255,7 @@
                     </article>
 
                     <!-- 08 Detroit -->
-                    <article class="pass pass--alaska reveal">
+                    <article class="pass pass--alaska reveal gsap-reveal">
                         <div class="pass-main">
                             <div class="pass-head">
                                 <span class="pass-logoband"><img class="pass-logo pass-logo--white" src="assets/airlines/alaska-c.png" alt="Alaska Airlines"></span>
@@ -266,7 +279,7 @@
                     </article>
 
                     <!-- 09 San Diego (May 2026) -->
-                    <article class="pass pass--frontier reveal">
+                    <article class="pass pass--frontier reveal gsap-reveal">
                         <div class="pass-main">
                             <div class="pass-head">
                                 <span class="pass-logoband"><img class="pass-logo pass-logo--white" src="assets/airlines/frontier-c.png" alt="Frontier Airlines"></span>
@@ -290,7 +303,7 @@
                     </article>
 
                     <!-- 10 San Diego (Dec 2025) -->
-                    <article class="pass pass--alaska reveal">
+                    <article class="pass pass--alaska reveal gsap-reveal">
                         <div class="pass-main">
                             <div class="pass-head">
                                 <span class="pass-logoband"><img class="pass-logo pass-logo--white" src="assets/airlines/alaska-c.png" alt="Alaska Airlines"></span>
@@ -314,7 +327,7 @@
                     </article>
 
                     <!-- 11 Tahoe (road trip) -->
-                    <article class="pass pass--roadtrip reveal">
+                    <article class="pass pass--roadtrip reveal gsap-reveal">
                         <div class="pass-main">
                             <div class="pass-head">
                                 <span class="pass-airline">Road Trip</span>
@@ -347,6 +360,11 @@
         </section>
     </main>
 
+    <!-- GSAP vendored locally (no CDN, no build step); loads before script.js
+         so it can claim its elements via html.gsap-on first. -->
+    <script src="gsap.min.js"></script>
+    <script src="ScrollTrigger.min.js"></script>
+    <script src="gsap-motion.js"></script>
     <script src="anime.min.js"></script>
     <script src="script.js"></script>
 </body>
