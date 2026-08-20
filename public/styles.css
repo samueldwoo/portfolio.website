@@ -48,6 +48,65 @@
     --sans:    "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
     --mono:    "DM Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
+    /* ---- Modular type scale ------------------------------------------
+       Ratio 1.1547 = √(4/3): a HALF perfect-fourth. Sibling levels sit
+       one step apart (a gentle 15% — enough to read as different, not
+       enough to shout); the four editorial landmarks — body copy →
+       sub-head → case title → section title — sit *two* steps apart,
+       i.e. a full perfect fourth (1.333) between each. That gives the
+       page a wide, confident spread at the top of the hierarchy and a
+       fine-grained ramp through the many mid-level headings.
+
+       Step n = 16px × 1.1547ⁿ:
+         0 16.00   1 18.48   2 21.33   3 24.63   4 28.44   5 32.84
+         6 37.93   7 43.79   8 50.57   9 58.40  10 67.43  11 77.86
+        12 89.90
+
+       Every step is fluid: `clamp(min, rem + vw, max)` interpolates
+       between its 390px and its ~1440px value with no breakpoint jump.
+       The min is the mobile value (a tighter ~1.2 ratio falls out of it
+       naturally), the max is the desktop step above.
+
+       `.hero-name` deliberately sits OFF this scale at 8rem/128px — it
+       is the masthead, and HeroCanvas.tsx's contour fade is calibrated
+       against where that copy lands, so it is left untouched.
+       ------------------------------------------------------------------ */
+    /* Body copy is held just below step 1 (17.4 rather than 18.5) so it
+       stays clearly under `.hero-intro` (18.56px), which is fixed by the
+       hero-canvas calibration and must not move. */
+    --fs-1:  clamp(1rem,    0.96rem + 0.17vw, 1.09rem);    /* 16.0 → 17.4 */
+    --fs-2:  clamp(1.09rem, 0.99rem + 0.42vw, 1.334rem);   /* 17.5 → 21.3 */
+    --fs-3:  clamp(1.34rem, 1.16rem + 0.55vw, 1.54rem);    /* 21.4 → 24.6 */
+    --fs-4:  clamp(1.5rem,  1.16rem + 1.15vw, 1.778rem);   /* 24.0 → 28.4 */
+    --fs-6:  clamp(1.85rem, 1.44rem + 1.4vw,  2.371rem);   /* 29.6 → 37.9 */
+    --fs-7:  clamp(2rem,    1.4rem  + 1.55vw, 2.737rem);   /* 32.0 → 43.8 */
+    --fs-8:  clamp(2.05rem, 1.32rem + 2.2vw,  3.161rem);   /* 32.8 → 50.6 */
+    --fs-10: clamp(2.15rem, 1.05rem + 3.55vw, 4.215rem);   /* 34.4 → 67.4 */
+    --fs-12: clamp(2.9rem,  1.24rem + 4.9vw,  5.62rem);    /* 46.4 → 89.9 */
+
+    /* Line-height, tuned per band: display type is set solid, body copy
+       is set open. Never one global value for both. */
+    --lh-display: 1.0;    /* 65px+  — single-word section titles */
+    --lh-title:   1.06;   /* 40–65  — case titles, feature titles  */
+    --lh-head:    1.18;   /* 22–40  — sub-heads, card titles       */
+    --lh-body:    1.6;    /* supporting copy                       */
+    --lh-prose:   1.7;    /* long-form reading                     */
+
+    /* Optical letter-spacing: tighter as the type grows, so large
+       display sizes don't read as loose. Small/mono type keeps its
+       positive tracking (set locally). */
+    --tr-xl: -0.038em;    /* 70px+  */
+    --tr-lg: -0.032em;    /* 45–70  */
+    --tr-md: -0.026em;    /* 30–45  */
+    --tr-sm: -0.018em;    /* 22–30  */
+
+    /* Vertical rhythm between levels — one set of values so the gaps
+       between kicker/title/intro/body are consistent on every band. */
+    --sp-kicker: clamp(12px, 1.1vw, 17px);   /* kicker  → title */
+    --sp-title:  clamp(18px, 1.9vw, 28px);   /* title   → intro */
+    --sp-head:   clamp(40px, 4.6vw, 66px);   /* head    → body  */
+    --sp-sub:    clamp(52px, 6vw,   84px);   /* body    → subhead */
+
     /* Layout */
     --topbar-h: 68px;
     --content-max: 1200px;
@@ -63,8 +122,8 @@ html { scroll-behavior: smooth; }
 
 body {
     font-family: var(--sans);
-    font-size: 16px;
-    line-height: 1.55;
+    font-size: var(--fs-1);
+    line-height: var(--lh-body);
     color: var(--ink2);
     background: var(--bg);
     -webkit-font-smoothing: antialiased;
@@ -507,46 +566,70 @@ a { color: inherit; text-decoration: none; }
 /* ---------- Section head ---------- */
 .section-head {
     max-width: var(--content-max);
-    margin-bottom: 48px;
+    margin-bottom: var(--sp-head);
 }
+/* Level 1 — kicker. Stays small: it is the eyebrow, and the whole point
+   of raising the title is to widen the gap between these two. */
 .kicker {
     font-family: var(--mono);
-    font-size: .74rem;
-    letter-spacing: .2em;
+    font-size: .76rem;
+    line-height: 1.2;
+    letter-spacing: .22em;
     text-transform: uppercase;
     color: var(--sage-deep);
-    margin-bottom: 14px;
+    margin-bottom: var(--sp-kicker);
 }
 .kicker-num { color: var(--sage-deep); }
+/* Level 5 — section title. Step 12 of the scale (~90px at 1440): the
+   masthead of everything below the fold. Set solid at 1.0 with the
+   tightest optical tracking, because Space Grotesk at this size opens up
+   noticeably. */
 .section-title {
     font-family: var(--display);
     font-weight: 700;
-    font-size: clamp(2.4rem, 5.6vw, 4.4rem);
-    line-height: 1.02;
-    letter-spacing: -0.03em;
+    font-size: var(--fs-12);
+    line-height: var(--lh-display);
+    letter-spacing: var(--tr-xl);
     color: var(--ink);
-    margin-bottom: 20px;
+    margin-bottom: var(--sp-title);
+    /* Space Grotesk's caps sit high in the em box; at 90px the default
+       line box clips nothing but reads top-heavy without this. */
+    padding-top: .02em;
+    text-wrap: balance;
 }
 .section-title em { font-style: normal; color: var(--sage); }
+/* Level 3 — section intro. One full step above body copy so it reads as
+   a deck, not as body text that happens to be grey. */
 .section-intro {
-    font-size: 1.08rem;
+    font-size: var(--fs-2);
+    line-height: var(--lh-body);
     color: var(--mut);
     max-width: 46ch;
+    text-wrap: pretty;
 }
 
+/* Level 4 — sub-head. Step 4 (~28px): sits a full perfect-fourth below
+   the case title and a fourth above body, so the three read as rungs. */
 .subhead {
     font-family: var(--display);
     font-weight: 600;
-    font-size: 1.4rem;
-    letter-spacing: -0.02em;
+    font-size: var(--fs-4);
+    line-height: var(--lh-head);
+    letter-spacing: var(--tr-sm);
     color: var(--ink);
-    margin: 56px 0 22px;
-    padding-bottom: 10px;
+    margin: var(--sp-sub) 0 var(--sp-title);
+    padding-bottom: 12px;
     border-bottom: 1px solid var(--line);
 }
 .subhead-flush { margin-top: 0; }
 
-.prose p { max-width: 66ch; margin-bottom: 18px; color: var(--ink2); }
+.prose p {
+    max-width: 66ch;
+    font-size: var(--fs-1);
+    line-height: var(--lh-prose);
+    margin-bottom: 1em;
+    color: var(--ink2);
+}
 .prose p:last-child { margin-bottom: 0; }
 
 /* ---------- HOME ---------- */
@@ -592,6 +675,12 @@ a { color: inherit; text-decoration: none; }
     gap: 12px;
     font-family: var(--mono);
     font-size: .74rem;
+    /* Hero line-heights are pinned to the pre-scale values (1.55, the old
+       body default) rather than inheriting --lh-body. HeroCanvas.tsx fades
+       its contour field against where this copy lands, so the hero block's
+       geometry is deliberately frozen: sizes, leading and margins here are
+       unchanged by this pass. */
+    line-height: 1.55;
     letter-spacing: .16em;
     text-transform: uppercase;
     color: var(--mut);
@@ -625,6 +714,7 @@ a { color: inherit; text-decoration: none; }
     font-family: var(--display);
     font-weight: 500;
     font-size: clamp(1.3rem, 2.8vw, 1.9rem);
+    line-height: 1.55;   /* pinned — see .hero-meta note */
     letter-spacing: -0.02em;
     color: var(--sage-deep);
     min-height: 1.4em;
@@ -634,6 +724,14 @@ a { color: inherit; text-decoration: none; }
 .hero-subtitle.fade-out { opacity: 0; }
 .hero-lower {
     display: grid;
+    /* `58ch` is resolved against THIS element's font-size, so it inherited
+       the body size. Raising body copy silently widened the hero intro
+       column 585px → 638px and pushed glyphs to x≈756 at 1440 — past the
+       x≈605 point where HeroCanvas.tsx's horizontal gradient starts
+       inking. Pinning the font-size the `ch` unit measures against keeps
+       the column at its original 585px and the copy inside the clean
+       third, independent of the body scale. */
+    font-size: 16px;
     grid-template-columns: minmax(0, 58ch) auto;
     align-items: end;
     gap: 32px 48px;
@@ -708,15 +806,18 @@ a { color: inherit; text-decoration: none; }
     z-index: 2;
 }
 .card:hover::after { opacity: .8; }
+/* Level 4-ish — card title. Step 3, one rung under `.subhead` so a card
+   inside a section never competes with the section's own sub-heads. */
 .card-title {
     font-family: var(--display);
     font-weight: 600;
-    font-size: 1.32rem;
-    letter-spacing: -0.02em;
+    font-size: var(--fs-3);
+    line-height: var(--lh-head);
+    letter-spacing: var(--tr-sm);
     color: var(--ink);
-    margin-bottom: 12px;
+    margin-bottom: 14px;
 }
-.card p { color: var(--ink2); margin-bottom: 12px; }
+.card p { color: var(--ink2); line-height: var(--lh-body); margin-bottom: 12px; }
 .card p:last-child { margin-bottom: 0; }
 
 /* ---------- Interests (editorial, de-carded) ---------- */
@@ -739,12 +840,16 @@ a { color: inherit; text-decoration: none; }
     gap: 20px;
     margin-bottom: 16px;
 }
+/* The lead block is the one interest given editorial weight: step 6,
+   sitting between the card titles and the case titles. */
 .interest-block--lead .interest-heading {
-    font-size: clamp(1.9rem, 3.4vw, 2.6rem);
+    font-size: var(--fs-6);
+    line-height: var(--lh-title);
+    letter-spacing: var(--tr-md);
 }
 .interest-block--lead .interest-copy {
-    font-size: 1.16rem;
-    line-height: 1.65;
+    font-size: var(--fs-2);
+    line-height: var(--lh-prose);
     max-width: 62ch;
     color: var(--ink2);
 }
@@ -783,13 +888,15 @@ a { color: inherit; text-decoration: none; }
 .interest-heading {
     font-family: var(--display);
     font-weight: 600;
-    font-size: 1.5rem;
-    letter-spacing: -0.02em;
+    font-size: var(--fs-3);
+    line-height: var(--lh-head);
+    letter-spacing: var(--tr-sm);
     color: var(--ink);
-    margin-bottom: 12px;
+    margin-bottom: 14px;
 }
 .interest-copy {
     color: var(--ink2);
+    line-height: var(--lh-body);
     max-width: 46ch;
 }
 
@@ -881,8 +988,14 @@ a.bubble.ticker:hover::after { transform: translate(2px, -2px); opacity: 1; }
     padding: 40px 38px;
     background: linear-gradient(160deg, var(--panel) 60%, var(--sage-soft));
 }
-.project-feature .card-title { font-size: 2rem; }
-.project-feature .project-index { font-size: 2.4rem; margin-bottom: 0; }
+/* The feature card is promoted two steps over its sibling cards — that
+   asymmetry is what makes the grid read as edited rather than tiled. */
+.project-feature .card-title {
+    font-size: var(--fs-6);
+    line-height: var(--lh-title);
+    letter-spacing: var(--tr-md);
+}
+.project-feature .project-index { font-size: var(--fs-4); margin-bottom: 0; }
 /* Highlight chips fill the feature card's mid-space so it frames content, not void */
 .feature-chips {
     list-style: none;
@@ -890,8 +1003,15 @@ a.bubble.ticker:hover::after { transform: translate(2px, -2px); opacity: 1; }
     flex-direction: column;
     align-items: flex-start;
     gap: 10px;
-    margin: 26px 0 auto;      /* auto-bottom pushes title to the lower edge */
+    /* auto-bottom pushes the title to the lower edge on tall cards; the
+       28px floor is what keeps the chips off the title once the card
+       collapses to a single mobile column and `auto` resolves to 0.
+       (Pre-existing: the gap measured 0px at 390 before this pass — now
+       that the feature title is set at 1.06 leading, that collision is
+       far more visible, so it is fixed here with the rhythm work.) */
+    margin: 26px 0 auto;
 }
+.feature-chips + .card-title { margin-top: 28px; }
 .feature-chips li {
     font-family: var(--mono);
     font-size: .74rem;
@@ -932,12 +1052,13 @@ a.bubble.ticker:hover::after { transform: translate(2px, -2px); opacity: 1; }
 .past-title {
     font-family: var(--display);
     font-weight: 600;
-    font-size: 1.24rem;
-    letter-spacing: -0.02em;
+    font-size: var(--fs-3);
+    line-height: var(--lh-head);
+    letter-spacing: var(--tr-sm);
     color: var(--ink);
-    margin-bottom: 8px;
+    margin-bottom: 10px;
 }
-.past-desc { color: var(--ink2); max-width: 60ch; }
+.past-desc { color: var(--ink2); line-height: var(--lh-body); max-width: 60ch; }
 .project-tech {
     font-family: var(--mono);
     font-size: .72rem;
@@ -1034,8 +1155,9 @@ a.bubble.ticker:hover::after { transform: translate(2px, -2px); opacity: 1; }
 .exp-title {
     font-family: var(--display);
     font-weight: 600;
-    font-size: 1.28rem;
-    letter-spacing: -0.02em;
+    font-size: var(--fs-3);
+    line-height: var(--lh-head);
+    letter-spacing: var(--tr-sm);
     color: var(--ink);
 }
 .exp-date {
@@ -1052,7 +1174,12 @@ a.bubble.ticker:hover::after { transform: translate(2px, -2px); opacity: 1; }
     font-weight: 600;
     margin: 4px 0 12px;
 }
-.exp-item p:not(.exp-company) { color: var(--ink2); margin-bottom: 12px; max-width: 68ch; }
+.exp-item p:not(.exp-company) {
+    color: var(--ink2);
+    line-height: var(--lh-prose);
+    margin-bottom: .85em;
+    max-width: 68ch;
+}
 .exp-item p:last-child { margin-bottom: 0; }
 
 /* ---------- Resume button ---------- */
@@ -1235,27 +1362,33 @@ a.bubble.ticker:hover::after { transform: translate(2px, -2px); opacity: 1; }
 }
 .case-index {
     font-family: var(--mono);
-    font-size: clamp(1.6rem, 3vw, 2.4rem);
+    font-size: var(--fs-6);
     font-weight: 500;
     color: var(--sage);
     font-variant-numeric: tabular-nums;
     line-height: 1;
     flex-shrink: 0;
 }
+/* Step 8 (~51px) — a full perfect fourth below `.section-title` and a
+   fourth above `.subhead`. This is the rung that used to be missing:
+   before, case titles and section titles were only ~1.5x apart, so the
+   page had two competing "biggest" levels. */
 .case-title {
     font-family: var(--display);
     font-weight: 700;
-    font-size: clamp(1.8rem, 4vw, 2.9rem);
-    line-height: 1.05;
-    letter-spacing: -0.03em;
+    font-size: var(--fs-8);
+    line-height: var(--lh-title);
+    letter-spacing: var(--tr-lg);
     color: var(--ink);
-    margin-bottom: 12px;
+    margin-bottom: var(--sp-kicker);
+    text-wrap: balance;
 }
 .case-tagline {
-    font-size: 1.12rem;
+    font-size: var(--fs-2);
     color: var(--mut);
     max-width: 60ch;
-    line-height: 1.6;
+    line-height: var(--lh-body);
+    text-wrap: pretty;
 }
 
 /* Meta strip: role / stack / status */
@@ -1294,15 +1427,23 @@ a.bubble.ticker:hover::after { transform: translate(2px, -2px); opacity: 1; }
     gap: 36px clamp(40px, 6vw, 72px);
     margin-bottom: 40px;
 }
+/* Mono label rung. Deliberately one notch under `.kicker` (.76rem/.22em)
+   so a within-case label never reads as loud as a band eyebrow. */
 .case-sub {
     font-family: var(--mono);
     font-size: .72rem;
-    letter-spacing: .16em;
+    line-height: 1.2;
+    letter-spacing: .18em;
     text-transform: uppercase;
     color: var(--sage-deep);
-    margin-bottom: 12px;
+    margin-bottom: 14px;
 }
-.case-block p { color: var(--ink2); max-width: 60ch; line-height: 1.7; }
+.case-block p {
+    color: var(--ink2);
+    max-width: 60ch;
+    font-size: var(--fs-1);
+    line-height: var(--lh-prose);
+}
 .case-tags { margin-top: 0; }
 
 /* Even project grid variant (teasers, three cards).
@@ -1436,14 +1577,18 @@ a.bubble.ticker:hover::after { transform: translate(2px, -2px); opacity: 1; }
     gap: 10px;
     margin: -2px 0 2px;
 }
+/* Boarding-pass codes are three-glyph airport codes inside a fixed-width
+   card, so they are size-capped independently of the editorial scale —
+   but the optical tracking follows the same rule as the rest of the
+   display type at this size. */
 .pass-code {
     font-family: var(--display);
     font-weight: 700;
-    font-size: clamp(1.7rem, 3.4vw, 2.3rem);
-    letter-spacing: -0.02em;
+    font-size: clamp(1.7rem, 3.4vw, 2.45rem);
+    letter-spacing: var(--tr-sm);
     line-height: 1;
 }
-.pass-code--sm { font-size: clamp(1.15rem, 2.4vw, 1.5rem); }
+.pass-code--sm { font-size: clamp(1.05rem, 2.4vw, 1.5rem); letter-spacing: -0.012em; }
 .pass-plane {
     width: 34px;
     height: 34px;
@@ -1750,6 +1895,25 @@ html.js-anim .reveal:not(.is-visible) { opacity: 0; }
 @media (max-width: 420px) {
     .band { padding-left: 18px; padding-right: 18px; }
     .topbar-inner { padding: 0 18px; }
+}
+
+/* ---- Small-screen safety belt for the raised display sizes ----
+   Bigger type means a single long word can out-measure the column.
+   `text-wrap: balance` won't help there — only a break will. These are
+   no-ops until a word genuinely cannot fit, so wrapping on wider
+   screens is unaffected. Applies to the display levels only; body copy
+   already wraps naturally. */
+.section-title,
+.case-title,
+.subhead,
+.card-title,
+.interest-heading,
+.past-title,
+.exp-title,
+.hero-name {
+    overflow-wrap: break-word;
+    /* Never mid-word-break the display type unless it truly overflows —
+       break-word only kicks in as a last resort, unlike break-all. */
 }
 
 /* ============================================================
