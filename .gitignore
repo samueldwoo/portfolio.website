@@ -22,6 +22,12 @@ Network Trash Folder
 Temporary Items
 .apdisk
 
+# Astro / Node build artifacts
+node_modules/
+dist/
+.astro/
+.vercel/
+
 # Logs
 *.log
 npm-debug.log*
