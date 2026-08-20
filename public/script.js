@@ -34,6 +34,39 @@
     var yearEl = document.getElementById("year");
     if (yearEl) yearEl.textContent = String(new Date().getFullYear());
 
+    /* ---------- URL hash helpers ----------
+       Declared up here because the scroll-spy below uses them and `var`
+       initialisation does not hoist (only the `function` declaration does). */
+    var lastSpyId = null;
+    /* The spy must not touch the URL until the reader has actually scrolled.
+       Its first run happens at load while scrollY is still 0, so it concluded
+       "home" and cleared an incoming #work — destroying the anchor target
+       before the cross-page landing code could use it (measured: hash gone at
+       t=0.2s, page never scrolled). */
+    var spyMayWriteHash = false;
+
+    /* Write the hash without a history entry or a re-jump. We preventDefault()
+       on in-page links to run our own smooth scroll, which also suppresses the
+       browser's own URL update — so we have to do it ourselves or the hash goes
+       stale (sitting on #work, clicking Interests left #work in the URL, and a
+       refresh then pulled the reader back to Work). */
+    function setHash(hash) {
+        if (!window.history || !window.history.replaceState) return;
+        var base = window.location.pathname + window.location.search;
+        try {
+            window.history.replaceState(null, "", hash ? base + hash : base);
+        } catch (err) { /* file:// or blocked — cosmetic only */ }
+    }
+
+    /* The hero is the page's default state, so it clears the hash entirely
+       rather than showing #home. Only sections that have a nav link are
+       written, so scrolling through an unlinked band does not invent a hash. */
+    function syncHashToSection(id) {
+        if (!id || id === "home") { setHash(""); return; }
+        var linked = navLinks.some(function (l) { return l.getAttribute("data-nav") === id; });
+        if (linked) setHash("#" + id);
+    }
+
     /* ---------- Scroll-spy: highlight active top-bar link ---------- */
     var navLinks = Array.prototype.slice.call(document.querySelectorAll(".nav-link, .nav-cta"));
     var sections = Array.prototype.slice.call(document.querySelectorAll(".band"));
@@ -70,6 +103,15 @@
                 best = sections[sections.length - 1].id;
             }
             setActive(best);
+            /* Keep the URL honest while the reader scrolls by hand, so a
+               refresh or a copied link reflects where they actually are
+               instead of whatever hash they originally arrived with. Only
+               write on an actual change — replaceState every frame would be
+               wasteful. The hero is the default state, so it clears the hash. */
+            if (best !== lastSpyId) {
+                lastSpyId = best;
+                if (spyMayWriteHash) syncHashToSection(best);
+            }
         };
         var spyScheduled = false;
         var onScrollSpy = function () {
@@ -80,6 +122,19 @@
         window.addEventListener("scroll", onScrollSpy, { passive: true });
         window.addEventListener("resize", onScrollSpy, { passive: true });
         updateSpy();
+
+        /* Arm hash-writing only once the reader drives the page themselves.
+           Real user input (wheel / touch / keyboard) is the signal — a
+           programmatic scroll from the anchor-landing code must not count. */
+        var armSpyHash = function () {
+            spyMayWriteHash = true;
+            window.removeEventListener("wheel", armSpyHash);
+            window.removeEventListener("touchstart", armSpyHash);
+            window.removeEventListener("keydown", armSpyHash);
+        };
+        window.addEventListener("wheel", armSpyHash, { passive: true });
+        window.addEventListener("touchstart", armSpyHash, { passive: true });
+        window.addEventListener("keydown", armSpyHash);
     }
 
     /* ---------- Mobile hamburger menu ---------- */
@@ -136,7 +191,14 @@
         updateProgress();
     }
 
-    /* ---------- Smooth-scroll for nav + in-page links ---------- */
+    /* ---------- Smooth-scroll for nav + in-page links ----------
+       We preventDefault() to run our own smooth scroll, which also cancels the
+       browser's URL update — so the hash would go stale: sitting on
+       index.html#work and clicking Interests scrolled correctly but left #work
+       in the address bar, and a refresh then yanked you back to Work.
+       We therefore write the hash ourselves with replaceState, which updates
+       the URL (so reload/copy-paste are correct) without pushing a history
+       entry per click and without triggering another jump. */
     document.querySelectorAll('a[href^="#"]').forEach(function (link) {
         link.addEventListener("click", function (e) {
             var id = link.getAttribute("href");
@@ -150,6 +212,16 @@
             });
             target.setAttribute("tabindex", "-1");
             target.focus({ preventScroll: true });
+            setHash(id);
+        });
+    });
+
+    /* The brand/home link points at #home (or index.html#home cross-page).
+       Landing on the hero is the page's default state, so strip the hash
+       entirely rather than leaving #home in the URL. */
+    document.querySelectorAll('.brand[href^="#"], a[href="#home"]').forEach(function (link) {
+        link.addEventListener("click", function () {
+            setHash("");
         });
     });
 
