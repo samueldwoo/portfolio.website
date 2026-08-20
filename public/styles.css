@@ -169,43 +169,62 @@ a { color: inherit; text-decoration: none; }
     gap: 20px;
 }
 
+/* ---- Brand: springy wordmark (no icon — the type is the mark) ----
+   Bumped from 1.18rem to 1.45rem and to weight 700: the old mark read as a
+   formal nametag, and at the smaller size the letter motion was invisible. */
 .brand {
     display: inline-flex;
     align-items: center;
-    gap: 9px;
     font-family: var(--display);
-    font-weight: 600;
-    font-size: 1.18rem;
-    letter-spacing: -0.03em;
+    font-weight: 700;
+    font-size: 1.45rem;
+    letter-spacing: -0.045em;
     color: var(--ink);
     white-space: nowrap;
 }
-.brand-name { display: inline-block; }
+.brand-name {
+    position: relative;
+    display: inline-flex;
+    align-items: baseline;
+    padding-bottom: 6px;   /* room for the underline rule */
+}
+/* Each letter is its own transform context so GSAP can stagger them.
+   Resting state is plain, upright type — nothing here starts hidden or
+   displaced, so reduced motion needs no rescue. */
+.brand-ltr {
+    display: inline-block;
+    will-change: transform;
+}
 .brand-dot { color: var(--sage); }
 
-/* Waving-hand mark: sage hand that waves on hover/focus (rooted at wrist) */
-.brand-wave {
-    width: 22px;
-    height: 22px;
-    color: var(--sage);
-    transform-origin: 70% 85%;
-    transition: transform .2s ease;
+/* Sage rule that sweeps in under the wordmark on hover. Collapsed by
+   default via scaleX(0) — a transform, so it never affects layout. */
+.brand-rule {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 2.5px;
+    border-radius: 2px;
+    background: var(--sage);
+    transform: scaleX(0);
+    transform-origin: 0 50%;
+    pointer-events: none;
 }
-.brand:hover .brand-wave,
-.brand:focus-visible .brand-wave {
-    animation: hand-wave .8s ease-in-out;
+
+/* No-JS / pre-GSAP fallback: a plain CSS underline sweep so the mark still
+   responds to hover even if gsap-motion.js never runs. GSAP takes over and
+   neutralizes this once it has loaded (see the html.gsap-on rule below). */
+.brand:hover .brand-rule,
+.brand:focus-visible .brand-rule {
+    transform: scaleX(1);
+    transition: transform .35s cubic-bezier(.2,.7,.2,1);
 }
-@keyframes hand-wave {
-    0%   { transform: rotate(0deg); }
-    20%  { transform: rotate(14deg); }
-    40%  { transform: rotate(-8deg); }
-    60%  { transform: rotate(14deg); }
-    80%  { transform: rotate(-4deg); }
-    100% { transform: rotate(0deg); }
-}
+
 @media (prefers-reduced-motion: reduce) {
-    .brand-wave { transition: none; }
-    .brand:hover .brand-wave, .brand:focus-visible .brand-wave { animation: none; }
+    .brand-ltr { transform: none !important; }
+    .brand:hover .brand-rule,
+    .brand:focus-visible .brand-rule { transition: none; }
 }
 
 .nav-links {
@@ -1435,10 +1454,10 @@ a.bubble.ticker:hover::after { transform: translate(2px, -2px); opacity: 1; }
     pointer-events: none;
 }
 
-/* GSAP owns the brand wave once it has loaded — retire the CSS
-   keyframes so the two never rock the wrist at the same time. */
-html.gsap-on .brand:hover .brand-wave,
-html.gsap-on .brand:focus-visible .brand-wave { animation: none; }
+/* GSAP owns the brand mark once it has loaded — drop the CSS underline
+   transition so the two never animate the rule at the same time. */
+html.gsap-on .brand:hover .brand-rule,
+html.gsap-on .brand:focus-visible .brand-rule { transition: none; }
 
 /* While GSAP is mid-tween, suppress the element's own CSS transitions:
    a .3s transition on `transform` chasing a per-frame inline transform

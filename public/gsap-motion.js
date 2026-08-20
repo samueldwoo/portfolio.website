@@ -8,10 +8,10 @@
                       line-draw (the .motif-draw paths), .kicker-num
                       count-ups, and every .reveal EXCEPT .gsap-reveal.
      CSS       owns : .reveal-clip clip-wipe, all :hover states.
-     GSAP (here) owns: the brand waving-hand, the decorative
+     GSAP (here) owns: the brand springy wordmark, the decorative
                       .shape-field line-art layer, hero/glow parallax,
-                      the timeline + case-study progress rails, chip
-                      staggers, and every element tagged .gsap-reveal.
+                      the timeline progress rail, chip staggers, and
+                      every element tagged .gsap-reveal.
 
    The handoff is explicit: this file adds `html.gsap-on` and script.js
    only skips .gsap-reveal elements when that class is present. If GSAP
@@ -46,68 +46,89 @@
     var rand = gsap.utils.random;
 
     /* ============================================================
-       1. Brand mark — waving hand
-       Replaces the old CSS @keyframes hand-wave. The point of doing it
-       in GSAP is physicality: the fingers splay open in a stagger with
-       an elastic overshoot *before* the wrist starts rocking, so it
-       reads as a hand opening into a wave instead of an icon rotating.
-       One paused timeline is built per brand and restarted on hover /
-       focus, so repeated hovers never stack tweens.
+       1. Brand mark — springy wordmark
+       The old waving-hand icon read as a formal nametag; this is the
+       type itself as the mark. On hover the letters lift and settle on
+       an elastic spring in a stagger, the sage period pops, and a rule
+       sweeps in underneath.
+
+       Magnetism (letters leaning toward the cursor as you approach) is
+       gated on POINTER STATE, not on the spring finishing. Gating on the
+       timeline's onComplete was a real bug: the moment the spring ended
+       while the cursor was still on the mark, magnetism re-engaged and
+       snapped the letters. Both were writing `y` and fought each other.
        ============================================================ */
     toArray(".brand").forEach(function (brand) {
-        var hand = brand.querySelector(".brand-wave");
-        if (!hand) return;
-        var fingers = toArray(hand.querySelectorAll("path"));
+        var letters = toArray(brand.querySelectorAll(".brand-ltr"));
+        if (!letters.length) return;
         var dot = brand.querySelector(".brand-dot");
+        var rule = brand.querySelector(".brand-rule");
+        var topbar = brand.closest(".topbar") || brand;
 
-        // Palm/pinky path is the last one and carries the wrist, so it
-        // gets a smaller travel than the three free fingers.
-        var travel = fingers.map(function (_, i) { return i === fingers.length - 1 ? -0.5 : -1.5; });
+        gsap.set(letters, { transformOrigin: "50% 100%" });
 
-        var tl = gsap.timeline({
-            paused: true,
-            defaults: { transformOrigin: "50% 100%" },
-            onComplete: function () {
-                // Drop inline transforms so the icon returns to a pristine
-                // CSS resting state (and hover transitions stay CSS-driven).
-                gsap.set(fingers, { clearProps: "all" });
-                gsap.set(hand, { clearProps: "all" });
-                if (dot) gsap.set(dot, { clearProps: "all" });
-            }
+        var overMark = false;
+        var springTl = null;
+        // quickTo gives a cheap per-frame setter for the magnetism pass.
+        var pull = letters.map(function (l) {
+            return gsap.quickTo(l, "y", { duration: 0.5, ease: "power3.out" });
         });
 
-        tl.to(fingers, {
-            y: function (i) { return travel[i]; },
-            rotation: function (i) { return (i - 1.5) * 3; },
-            duration: 0.42,
-            ease: "elastic.out(1, 0.42)",
-            stagger: 0.045
-        }, 0)
-          .to(hand, {
-              keyframes: {
-                  rotation: [0, 17, -9, 13, -4, 0],
-                  easeEach: "sine.inOut"
-              },
-              duration: 0.62,
-              transformOrigin: "70% 85%"
-          }, 0.1)
-          .to(fingers, {
-              y: 0,
-              rotation: 0,
-              duration: 0.34,
-              ease: "power2.inOut",
-              stagger: 0.03
-          }, 0.5);
+        /* While the pointer is in the top bar but NOT on the mark, each
+           letter leans up in proportion to how close the cursor is. */
+        topbar.addEventListener("mousemove", function (e) {
+            if (overMark) return;              // hovered: the spring owns `y`
+            letters.forEach(function (l, i) {
+                var r = l.getBoundingClientRect();
+                var cx = r.left + r.width / 2;
+                var near = Math.max(0, 1 - Math.abs(e.clientX - cx) / 110);
+                pull[i](-7 * near);
+            });
+        });
+        topbar.addEventListener("mouseleave", function () {
+            if (!overMark) letters.forEach(function (l, i) { pull[i](0); });
+        });
 
-        if (dot) {
-            tl.to(dot, { scale: 1.7, duration: 0.16, ease: "power2.out", transformOrigin: "50% 85%" }, 0.06)
-              .to(dot, { scale: 1, duration: 0.42, ease: "elastic.out(1, 0.4)" }, 0.22);
-        }
+        var playSpring = function () {
+            overMark = true;
+            // Hand `y` over cleanly so magnetism tweens cannot overlap.
+            gsap.killTweensOf(letters, "y,scaleY");
+            if (springTl) springTl.kill();
+            springTl = gsap.timeline()
+                .to(letters, {
+                    y: -9, scaleY: 1.08,
+                    duration: 0.2, stagger: 0.045, ease: "power2.out"
+                }, 0)
+                .to(letters, {
+                    y: 0, scaleY: 1,
+                    duration: 0.95, stagger: 0.045, ease: "elastic.out(1.1, 0.33)"
+                }, 0.2);
+            if (dot) {
+                springTl.to(dot, {
+                    scale: 1.6, duration: 0.18, yoyo: true, repeat: 1,
+                    ease: "power2.out", transformOrigin: "50% 80%"
+                }, 0.26);
+            }
+            if (rule) {
+                springTl.fromTo(rule, { scaleX: 0 },
+                    { scaleX: 1, duration: 0.5, ease: "power3.out", transformOrigin: "0% 50%" }, 0.08);
+            }
+        };
 
-        var replay = function () { tl.restart(); };
-        brand.addEventListener("mouseenter", replay);
-        brand.addEventListener("focus", replay);
+        var settle = function () {
+            overMark = false;
+            gsap.to(letters, { y: 0, scaleY: 1, duration: 0.4, ease: "power2.out" });
+            if (rule) {
+                gsap.to(rule, { scaleX: 0, duration: 0.28, ease: "power2.in", transformOrigin: "100% 50%" });
+            }
+        };
+
+        brand.addEventListener("mouseenter", playSpring);
+        brand.addEventListener("focus", playSpring);
+        brand.addEventListener("mouseleave", settle);
+        brand.addEventListener("blur", settle);
     });
+
 
     /* ============================================================
        2. Decorative line-art shape fields
