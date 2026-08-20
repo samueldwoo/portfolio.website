@@ -153,6 +153,63 @@
         });
     });
 
+    /* ---------- Cross-page anchor landing (index.html#work etc.) ----------
+       Arriving from another page, the browser jumps to the hash while the
+       document is still settling: webfonts have not swapped, images have no
+       intrinsic size yet, and the .reveal elements are still at opacity 0 /
+       translated. Everything below the anchor then grows and the saved scroll
+       position ends up SHORT of the section — measured 207px short landing on
+       #interests, which reads as "it only took me to the home page".
+
+       There is no scroll-anchoring fix for this because the shift happens
+       above the viewport, so we re-assert the position ourselves once layout
+       has actually stabilised: after `load`, then again on a couple of rAF
+       ticks, and once more if the document height is still changing. */
+    (function () {
+        var hash = window.location.hash;
+        if (!hash || hash.length < 2) return;
+
+        var target;
+        try {
+            target = document.querySelector(hash);
+        } catch (err) {
+            return;                 // malformed selector in the hash
+        }
+        if (!target) return;
+
+        var settle = function () {
+            // scroll-margin-top on .band already accounts for the sticky bar,
+            // so scrollIntoView lands the heading in the right place.
+            target.scrollIntoView({ behavior: "auto", block: "start" });
+        };
+
+        var lastHeight = -1;
+        var attempts = 0;
+        var recheck = function () {
+            var h = document.documentElement.scrollHeight;
+            // Re-assert while the page is still growing, up to ~1s.
+            if (h !== lastHeight && attempts < 12) {
+                lastHeight = h;
+                settle();
+                attempts++;
+                setTimeout(recheck, 80);
+            }
+        };
+
+        // Run after the browser's own hash jump, then keep correcting.
+        if (document.readyState === "complete") {
+            requestAnimationFrame(function () { settle(); recheck(); });
+        } else {
+            window.addEventListener("load", function () {
+                requestAnimationFrame(function () { settle(); recheck(); });
+            });
+        }
+        // Fonts can swap after `load` and shift metrics again.
+        if (document.fonts && document.fonts.ready) {
+            document.fonts.ready.then(function () { settle(); });
+        }
+    })();
+
     /* ---------- Reveals ---------- */
     // `.gsap-reveal` nodes belong to gsap-motion.js when it signalled
     // that it took ownership; otherwise they fall through to us.
