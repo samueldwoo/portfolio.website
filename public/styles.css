@@ -153,7 +153,16 @@ a { color: inherit; text-decoration: none; }
     position: sticky;
     top: 0;
     z-index: 200;
-    background: rgba(245,246,242,.78);
+    /* Alpha raised .78 -> .91 for the inverted `#work` band. The bar is
+       translucent and the dark plate scrolls underneath it, so at .78 the
+       composited bar dropped to #c5c7c2 and `.nav-link.is-active` /
+       `.nav-cta` (--sage-deep #4e6640) fell to 3.74:1 — below AA. At .91
+       the bar composites to #e1e3de over the plate: nav-link 7.65:1,
+       active/CTA 4.92:1, brand 13.99:1. All measured, not eyeballed.
+       Costs nothing on the light sections: the overlay colour IS
+       --bg #f5f6f2, so over light ground .78 and .91 composite to the
+       same #f5f6f2 and the blur still reads. */
+    background: rgba(245,246,242,.91);
     -webkit-backdrop-filter: saturate(140%) blur(14px);
             backdrop-filter: saturate(140%) blur(14px);
     border-bottom: 1px solid var(--line);
@@ -341,6 +350,159 @@ a { color: inherit; text-decoration: none; }
     opacity: .5;
 }
 .band > .band-inner { position: relative; z-index: 1; }
+
+/* ============================================================
+   Inverted band — the ONE dark plate on the site (#work)
+   ============================================================
+
+   Why one dark band: the page was a single uninterrupted light sheet.
+   `#work` is the substantive middle of the scroll, so inverting it gives
+   the page a centre of gravity and makes the light bands above and below
+   read as a deliberate frame.
+
+   How: no `filter: invert`, no per-element repainting. `.band--dark`
+   simply REDEFINES the design tokens for its own subtree, so every
+   descendant rule (`.section-title { color: var(--ink) }`,
+   `.subhead { border-bottom: 1px solid var(--line) }`, the timeline,
+   the chips, the résumé button) resolves against the dark ramp with no
+   further edits. Only the handful of rules that hardcode a literal
+   colour instead of a token need explicit fixes; those are grouped at
+   the bottom of this block and each says why.
+
+   Colours are derived from the existing sage family — the ramp is the
+   light one turned inside out, not a new hue. Every ratio below was
+   computed (not eyeballed) against the WORST CASE ground, i.e. the base
+   plate plus both radial washes at their peak plus a dot-grid dot:
+   #343e2a. Body/label text clears 4.5:1, display type clears 3:1. */
+.band--dark {
+    /* ---- Surfaces ---- */
+    /* Deep sage-black: the same hue as --sage-deep #4e6640 driven down
+       in value. Reads as "very dark green", never as pure black. */
+    --band-dark-base: #1b2216;
+    --bg:     #1b2216;   /* also repaints .exp-item::before dot fill */
+    --bg2:    #212a1b;
+    --panel:  #232d1d;
+    --panel2: #28321f;
+    --line:   #3d4a31;   /* 1.73:1 on base — matches the light hairline's presence */
+    --line2:  #4d5c3f;   /* 2.27:1 on base — matches light --line2's presence */
+
+    /* ---- Text ramp — off-white/sage on dark (the light ramp inverted) ---- */
+    --ink:  #f2f4ec;     /* 10.13:1 worst case */
+    --ink2: #dde3d2;     /*  8.56:1 worst case */
+    --mut:  #b6c0a7;     /*  5.93:1 worst case — small mono labels live here */
+
+    /* ---- Accents — sage, lightened so it carries on a dark ground ---- */
+    --sage:      #a9c78c;   /* 6.03:1 — links, rails, focus ring */
+    --sage-hi:   #c2d9a6;   /* 7.40:1 — hover / decorative */
+    --olive:     #b9c48a;
+    --sage-soft: #2b3722;   /* chip FILL is now dark, not light */
+    --sage-deep: #bcd39f;   /* 6.93:1 — kickers, chip text, .exp-company */
+
+    color: var(--ink2);
+
+    /* Opaque plate. This is required, not cosmetic: `.band` has no
+       background of its own, so without one the fixed light
+       `.atmosphere` (z-index -2) and its sage/olive `.glow` blobs would
+       show straight through. `.band--dark` is position:relative, so its
+       background paints over that negative-z-index layer and occludes
+       it entirely — which is why the plate carries its own two washes
+       here, echoing .glow-sage / .glow-olive in the dark register. */
+    background:
+        radial-gradient(60vw 60vw at 88% -18%,  rgba(169,199,140,.06), rgba(169,199,140,0) 62%),
+        radial-gradient(54vw 54vw at -12% 118%, rgba(185,196,138,.045), rgba(185,196,138,0) 62%),
+        var(--band-dark-base);
+
+    /* ---- Seams ----
+       The light `.band` hairline would read as a stray bright line
+       against the dark plate, so both edges are handled explicitly
+       instead: see the `border-bottom: none` pair and `::after` below. */
+    border-bottom: none;
+}
+
+/* Kill the hairline on the light band ABOVE the plate too, so the
+   transition is one clean tonal step rather than a light rule stranded
+   on a dark edge. If :has() is unsupported the fallback is the original
+   1px --line, which still reads as an intentional rule — degrades
+   quietly rather than breaking. */
+.band:has(+ .band--dark) { border-bottom: none; }
+
+/* Deliberate seam marking: a 1px sage gradient rule inset at the top and
+   bottom edge of the plate, in exactly the register `.card::after`
+   already uses. It keeps the two hard edges from looking like an
+   accident without adding a heavy border. */
+.band--dark::after {
+    content: "";
+    position: absolute;
+    left: 0; right: 0; top: 0; bottom: 0;
+    z-index: 0;
+    pointer-events: none;
+    background-image:
+        linear-gradient(90deg, transparent, rgba(169,199,140,.34), transparent),
+        linear-gradient(90deg, transparent, rgba(169,199,140,.22), transparent);
+    background-size: 100% 1px, 100% 1px;
+    background-position: 0 0, 0 100%;
+    background-repeat: no-repeat;
+}
+
+/* Dot-grid texture: the shared `.band::before` hardcodes a dark sage dot
+   (rgba(95,122,79,.06)) which is invisible on a dark ground. Same texture,
+   inverted — a light sage dot at a comparably faint strength. */
+.band--dark::before {
+    background-image: radial-gradient(rgba(169,199,140,.075) 1px, transparent 1px);
+    opacity: .55;
+}
+
+/* ---- The literal-colour rules that tokens can't reach ---- */
+
+/* `.btn-resume` / form buttons hardcode `color: #fff` on `background:
+   var(--sage)`. With --sage now LIGHT sage, white-on-sage would be
+   ~1.6:1. Flip the button to dark ink on the light sage pill: 9.30:1
+   (11.4:1 on hover). The button also becomes the brightest object in the
+   band, which is correct — it's the section's only real call to action. */
+.band--dark .btn-resume,
+.band--dark .contact-form button {
+    color: #161c11;
+    background: var(--sage);
+}
+.band--dark .btn-resume:hover,
+.band--dark .contact-form button:hover {
+    color: #161c11;
+    background: var(--sage-deep);
+}
+
+/* `.skills-list li:hover` and `a.bubble:hover` hardcode the light
+   `#dfe6d1` fill. Dark equivalent, one step up from --sage-soft, keeping
+   the chip label at 6.60:1. */
+.band--dark .skills-list li:hover,
+.band--dark a.bubble:hover { background: #35422a; }
+
+/* `.exp-item:first-child::before` marker glow is a literal dark-sage
+   rgba that vanishes on dark — same halo, light sage. */
+.band--dark .exp-item:first-child::before {
+    box-shadow: 0 0 0 4px rgba(169,199,140,.14);
+}
+
+/* Decorative line-art (`.shape-field`, `.card.spotlight`) already strokes
+   with var(--sage), so it picks up the light sage automatically — but the
+   light-mode opacities were tuned for a dark stroke on a light ground and
+   go muddy inverted. Lift them so nothing is stranded near-invisible.
+   Defensive: #work carries no `.shape-field` today, but the plate should
+   survive one being added. */
+.band--dark .shape-field .shape-line,
+.band--dark .shape-field .shape-ring,
+.band--dark .shape-field .shape-tick { opacity: .34; }
+.band--dark .shape-field .shape-ring { opacity: .26; }
+.band--dark .shape-field .shape-dot { opacity: .42; }
+.band--dark .card.spotlight::before {
+    background: radial-gradient(
+        340px circle at var(--mx, 50%) var(--my, 50%),
+        rgba(169,199,140,.10),
+        rgba(169,199,140,0) 60%);
+}
+
+/* Global ::selection is a dark-sage wash + var(--ink); on the plate that
+   token is now off-white, so give the pair a ground it actually reads on. */
+.band--dark ::selection { background: rgba(169,199,140,.28); color: var(--ink); }
 
 /* ---------- Section head ---------- */
 .section-head {
