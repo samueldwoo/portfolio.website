@@ -1,0 +1,35 @@
+---
+/**
+ * SiteFoot.astro — the one and only definition of the site footer markup.
+ *
+ * NOTE on placement: the footer is NOT a document-level element on this site.
+ * `.site-foot` is styled with `margin-top: 72px; padding-top: 24px;
+ * border-top: 1px solid var(--line)` and relies on being the last child inside
+ * a `.band-inner` / `.section-body` so it inherits the content column's width
+ * and gutters. Hoisting it into Base.astro at the end of <body> would put it
+ * full-bleed outside the column and visibly change the layout. So the markup
+ * lives here (single definition) and each page drops the component at the
+ * exact DOM position its static predecessor used.
+ *
+ * The right-hand cell genuinely differed between pages, so it's a prop:
+ *   index.html      -> "Built with plain HTML, CSS & JS" (plain text)
+ *   projects/travel -> "Back home ↗" link to index.html#home
+ *
+ * The year is hardcoded to 2026 exactly as before; script.js overwrites
+ * #year with the live year at runtime.
+ */
+interface Props {
+  /** 'built' = the index.html tagline, 'back' = the sub-page back-home link */
+  right: 'built' | 'back';
+}
+
+const { right } = Astro.props;
+---
+<footer class="site-foot">
+    <span>© <span id="year">2026</span> Samuel Woo</span>
+    {right === 'built' ? (
+        <span>Built with plain HTML, CSS &amp; JS</span>
+    ) : (
+        <span><a href="index.html#home" class="foot-link">Back home ↗</a></span>
+    )}
+</footer>

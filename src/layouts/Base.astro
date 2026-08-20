@@ -1,0 +1,125 @@
+---
+/**
+ * Base.astro — the single source of truth for <head>, the atmosphere layer,
+ * the skip link and the sticky top nav. Previously triplicated verbatim across
+ * index.html / projects.html / travel.html.
+ *
+ * Every per-page difference is a prop:
+ *   title / description  — <head> metadata
+ *   page                 — 'home' | 'projects' | 'travel'; drives the brand
+ *                          href, whether nav hrefs are same-page hashes or
+ *                          cross-page, and which link carries is-active +
+ *                          aria-current
+ *   skipTarget           — the skip-link's #id ('home' | 'projects' | 'travel')
+ *
+ * The `head` slot lets a page append extra <head> tags (travel.html loads a
+ * second Google Fonts stylesheet for the airline wordmarks).
+ *
+ * The rendered markup is byte-for-byte equivalent to the old hand-written
+ * headers, including the quirk that projects.html's active link carries
+ * data-nav="projects" while travel.html's does not.
+ */
+interface Props {
+  title: string;
+  description: string;
+  page: 'home' | 'projects' | 'travel';
+  skipTarget: string;
+}
+
+const { title, description, page, skipTarget } = Astro.props;
+
+// On the home page the section links are same-page hashes and carry data-nav
+// so script.js's scroll-spy can claim them. From the sub-pages they point back
+// at index.html and there is nothing to spy on.
+const isHome = page === 'home';
+const brandHref = isHome ? '#home' : 'index.html#home';
+const href = (hash: string) => (isHome ? `#${hash}` : `index.html#${hash}`);
+const spy = (hash: string) => (isHome ? { 'data-nav': hash } : {});
+---
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light">
+    <meta name="description" content={description}>
+    <title>{title}</title>
+    <!-- Inline SVG favicon: sage "S" monogram on a light canvas -->
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23eceee6'/%3E%3Ctext x='16' y='23' font-family='Verdana,Geneva,sans-serif' font-size='20' font-weight='700' text-anchor='middle' fill='%235f7a4f'%3ES%3C/text%3E%3C/svg%3E">
+
+    <!-- Google Fonts: Space Grotesk (display), Inter (body/UI), DM Mono (labels) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <slot name="head" />
+
+    <!-- The hand-written stylesheet, served verbatim from public/ as one
+         global sheet. Deliberately NOT imported through Astro/Vite: no
+         scoping, no splitting, no hashing — same file, same cascade. -->
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Fixed background atmosphere: faint sage radial wash + abstract shapes -->
+    <div class="atmosphere" aria-hidden="true">
+        <div class="glow glow-sage"></div>
+        <div class="glow glow-olive"></div>
+    </div>
+    <a class="skip-link" href={`#${skipTarget}`}>Skip to content</a>
+
+    <!-- Sticky top navigation bar -->
+    <header class="topbar" aria-label="Primary">
+        <div class="topbar-inner">
+            <a class="brand" href={brandHref} aria-label="Samuel Woo — home">
+                <svg class="brand-wave" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M8.5 11.5V5.9a1.35 1.35 0 0 1 2.7 0v4.6"/>
+                    <path d="M11.2 10.5V4.6a1.35 1.35 0 0 1 2.7 0v5.9"/>
+                    <path d="M13.9 10.5V5.6a1.35 1.35 0 0 1 2.7 0v4.9"/>
+                    <path d="M16.6 10.5V7.2a1.35 1.35 0 0 1 2.7 0v6.3a6 6 0 0 1-6 6h-1.1a6 6 0 0 1-4.3-1.8l-3.1-3.2a1.4 1.4 0 0 1 2-2l1.9 1.8V6.9a1.35 1.35 0 0 1 2.7 0v4.6"/>
+                </svg>
+                <span class="brand-name">sam<span class="brand-dot" aria-hidden="true">.</span></span>
+            </a>
+
+            <nav class="nav-links" id="nav-links" aria-label="Sections">
+                <a href={href('interests')} class="nav-link" {...spy('interests')}>Interests</a>
+                {page === 'projects' ? (
+                    <a href="projects.html" class="nav-link is-active" data-nav="projects" aria-current="true">Projects</a>
+                ) : (
+                    <a href="projects.html" class="nav-link">Projects</a>
+                )}
+                {page === 'travel' ? (
+                    <a href="travel.html" class="nav-link is-active" aria-current="true">Travel</a>
+                ) : (
+                    <a href="travel.html" class="nav-link">Travel</a>
+                )}
+                <a href={href('work')} class="nav-link" {...spy('work')}>Work</a>
+                <a href={href('connect')} class="nav-cta" {...spy('connect')}>Connect</a>
+            </nav>
+
+            <button class="nav-toggle" id="nav-toggle" aria-expanded="false" aria-controls="nav-links" aria-label="Open menu">
+                <span class="nav-toggle-bar" aria-hidden="true"></span>
+                <span class="nav-toggle-bar" aria-hidden="true"></span>
+                <span class="nav-toggle-bar" aria-hidden="true"></span>
+            </button>
+        </div>
+        <div class="scroll-progress" id="scroll-progress" aria-hidden="true"></div>
+    </header>
+
+    <slot />
+
+    <!-- Vendored libs + the two hand-written motion files, in the exact order
+         the static pages used them. `is:inline` keeps Astro/Vite from
+         bundling, hashing or reordering any of it — these are byte-identical
+         <script src> tags pointing at public/.
+
+         Order matters: GSAP + ScrollTrigger, then gsap-motion.js so it can
+         claim its elements via html.gsap-on BEFORE script.js runs and decides
+         whether to skip .gsap-reveal nodes. anime.min.js only has to precede
+         script.js. -->
+    <script is:inline src="gsap.min.js"></script>
+    <script is:inline src="ScrollTrigger.min.js"></script>
+    <script is:inline src="gsap-motion.js"></script>
+    <script is:inline src="anime.min.js"></script>
+    <script is:inline src="script.js"></script>
+</body>
+</html>
