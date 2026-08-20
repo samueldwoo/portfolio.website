@@ -1435,22 +1435,6 @@ a.bubble.ticker:hover::after { transform: translate(2px, -2px); opacity: 1; }
     pointer-events: none;
 }
 
-/* Case-study read-progress hairline under the case head. */
-.case-rail {
-    position: relative;
-    height: 2px;
-    margin-bottom: 30px;
-    border-radius: 2px;
-    background: var(--line);
-    overflow: hidden;
-}
-.case-rail-fill {
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(90deg, var(--sage), var(--olive));
-    transform-origin: 0% 50%;
-}
-
 /* GSAP owns the brand wave once it has loaded — retire the CSS
    keyframes so the two never rock the wrist at the same time. */
 html.gsap-on .brand:hover .brand-wave,
@@ -1619,7 +1603,7 @@ html.js-anim .reveal:not(.is-visible) { opacity: 0; }
         stroke-dashoffset: 0 !important;
     }
     .shape-field .shape-dot { opacity: .3 !important; }
-    .timeline-rail, .case-rail-fill {
+    .timeline-rail {
         opacity: 1 !important;
         transform: none !important;   /* rails sit filled, as design elements */
     }

@@ -267,18 +267,6 @@
                 }
             );
         });
-
-        toArray(".case-rail-fill").forEach(function (fill) {
-            var cs = fill.closest(".case-study") || fill;
-            gsap.fromTo(fill,
-                { scaleX: 0 },
-                {
-                    scaleX: 1,
-                    ease: "none",
-                    scrollTrigger: { trigger: cs, start: "top 78%", end: "bottom 70%", scrub: 0.5 }
-                }
-            );
-        });
     }
 
     /* ============================================================
