@@ -1,7 +1,7 @@
 ---
 import Base from '../layouts/Base.astro';
 import SiteFoot from '../components/SiteFoot.astro';
-import ReactProbe from '../components/ReactProbe.tsx';
+import HeroCanvas from '../components/HeroCanvas.tsx';
 ---
 
 <Base
@@ -15,18 +15,21 @@ import ReactProbe from '../components/ReactProbe.tsx';
 
         <!-- HOME -->
         <section id="home" class="band band-home" aria-labelledby="home-title">
+            <!-- Generative atmosphere layer. This REPLACES the old static
+                 `.hero-motif` line-draw SVG: same sage stroke register, but a
+                 living contour field that eases toward the pointer. It is a
+                 direct child of the band (not `.home-inner`) so it sits at
+                 z-index 0 under `.band > .band-inner`'s z-index 1 — no
+                 stacking-context surprises, and nothing anime.js or GSAP
+                 touches lives inside it.
+
+                 client:load (not client:visible): the hero is above the fold on
+                 every viewport, so client:visible's IntersectionObserver would
+                 fire on the very first frame anyway — it only adds a round-trip
+                 before the atmosphere appears. The island still ships as a
+                 deferred module, so it never blocks first paint. -->
+            <HeroCanvas client:load />
             <div class="band-inner home-inner">
-                <!-- Fauna-style abstract line-draw motif: draws in on load -->
-                <svg class="hero-motif" viewBox="0 0 400 300" fill="none" aria-hidden="true">
-                    <!-- Inner <g> exists purely so GSAP can parallax the motif in SVG
-                         user units; anime.js still owns the .motif-draw stroke draw. -->
-                    <g class="motif-parallax">
-                        <path class="motif-draw" d="M60 210 C 60 150, 120 120, 180 150 C 240 180, 260 120, 210 90 C 160 60, 120 90, 150 140 C 190 205, 300 190, 340 110" />
-                        <circle class="motif-draw" cx="340" cy="110" r="10" />
-                        <path class="motif-draw" d="M40 250 L 360 250" />
-                        <path class="motif-draw" d="M300 40 L 340 80 M340 40 L 300 80" />
-                    </g>
-                </svg>
                 <p class="hero-meta reveal reveal-clip">
                     <span>Sunnyvale</span>
                     <span class="hero-meta-dot" aria-hidden="true">·</span>
@@ -335,7 +338,4 @@ import ReactProbe from '../components/ReactProbe.tsx';
             </div>
         </section>
     </main>
-
-    <!-- Visually-inert React island: proves @astrojs/react hydrates. -->
-    <ReactProbe client:visible />
 </Base>

@@ -1,7 +1,6 @@
 ---
 import Base from '../layouts/Base.astro';
 import SiteFoot from '../components/SiteFoot.astro';
-import ReactProbe from '../components/ReactProbe.tsx';
 ---
 
 <Base
@@ -319,7 +318,4 @@ import ReactProbe from '../components/ReactProbe.tsx';
             </div>
         </section>
     </main>
-
-    <!-- Visually-inert React island: proves @astrojs/react hydrates. -->
-    <ReactProbe client:visible />
 </Base>
