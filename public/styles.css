@@ -396,27 +396,31 @@ a { color: inherit; text-decoration: none; }
     padding-bottom: clamp(64px, 8vw, 96px);
 }
 .home-inner { max-width: var(--content-max); position: relative; }
-.home-inner > *:not(.hero-motif) { position: relative; z-index: 1; }
+.home-inner > * { position: relative; z-index: 1; }
 
-/* Hero abstract line-draw motif (SVG) sits behind the name */
-.hero-motif {
-    position: absolute !important;
-    top: 50%;
-    right: clamp(-40px, 2vw, 40px);
-    transform: translateY(-50%);
-    width: min(44vw, 540px);
-    height: auto;
-    pointer-events: none;
+/* ---- Generative hero atmosphere (React island: HeroCanvas.tsx) ----
+   Replaces the old static `.hero-motif` SVG. The wrapper is a bare positioned
+   box the component measures with ResizeObserver; the canvas fills it. Both are
+   inert: no pointer events, aria-hidden, and z-index 0 so `.band > .band-inner`
+   (z-index 1) always paints the hero copy on top.
+
+   Note there is deliberately NO opacity transition or keyframe here. The
+   component ramps its own alpha inside the draw call, so under
+   prefers-reduced-motion the single static frame is visible at full strength
+   with no CSS state to get stranded in. */
+.hero-canvas-wrap {
+    position: absolute;
+    inset: 0;
     z-index: 0;
-    opacity: .9;
+    pointer-events: none;
+    overflow: hidden;
+    contain: layout paint;
 }
-.hero-motif path,
-.hero-motif circle,
-.hero-motif line {
-    fill: none;
-    stroke: var(--sage);
-    stroke-width: 1.4;
-    opacity: .28;
+.hero-canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
 }
 
 .hero-meta {
@@ -1494,7 +1498,6 @@ html.js-anim .reveal:not(.is-visible) { opacity: 0; }
    ============================================================ */
 @media (max-width: 1080px) {
     .section-intro { max-width: 60ch; }
-    .hero-motif { opacity: .55; width: min(56vw, 440px); }
 }
 
 @media (max-width: 900px) {
@@ -1508,7 +1511,6 @@ html.js-anim .reveal:not(.is-visible) { opacity: 0; }
     .project-feature { grid-row: auto; }
     .past-item { grid-template-columns: 1fr; gap: 8px; }
     .hero-lower { grid-template-columns: 1fr; align-items: start; gap: 28px; }
-    .hero-motif { display: none; }
 }
 
 /* Mobile: collapse nav links into a hamburger dropdown */
@@ -1605,7 +1607,11 @@ html.js-anim .reveal:not(.is-visible) { opacity: 0; }
     .btn-resume, .contact-form button, .nav-links { transition: none !important; }
     .card.spotlight::before { display: none !important; }
     .bg-shapes { display: none !important; }
-    .hero-motif { opacity: .28 !important; }
+
+    /* The hero canvas MUST stay visible here. HeroCanvas.tsx paints exactly one
+       static frame under reduced motion and never starts its rAF loop, so this
+       is finished artwork, not a stranded from-state. Never hide it. */
+    .hero-canvas-wrap, .hero-canvas { opacity: 1 !important; display: block !important; }
 
     /* --- GSAP layer safety belts ---
        gsap-motion.js returns before it touches the DOM under reduced
