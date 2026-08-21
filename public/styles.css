@@ -1916,11 +1916,25 @@ a.bubble.ticker:hover::after { transform: translate(2px, -2px); opacity: 1; }
 
 /* Per-placement geometry. Kept off the small breakpoints entirely —
    decoration is the first thing to go when space is tight. */
-.shape-field--interests { top: 4%;  right: -6%;  width: min(30vw, 340px); }
-.shape-field--projects  { bottom: 2%; left: -7%;  width: min(26vw, 300px); }
-.shape-field--connect   { top: 10%; right: -4%;  width: min(24vw, 280px); }
-.shape-field--cooking   { top: 0;   right: -5%;  width: min(24vw, 280px); }
-.shape-field--travel    { top: 50%; right: -2%;  width: min(34vw, 400px); transform: translateY(-50%); }
+/* OFFSETS ARE NON-NEGATIVE ON PURPOSE — do not put them back.
+   These used to hang off the band edge (right: -6%, left: -7%, etc). A soft
+   radial wash can bleed off-screen invisibly, which is why `.glow` still does;
+   but these are HARD STROKES, so `body { overflow-x: hidden }` cut them mid-line
+   and a severed circle reads as a rendering fault rather than as bleed.
+   Measured at 1440 before this: --interests 25% clipped, --connect 21%,
+   --projects 19%, --cooking 11%, --travel 7%.
+
+   Sitting flush to the edge instead, capped at min(16vw, 230px), each field now
+   fits inside the page's own side margin at >=1440 (230px of art in a 240px
+   margin) rather than overlapping the text column AND being cut. Below that the
+   margin narrows and they drift behind the content column, which is fine: they
+   are z-index 0 under `.band-inner`, and they are already hidden entirely below
+   the mobile breakpoint. */
+.shape-field--interests { top: 4%;   right: 0; width: min(16vw, 230px); }
+.shape-field--projects  { bottom: 2%; left: 0; width: min(16vw, 230px); }
+.shape-field--connect   { top: 10%;  right: 0; width: min(15vw, 215px); }
+.shape-field--cooking   { top: 0;    right: 0; width: min(15vw, 215px); }
+.shape-field--travel    { top: 50%;  right: 0; width: min(18vw, 260px); transform: translateY(-50%); }
 
 @media (max-width: 1080px) {
     .shape-field { opacity: .6; }
