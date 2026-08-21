@@ -86,8 +86,15 @@ const spanLabel = `${MONTH_ABBR[firstM - 1]} ${firstY} – ${MONTH_ABBR[lastM - 
         </section>
 
         <!-- BOARDING PASS WALL -->
-        <section class="band band-flush-top" aria-label="Boarding passes">
-            <div class="band-inner">
+        <!-- Inverted, which is the whole point of the wall: the passes are
+             saturated airline colours, and on the light sheet they read as
+             eleven bright rectangles floating in white space. On the dark
+             plate they read as a departures board — the plate does the job a
+             gallery wall does. `.band--dark` redefines tokens for its
+             subtree; each `.pass` carries its own `--pass-bg`/`--pass-ink`,
+             so no pass colour or contrast moves. -->
+        <section class="band band-flush-top band--dark" aria-label="Boarding passes">
+            <div class="band-inner" data-rail="02 / Boarding passes">
 
                 <!-- Trip cadence. The wall below is ordered by feel, not by
                      date, so the one fact it genuinely hides is WHEN the trips
@@ -145,10 +152,16 @@ const spanLabel = `${MONTH_ABBR[firstM - 1]} ${firstY} – ${MONTH_ABBR[lastM - 
                     </ul>
                 </figure>
 
+                <!-- 12-column mosaic (layout.css §12): the two long-haul
+                     passes span six columns across the top row, then three
+                     rows of three. gsap-motion.js staggers the wall with
+                     `grid: 'auto'`, which measures the real laid-out
+                     geometry, so the diagonal entrance adapts to this
+                     mosaic (and to the 2-up / 1-up collapses) on its own. -->
                 <div class="pass-wall">
 
                     <!-- 01 Tokyo -->
-                    <article class="pass pass--zipair reveal gsap-reveal">
+                    <article class="pass pass--zipair pass--wide reveal gsap-reveal">
                         <div class="pass-main">
                             <div class="pass-head">
                                 <span class="pass-logoband"><img class="pass-logo pass-logo--white" src="assets/airlines/zipair-t-c.png" alt="Zip Air"></span>
@@ -172,7 +185,7 @@ const spanLabel = `${MONTH_ABBR[firstM - 1]} ${firstY} – ${MONTH_ABBR[lastM - 
                     </article>
 
                     <!-- 02 Seoul -->
-                    <article class="pass pass--korean reveal gsap-reveal">
+                    <article class="pass pass--korean pass--wide reveal gsap-reveal">
                         <div class="pass-main">
                             <div class="pass-head">
                                 <span class="pass-logoband"><img class="pass-logo pass-logo--white" src="assets/airlines/korean-c.png" alt="Korean Air"></span>

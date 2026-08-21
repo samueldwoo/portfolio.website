@@ -89,7 +89,14 @@ import SiteFoot from '../components/SiteFoot.astro';
         </section>
 
         <!-- CASE STUDY 02 — Portfolio site -->
-        <section class="band case-study" aria-labelledby="cs-site-title">
+        <!-- Inverted. Two consecutive case studies in the same register read
+             as one long slab; alternating the plate turns them into two
+             distinct spreads and gives this page the same
+             light / dark / inset rhythm as the home page. `.band--dark`
+             redefines the design tokens for its own subtree, so the
+             case-rail, the meta strip and the prose all follow with no
+             markup change. -->
+        <section class="band case-study band--dark" aria-labelledby="cs-site-title">
             <div class="band-inner">
                 <aside class="case-rail" aria-hidden="true">
                     <span class="case-rail-track"><span class="case-rail-fill"></span><span class="case-rail-head"></span></span>
@@ -140,7 +147,10 @@ import SiteFoot from '../components/SiteFoot.astro';
         </section>
 
         <!-- STILL COOKING (teasers) -->
-        <section class="band band--shapes" aria-labelledby="cooking-title">
+        <!-- Inset plate, closing the page the way the home page's projects
+             band does — the teasers sit on their own sheet rather than
+             bleeding to the viewport edge. -->
+        <section class="band band--shapes band--plate" aria-labelledby="cooking-title">
             <!-- Line-art "simmering pot" abstraction for the still-cooking band -->
             <svg class="shape-field shape-field--cooking" viewBox="0 0 240 240" fill="none" aria-hidden="true">
                 <g class="shape-drift">
@@ -152,7 +162,7 @@ import SiteFoot from '../components/SiteFoot.astro';
                     <circle class="shape-dot shape-dot--soft" cx="156" cy="22" r="4.5" />
                 </g>
             </svg>
-            <div class="band-inner">
+            <div class="band-inner" data-rail="03 / On the bench">
                 <div class="section-head">
                     <p class="kicker reveal reveal-clip">Also on the bench</p>
                     <h2 id="cooking-title" class="section-title reveal reveal-clip">Still cooking</h2>

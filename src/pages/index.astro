@@ -53,7 +53,14 @@ import HeroCanvas from '../components/HeroCanvas.tsx';
         </section>
 
         <!-- INTERESTS -->
-        <section id="interests" class="band band--shapes" aria-labelledby="interests-title">
+        <!-- First of the two dark plates. The page used to run five light
+             bands in a row; inverting this one puts a hard tonal break
+             immediately after the hero, so the scroll reads
+             light / dark / inset-plate / dark / light instead of one
+             uninterrupted sheet. All the colour inversion lives in
+             `.band--dark` in styles.css (local custom-property overrides),
+             so the markup below is unchanged by it. -->
+        <section id="interests" class="band band--shapes band--dark" aria-labelledby="interests-title">
             <!-- Decorative line-art field: draws itself in on enter, then drifts.
                  Same sage stroke register as the hero signature motif. -->
             <svg class="shape-field shape-field--interests" viewBox="0 0 260 260" fill="none" aria-hidden="true">
@@ -69,7 +76,11 @@ import HeroCanvas from '../components/HeroCanvas.tsx';
                     <path class="shape-tick" d="M24 236 L 40 236 M52 236 L 68 236 M80 236 L 96 236 M108 236 L 124 236 M136 236 L 152 236 M164 236 L 180 236" />
                 </g>
             </svg>
-            <div class="band-inner">
+            <!-- data-rail: the rotated mono running head in the band's left
+                 margin (layout.css). Decorative — it repeats the <h2> below,
+                 is drawn with generated content so it is never in the a11y
+                 tree, and only exists at >=1280px where the gutter does. -->
+            <div class="band-inner" data-rail="01 / Interests">
                 <div class="section-head">
                     <h2 id="interests-title" class="section-title reveal reveal-clip">Interests</h2>
                 </div>
@@ -146,7 +157,12 @@ import HeroCanvas from '../components/HeroCanvas.tsx';
         </section>
 
         <!-- PROJECTS -->
-        <section id="projects" class="band band--shapes" aria-labelledby="projects-title">
+        <!-- The one INSET band on the page: `band--plate` gives the section
+             its own margins, hairline and rounded corners so it reads as a
+             sheet laid on the page rather than another full-bleed slab. It
+             sits between the two dark plates, which is what makes the
+             bleed/inset alternation legible. -->
+        <section id="projects" class="band band--shapes band--plate" aria-labelledby="projects-title">
             <!-- Stacked-cards / layered-sheet abstraction, in line-art -->
             <svg class="shape-field shape-field--projects" viewBox="0 0 240 240" fill="none" aria-hidden="true">
                 <g class="shape-drift">
@@ -157,13 +173,19 @@ import HeroCanvas from '../components/HeroCanvas.tsx';
                     <circle class="shape-dot shape-dot--soft" cx="120" cy="212" r="4" />
                 </g>
             </svg>
-            <div class="band-inner">
+            <div class="band-inner" data-rail="02 / Projects">
                 <div class="section-head">
                     <h2 id="projects-title" class="section-title reveal reveal-clip">Projects</h2>
                     <p class="section-intro reveal">A couple I've written up, plus a few still on the bench.</p>
                 </div>
 
                 <div class="section-body">
+                    <!-- Bento mosaic (layout.css §8). Four tiles on a
+                         12-column grid with OFFSET seams — row 1 splits 7/5,
+                         row 2 splits 5/7 — so the vertical join moves as the
+                         eye travels down. DOM order matches visual order on
+                         every breakpoint, including the single-column
+                         collapse below 900px. -->
                     <div class="project-grid">
                         <a class="card project-card project-feature reveal spotlight" href="projects.html#cs-finance-title">
                             <span class="project-index" aria-hidden="true">01</span>
@@ -178,7 +200,7 @@ import HeroCanvas from '../components/HeroCanvas.tsx';
                             <span class="card-cta">Read case study <span aria-hidden="true">→</span></span>
                         </a>
 
-                        <a class="card project-card reveal spotlight" href="projects.html#cs-site-title">
+                        <a class="card project-card project-card--tall reveal spotlight" href="projects.html#cs-site-title">
                             <span class="project-index" aria-hidden="true">02</span>
                             <h4 class="card-title">This Website</h4>
                             <p class="project-tech">HTML/CSS/JS</p>
@@ -186,7 +208,18 @@ import HeroCanvas from '../components/HeroCanvas.tsx';
                             <span class="card-cta">Read case study <span aria-hidden="true">→</span></span>
                         </a>
 
-                        <a class="card project-card reveal spotlight" href="projects.html">
+                        <!-- The mosaic's fourth tile: pure type + procedural
+                             hatch, no imagery. It exists to break the run of
+                             three near-identical cards with a surface that
+                             isn't a card, and to carry the biggest numeral on
+                             the page against its 11px mono label. -->
+                        <div class="bento-plate reveal">
+                            <span class="bento-plate-k">On the record</span>
+                            <span class="bento-plate-n">05</span>
+                            <p class="bento-plate-note">projects tracked. Two written up end to end, three still on the bench.</p>
+                        </div>
+
+                        <a class="card project-card project-card--wide reveal spotlight" href="projects.html">
                             <span class="project-index" aria-hidden="true">→</span>
                             <h4 class="card-title">See all projects</h4>
                             <p class="project-tech">Full case studies + what's cooking</p>
@@ -206,7 +239,7 @@ import HeroCanvas from '../components/HeroCanvas.tsx';
              inversion lives in `.band--dark` in styles.css (local custom-property
              overrides — no filters), so the content markup is untouched. -->
         <section id="work" class="band band--dark" aria-labelledby="work-title">
-            <div class="band-inner">
+            <div class="band-inner" data-rail="03 / Work">
                 <div class="section-head">
                     <h2 id="work-title" class="section-title reveal reveal-clip">Work</h2>
                     <p class="section-intro reveal">The professional stuff, if you're into that.</p>
@@ -289,7 +322,7 @@ import HeroCanvas from '../components/HeroCanvas.tsx';
                     <circle class="shape-dot shape-dot--soft" cx="168" cy="208" r="4" />
                 </g>
             </svg>
-            <div class="band-inner">
+            <div class="band-inner" data-rail="04 / Connect">
                 <div class="section-head">
                     <h2 id="connect-title" class="section-title reveal reveal-clip">Connect</h2>
                     <p class="section-intro reveal">Always happy to talk robotics, food, or whatever you're building. Don't be a stranger.</p>
