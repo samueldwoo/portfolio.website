@@ -18,4 +18,364 @@
        focusable elements or it injects <li> and <article> into the tab order.
      - prefers-reduced-motion: no transforms, no cursor effects, resting state
        must already be the finished state.
+   ==========================================================================
+
+   WHAT LIVES HERE (all of it paired with motion-ux.js):
+     1. Interaction-state hand-off for the elements Motion newly claims
+     2. Cursor companion — the follower layer and its contextual shapes
+     3. Travelling focus halo
+     4. Form feedback (invalid state)
+     5. Page-transition veil
+     6. Reduced-motion and coarse-pointer stand-downs
+
+   Two rules govern every block below.
+
+   ONE OWNER PER PROPERTY. motion-ux.js writes `transform` (and only
+   transform) on the elements it claims, plus `opacity` on the nodes it
+   creates itself. So nothing here declares a transform or a transition on
+   `transform` for a `.motion-spring` element, and where a state change needs
+   a non-transform property to move (the caret morph, the invalid ring) it is
+   a CSS transition on width/height/colour/box-shadow — properties the JS
+   never touches.
+
+   NOTHING HERE IS LOAD-BEARING. Every selector is scoped to `html.motion-on`
+   or to a node motion-ux.js injects, and that script adds the flag only after
+   it has successfully claimed its elements. If it 404s, throws, or bails out
+   under reduced motion, none of this applies and the page is exactly the page
+   styles.css painted.
    ========================================================================== */
+
+/* ==========================================================================
+   1. Interaction-state hand-off
+   styles.css already withdraws the CSS `:hover` transform for the elements
+   Motion claimed in the first pass. These are the additions that pass made
+   necessary, and nothing more.
+   ========================================================================== */
+
+/* The tilt channel writes rotateX/rotateY on cards and boarding passes, so
+   they now render in 3D. `transform-style: flat` is what we want (children
+   must NOT get their own depth — a tilted card whose text floats off the
+   plate reads as broken), and the pass already clips its own corners. */
+html.motion-on .pass.motion-spring,
+html.motion-on .project-card.motion-spring,
+html.motion-on .contact-link.motion-spring {
+    transform-style: flat;
+}
+
+/* The plane on a boarding pass taxis forward on hover — Motion writes its
+   `x`. Spelling the transition list out (rather than leaving it unset) pins
+   `transform` OUT of it, so a later `transition: all` on `.pass-plane` can't
+   quietly start chasing the spring frame by frame. Opacity stays CSS's. */
+html.motion-on .pass.motion-spring .pass-plane {
+    transition: opacity .25s ease;
+}
+
+/* The pass wall's hover shadow is the only depth cue left to CSS now that
+   the lift is a spring. Warm it slightly on hover so the tilt has something
+   to sell it — colour and shadow only, per the ownership split. */
+html.motion-on .pass.motion-spring:hover {
+    box-shadow:
+        0 3px 8px rgba(31, 42, 24, .10),
+        0 30px 60px -26px rgba(31, 42, 24, .38);
+}
+
+/* Chips get a press state, which means a finger needs to see something on a
+   device with no hover at all. Background is CSS-owned, so it is free. */
+html.motion-on .bubble.motion-spring:active,
+html.motion-on .skills-list li.motion-spring:active {
+    background: #dfe6d1;
+    border-color: var(--sage);
+}
+html.motion-on .band--dark .skills-list li.motion-spring:active,
+html.motion-on .band--dark a.bubble.motion-spring:active {
+    background: #35422a;
+}
+
+/* ==========================================================================
+   2. Cursor companion  (motion-ux.js §3)
+
+   Three layers, three owners:
+     .mx-follow   position   — motion-ux.js, from its own rAF integrator
+                               (a spring re-targeted every frame is a chase,
+                                not a spring, so the follow is a lerp)
+     .mx-ring/.mx-dot  scale + opacity — Motion
+     everything else (size, colour, radius, the caret morph) — this file
+
+   The follow hosts are fixed 80x80 boxes pulled back by half their size, so
+   their centre sits exactly on the translated origin and a centred child is
+   centred on the pointer at ANY size. That matters: it means the caret morph
+   can change width and height without a transform, which would otherwise
+   collide with Motion's scale.
+
+   The box is deliberately NOT 0x0. Measured: with `width/height: 0` the ring
+   overflows its grid area, Chrome falls back to safe (start) alignment, and
+   both followers end up half their own size down and to the right of the
+   pointer — 20px off for the ring, and the label centred on a different
+   point than the ring it belongs to. 80px comfortably contains the largest
+   state (the card ring at 1.55 x 40px = 62px), so alignment stays unsafe and
+   therefore centred.
+
+   `pointer-events: none` on every node, and the native cursor is left
+   visible — see the note in motion-ux.js §3 for why hiding it is not on.
+   ========================================================================== */
+.mx-follow {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 80px;
+    height: 80px;
+    margin: -40px 0 0 -40px;
+    display: grid;
+    place-items: center;
+    z-index: 900;
+    pointer-events: none;
+    will-change: transform;
+}
+
+.mx-ring {
+    width: 40px;
+    height: 40px;
+    border: 1.5px solid var(--sage);
+    border-radius: 999px;
+    background: rgba(95, 122, 79, .05);
+    opacity: 0;
+    /* Only the caret morph moves these; Motion owns scale/opacity. */
+    transition: width .22s cubic-bezier(.2,.7,.2,1),
+                height .22s cubic-bezier(.2,.7,.2,1),
+                border-radius .22s ease,
+                border-color .2s ease,
+                background-color .2s ease;
+}
+.mx-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    background: var(--sage);
+    opacity: 0;
+    transition: background-color .2s ease;
+}
+
+/* Over a text field the ring becomes a caret: a thin sage bar the height of
+   a line of type. Size only — no transform. */
+.mx-ring.is-field {
+    width: 2px;
+    height: 30px;
+    border-radius: 2px;
+    border-color: transparent;
+    background: var(--sage);
+}
+
+/* On the one inverted band the sage hairline would nearly vanish, so the
+   companion switches to the light accent.
+
+   These are LITERAL values, not `var(--sage)`. The follower is a fixed layer
+   parented to <body>, so it sits outside `.band--dark` and cannot inherit
+   that band's local token overrides — `var(--sage)` here would resolve to the
+   light-ground #5f7a4f and read as a dark smudge on a dark plate. The hexes
+   below are the ones `.band--dark` sets for itself in styles.css: --sage
+   #a9c78c (6.03:1 on the band) and --sage-deep #bcd39f (6.93:1). */
+.mx-ring.is-dark {
+    border-color: #a9c78c;
+    background: rgba(169, 199, 140, .10);
+}
+.mx-ring.is-dark.is-field { background: #a9c78c; }
+.mx-dot.is-dark { background: #a9c78c; }
+
+/* Contextual label. Links only — a label on a chip or a boarding pass would
+   promise a click the markup does not have. Small sage text on the light
+   canvas uses --sage-deep for its AA headroom (see the token table). */
+.mx-label {
+    position: absolute;
+    /* 38px below the pointer clears the largest ring state (31px radius) with
+       a little air. Measured at 24px: the label sat 27px INSIDE the card ring. */
+    top: calc(50% + 38px);
+    left: 50%;
+    transform: translateX(-50%) translateY(-5px);
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    box-shadow: 0 6px 18px -12px rgba(31, 42, 24, .5);
+    font-family: var(--mono);
+    font-size: .6rem;
+    font-weight: 500;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    color: var(--sage-deep);
+    opacity: 0;
+    /* Transform is CSS-only here; Motion animates opacity. */
+    transition: transform .22s cubic-bezier(.2,.7,.2,1);
+}
+.mx-label.is-on { transform: translateX(-50%) translateY(0); }
+/* Same reasoning as the ring: literal values lifted from `.band--dark`'s own
+   token block, because this layer cannot inherit them. #bcd39f on #232d1d
+   measures ~8.9:1, which the .6rem label needs — the light-ground --sage-hi
+   would have landed at 4.2:1 and failed AA at this size. */
+.mx-label.is-dark {
+    background: #232d1d;
+    border-color: #4d5c3f;
+    color: #bcd39f;
+}
+
+/* While the page is on its way out, the companion is noise. */
+html.mx-exiting .mx-follow { opacity: 0; transition: opacity .12s linear; }
+
+/* ==========================================================================
+   3. Travelling focus halo  (motion-ux.js §6)
+
+   A sage bloom that springs between focused elements so tabbing reads as one
+   continuous movement. Strictly ADDITIVE: the `:focus-visible` outline in
+   styles.css is untouched, so the focus indicator never depends on JS. The
+   centre is transparent, so it cannot dull the focused content.
+
+   Motion owns x/y/width/height/border-radius/opacity; this file only styles
+   it. No transition here — a CSS transition chasing the spring is the
+   mushiness `.gsap-busy` exists to prevent.
+   ========================================================================== */
+.mx-focus-halo {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 0;
+    height: 0;
+    z-index: 260;                     /* over content, under the skip link */
+    pointer-events: none;
+    opacity: 0;
+    border-radius: 14px;
+    box-shadow:
+        0 0 0 1px rgba(95, 122, 79, .38),
+        0 0 0 6px rgba(95, 122, 79, .09);
+    will-change: transform, width, height;
+}
+
+/* ==========================================================================
+   4. Form feedback  (motion-ux.js §7)
+
+   The shake is Motion writing `x`. The ring is here, on box-shadow and
+   border-colour, so the two never share a property. Colour is not the only
+   signal — the field also moves, and the browser's own validation message
+   still appears, so this reads for a colour-blind reader too.
+   ========================================================================== */
+.field.mx-invalid input,
+.field.mx-invalid textarea {
+    border-color: var(--bad);
+    box-shadow: 0 0 0 3px rgba(181, 80, 63, .16);
+}
+/* NOT `--bad` (#b5503f): the label is .66rem mono, i.e. small text, and
+   #b5503f on --bg measures 4.46:1 — just under AA. This is the same move
+   --sage-deep makes for small sage text: one step darker for the small
+   sizes only. #9e4433 measures ~5.4:1. The BORDER keeps --bad, which only
+   has to clear the 3:1 non-text threshold. */
+.field.mx-invalid label { color: #9e4433; }
+/* A focused invalid field keeps the red ring rather than reverting to sage:
+   the field is still wrong, and the focus outline already says "you are
+   here". */
+.field.mx-invalid input:focus-visible,
+.field.mx-invalid textarea:focus-visible {
+    border-color: var(--bad);
+    box-shadow: 0 0 0 3px rgba(181, 80, 63, .26);
+}
+
+/* ==========================================================================
+   5. Page-transition veil  (motion-ux.js §8)
+
+   The fade is a CSS `animation ... forwards`, NOT a JS tween, on purpose: if
+   motion-ux.js throws mid-transition the keyframes still finish, so the veil
+   can never be stranded opaque over the content. It is `pointer-events: none`
+   in every state, so even a stranded veil cannot swallow a click. Both
+   durations are mirrored by EXIT_MS in motion-ux.js §8 — change them
+   together.
+
+   The colour is the site's own canvas, not an accent: the page dissolves
+   into its own paper rather than flashing a colour at the reader. The sage
+   hairline sweeping the top is what gives the dissolve a direction.
+   ========================================================================== */
+.mx-veil {
+    position: fixed;
+    inset: 0;
+    z-index: 800;
+    pointer-events: none;
+    opacity: 0;
+    background:
+        radial-gradient(120% 80% at 50% 0%, rgba(230, 235, 220, .96), rgba(245, 246, 242, .99));
+}
+.mx-veil-bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 2px;
+    width: 100%;
+    background: linear-gradient(90deg, var(--sage), var(--olive));
+    transform: scaleX(0);
+    transform-origin: 0 50%;
+}
+
+/* `both`, not `forwards`: the fill has to cover the frame BEFORE the
+   animation starts too. The arrival veil is inserted at the base
+   `opacity: 0` and animates 1 → 0, so with `forwards` alone the first
+   painted frame would be transparent and the reader would see the veil
+   flash ON before it faded out. */
+
+/* Leaving: 240ms to opaque, with the bar sweeping across. */
+.mx-veil.is-out { animation: mx-veil-cover 240ms cubic-bezier(.4,0,.2,1) both; }
+.mx-veil.is-out .mx-veil-bar { animation: mx-veil-sweep 300ms cubic-bezier(.3,0,.2,1) both; }
+
+/* Arriving: the same veil, handed over from the previous page, fading out a
+   little slower than it faded in so the landing feels like a settle. */
+.mx-veil.is-in { animation: mx-veil-clear 380ms cubic-bezier(.2,.7,.2,1) both; }
+.mx-veil.is-in .mx-veil-bar { animation: mx-veil-retire 380ms cubic-bezier(.2,.7,.2,1) both; }
+
+@keyframes mx-veil-cover  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes mx-veil-clear  { from { opacity: 1; } to { opacity: 0; } }
+@keyframes mx-veil-sweep  { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes mx-veil-retire {
+    from { transform: scaleX(1); opacity: 1; }
+    to   { transform: scaleX(1); opacity: 0; }
+}
+
+/* The content dims under the veil. `opacity` and nothing else: a transform
+   here would create a containing block and break the pinned ScrollTrigger
+   rails on projects.html mid-exit. */
+html.mx-exiting .content {
+    opacity: .4;
+    transition: opacity 200ms ease-out;
+}
+
+/* ==========================================================================
+   6. Stand-downs
+   ========================================================================== */
+
+/* No hover, or a coarse pointer: the companion is meaningless and the focus
+   halo still is not, so only the companion goes. Every affordance above is
+   ALSO reachable by press (chips, cards and passes all have a pointerdown
+   state) precisely so a finger is never asked to hover. */
+@media (hover: none), (pointer: coarse) {
+    .mx-follow { display: none !important; }
+}
+
+/* motion-ux.js returns before it adds `motion-on` under reduced motion, so
+   none of this can apply in the first place, and every node above is created
+   by that script and therefore never exists. Kept as belt and braces for a
+   stale flag: no transforms, no cursor effects, and nothing that could be
+   left mid-animation. The veil is forced transparent rather than hidden so
+   that even a stranded one cannot cover the page. */
+@media (prefers-reduced-motion: reduce) {
+    .mx-follow,
+    .mx-focus-halo {
+        display: none !important;
+    }
+    .mx-veil,
+    .mx-veil-bar {
+        animation: none !important;
+        opacity: 0 !important;
+    }
+    html.mx-exiting .content {
+        opacity: 1 !important;
+        transition: none !important;
+    }
+    html.motion-on .pass.motion-spring .pass-plane {
+        transform: none !important;
+        transition: none !important;
+    }
+}
