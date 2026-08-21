@@ -1491,6 +1491,160 @@ a.bubble.ticker:hover::after { transform: translate(2px, -2px); opacity: 1; }
 /* pull the pass wall up under the hero without a double gap */
 .band-flush-top { padding-top: clamp(20px, 3vw, 36px); }
 
+/* ---------- Trip cadence strip ----------
+   A dot plot, not a bar chart: each trip is one mark, so the column height IS
+   the count and the reader can literally count it. Redundant encodings, per
+   WCAG 1.4.1 — count is carried by mark COUNT (position/quantity) and repeated
+   verbatim in each column's aria-label; sage fill adds nothing load-bearing.
+
+   No JS, no canvas, no chart library. It rests in its final state, so there is
+   nothing to strand under prefers-reduced-motion — the only motion it has is
+   the site's existing `.reveal` fade, which is already neutralised in the
+   reduced-motion block at the bottom of this sheet. */
+.trip-summary {
+    margin: 0 0 clamp(28px, 4vw, 44px);
+    padding: clamp(18px, 2.4vw, 26px) clamp(18px, 2.6vw, 30px) clamp(14px, 2vw, 20px);
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--r);
+    box-shadow: var(--shadow-card);
+}
+.trip-summary-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px 16px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--line);
+}
+/* Same mono label rung as `.case-sub` — a strip header, not a heading. */
+.trip-summary-title {
+    font-family: var(--mono);
+    font-size: .72rem;
+    line-height: 1.2;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: var(--sage-deep);          /* 5.87:1 on --panel #fff */
+}
+.trip-summary-span {
+    font-family: var(--mono);
+    font-size: .72rem;
+    letter-spacing: .06em;
+    color: var(--mut);                /* 5.74:1 on --panel */
+}
+
+.trip-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px clamp(28px, 5vw, 52px);
+    margin: 16px 0 0;
+}
+.trip-stat dt {
+    font-family: var(--mono);
+    font-size: .68rem;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--mut);
+    margin-bottom: 4px;
+}
+.trip-stat dd {
+    font-family: var(--display);
+    font-size: var(--fs-3);
+    font-weight: 600;
+    line-height: 1;
+    color: var(--ink);                /* 17.6:1 on --panel */
+    margin: 0;
+}
+
+.trip-plot {
+    list-style: none;
+    display: flex;
+    align-items: flex-end;
+    gap: clamp(3px, .7vw, 7px);
+    margin: clamp(18px, 2.4vw, 26px) 0 0;
+    padding: 0;
+}
+.trip-col {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+}
+/* Reserve the full peak height on every column so the baseline is straight
+   and a quiet month reads as empty space above its tick, not as a short bar. */
+.trip-marks {
+    display: flex;
+    flex-direction: column-reverse;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 3px;
+    height: calc(var(--trip-peak) * 16px + (var(--trip-peak) - 1) * 3px);
+}
+.trip-mark {
+    display: block;
+    width: clamp(8px, 1.1vw, 13px);
+    height: 13px;
+    border-radius: 3px;
+    background: var(--sage);          /* 4.41:1 on --panel — decorative fill, not text */
+}
+/* Baseline tick: every month gets one, so the axis is continuous and the
+   gaps are legible as gaps. #8f9884 is exactly 3.00:1 on --panel — the
+   WCAG 1.4.11 non-text floor — where the sheet's --line2 (1.64:1) would
+   not have cleared it for a meaningful axis.
+
+   Empty months are distinguished by HEIGHT (1px vs 3px), not by colour, so
+   the axis never leans on hue alone; both tones are the same value. */
+.trip-col-tick {
+    width: 100%;
+    height: 3px;
+    border-radius: 2px;
+    background: #8f9884;
+}
+.trip-col.is-empty .trip-col-tick { height: 1px; }
+.trip-col-label {
+    font-family: var(--mono);
+    font-size: .62rem;
+    letter-spacing: .04em;
+    color: var(--mut);                /* 5.74:1 on --panel */
+    white-space: nowrap;
+}
+
+/* Full 3-letter labels need ~34px a column. Below that, rotate them upright
+   rather than truncating to an ambiguous initial.
+
+   The fixed height matters: the two year-turnover labels ("Sep ’25", "Jan ’26")
+   are physically longer than the single-word months, and since the columns are
+   bottom-aligned a taller label would shove those two baseline ticks upward and
+   bend the axis. Pinning every rotated label to the same box keeps the baseline
+   dead straight. */
+@media (max-width: 900px) {
+    .trip-col-label {
+        writing-mode: vertical-rl;
+        transform: rotate(180deg);
+        font-size: .6rem;
+        letter-spacing: .02em;
+        height: 4.2em;
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+    }
+}
+
+@media (max-width: 560px) {
+    /* Eleven columns of mono text will not fit a 390px viewport in any
+       orientation, so the month ruler goes and the header's date range plus
+       the stat pairs carry the summary. The plot still reads as a shape and
+       every column keeps its aria-label, so nothing is lost non-visually. */
+    .trip-col-label { display: none; }
+    .trip-mark { height: 10px; }
+    .trip-marks {
+        height: calc(var(--trip-peak) * 13px + (var(--trip-peak) - 1) * 3px);
+    }
+}
+
 .pass-wall {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
