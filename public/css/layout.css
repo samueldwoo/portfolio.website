@@ -427,6 +427,27 @@
 .band-home {
     padding-bottom: clamp(72px, 9vw, 120px);
 }
+
+/* ---- Reserve a band for the putting green on narrow viewports ----
+   On wide screens the green lives in the right-hand gutter beside the copy. On
+   narrow there IS no gutter — the copy is full-bleed — so the green has to go
+   BELOW it, and something has to make room. Measured at 390x844 before this:
+   the copy ran to y=750 of an 844px hero, leaving 94px, while the green's play
+   box occupied 472->760. It was laid out on top of the intro paragraph and the
+   explore cue.
+
+   This padding is that room. HeroCanvas.tsx measures the copy's real bottom edge
+   and places the green, the ink ramp, the resting focus and the hairline inside
+   whatever is left, so the two stay in agreement without sharing a constant --
+   change this value and the green follows.
+
+   Breakpoint matches the component's own `narrow = cssW < 900`. */
+@media (max-width: 899px) {
+    .band-home {
+        --green-band: clamp(230px, 33vh, 310px);
+        padding-bottom: calc(clamp(72px, 9vw, 120px) + var(--green-band));
+    }
+}
 @media (min-width: 1400px) {
     .home-inner > .hero-meta,
     .home-inner > .hero-name,

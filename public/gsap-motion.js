@@ -566,8 +566,28 @@
                the hero barely fits as it is. gsap.matchMedia's revert also
                clears every inline prop when the query stops matching, so a
                rotate-to-landscape cannot leave a plane offset. */
+            /* ALSO min-width 820px, not just min-height.
+               The hero pins at `top top`, which (as scroll.css says) wants a
+               section exactly one viewport tall. On narrow viewports the hero is
+               now deliberately TALLER than that: layout.css reserves a band below
+               the copy for the putting green, because a phone has no side gutter
+               to put it in. Pinning a 1.25-viewport section would hold the page
+               still for ~445px of scrolling while the green sat below the fold
+               the entire time — the reader would scroll and see nothing move.
+               So on narrow the hero is a normal tall section: read the copy,
+               scroll, the green arrives. The pin stays a wide-viewport flourish.
+
+               900px, NOT 820px: it must match HeroCanvas.tsx's own
+               `narrow = cssW < 900` and layout.css's `max-width: 899px` band
+               reservation. At 820-899 the first attempt reserved the band AND
+               pinned, which is the exact combination this avoids (measured:
+               959px hero pinned in a 900px viewport).
+
+               matchMedia's revert clears every inline prop when the query stops
+               matching, so resizing or rotating across the breakpoint cannot
+               leave a plane offset. */
             var mmHero = gsap.matchMedia();
-            mmHero.add("(min-height: 560px)", function () {
+            mmHero.add("(min-height: 560px) and (min-width: 900px)", function () {
                 /* Pin length in viewport heights. Shorter on narrow screens:
                    the same 0.85 that reads as a considered hold at 1440
                    reads as a page that will not move on a phone. */

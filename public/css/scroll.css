@@ -134,10 +134,12 @@ html.gsap-on .hero-canvas-wrap { will-change: transform; }
 
 /* Decoration is the first thing to go when space is tight — same rule the
    `.shape-field` layer already follows. */
-@media (max-width: 900px) {
-    .hero-fg { opacity: .26; }
-}
-@media (max-width: 700px) {
+/* Below 820px the hero pin does not run (gsap-motion.js §4a — the narrow hero is
+   deliberately taller than a viewport to make room for the putting green), so
+   this plane would have no parallax to justify it and would just be static ink
+   near the copy. Hide it at the same breakpoint the pin stands down, so there is
+   no orphaned decoration. */
+@media (max-width: 819px) {
     .hero-fg { display: none; }
 }
 

@@ -259,15 +259,29 @@ export default function HeroCanvas() {
      */
     const COPY_SEL = '.hero-meta, .hero-name, .hero-subtitle, .hero-intro';
 
-    const measureCopy = () => {
-      const inner = document.querySelector('.home-inner');
-      const wrapRect = wrap.getBoundingClientRect();
-      if (!inner || !wrapRect.width) {
-        copyEdge = COPY_EDGE_FALLBACK;
-        return;
-      }
+    /**
+     * On narrow viewports the copy is full-bleed, so there is no horizontal
+     * gutter and the green has to live in a BAND BELOW the copy instead. This is
+     * the bottom of everything the green must clear, as a fraction of the canvas.
+     *
+     * `.explore-cue` IS included here (unlike the horizontal measurement, which
+     * excludes it): vertically it is the last thing in the copy column and the
+     * green must not sit on it.
+     *
+     * Fallback 0.72 roughly matches what layout.css reserves; the clamp floor of
+     * 0.86 guarantees the green always keeps at least 14% of the hero even if the
+     * measurement goes wrong.
+     */
+    const COPY_BOTTOM_FALLBACK = 0.72;
+    let copyBottom = COPY_BOTTOM_FALLBACK;
+    const COPY_BOTTOM_SEL =
+      '.hero-meta, .hero-name, .hero-subtitle, .hero-intro, .explore-cue';
+
+    /** Max right / bottom of the real glyph rects under `sel`, or null. */
+    const inkExtent = (inner: Element, sel: string) => {
       let right = -Infinity;
-      inner.querySelectorAll(COPY_SEL).forEach((el) => {
+      let bottom = -Infinity;
+      inner.querySelectorAll(sel).forEach((el) => {
         const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
         let node: Node | null;
         while ((node = walker.nextNode())) {
@@ -283,17 +297,40 @@ export default function HeroCanvas() {
           rects.forEach((r) => {
             if (r.width <= 1 || r.height <= 1) return;
             right = Math.max(right, r.right);
+            bottom = Math.max(bottom, r.bottom);
           });
         }
       });
-      if (!Number.isFinite(right)) {
+      return {
+        right: Number.isFinite(right) ? right : null,
+        bottom: Number.isFinite(bottom) ? bottom : null,
+      };
+    };
+
+    const measureCopy = () => {
+      const inner = document.querySelector('.home-inner');
+      const wrapRect = wrap.getBoundingClientRect();
+      if (!inner || !wrapRect.width || !wrapRect.height) {
         copyEdge = COPY_EDGE_FALLBACK;
+        copyBottom = COPY_BOTTOM_FALLBACK;
         return;
       }
-      // Clamp so a pathological measurement can neither erase the composition
-      // (too high) nor expose copy to full ink (too low).
-      const frac = (right - wrapRect.left) / wrapRect.width;
-      copyEdge = Math.min(0.66, Math.max(0.3, frac));
+
+      // Horizontal onset — excludes .explore-cue (see COPY_SEL's note).
+      const h = inkExtent(inner, COPY_SEL);
+      copyEdge =
+        h.right === null
+          ? COPY_EDGE_FALLBACK
+          // Clamp so a pathological measurement can neither erase the
+          // composition (too high) nor expose copy to full ink (too low).
+          : Math.min(0.66, Math.max(0.3, (h.right - wrapRect.left) / wrapRect.width));
+
+      // Vertical onset — includes .explore-cue.
+      const v = inkExtent(inner, COPY_BOTTOM_SEL);
+      copyBottom =
+        v.bottom === null
+          ? COPY_BOTTOM_FALLBACK
+          : Math.min(0.86, Math.max(0.35, (v.bottom - wrapRect.top) / wrapRect.height));
     };
 
     /**
@@ -308,12 +345,18 @@ export default function HeroCanvas() {
      */
     const grad = (rgb: string, a: number): CanvasGradient => {
       if (narrow) {
-        // Original hand-tuned narrow stops; intentionally not derived (see above).
+        /* Derived from the measured copy BOTTOM, not the old hardcoded
+           0.5/0.72/0.9. Those constants predated the reserved green band and
+           started inking at 0.5 -- half way up the intro paragraph -- which is
+           why contours and the cup were drawn straight over the body copy on a
+           phone. The clear zone now covers every line of copy, and the ramp
+           lives entirely inside the band layout.css reserves below it. */
+        const e = copyBottom;
         const g = ctx.createLinearGradient(0, 0, 0, cssH);
         g.addColorStop(0, `rgba(${rgb},0)`);
-        g.addColorStop(0.5, `rgba(${rgb},0)`);
-        g.addColorStop(0.72, `rgba(${rgb},${(a * 0.28).toFixed(4)})`);
-        g.addColorStop(0.9, `rgba(${rgb},${a.toFixed(4)})`);
+        g.addColorStop(Math.max(0.02, e - 0.02), `rgba(${rgb},0)`);
+        g.addColorStop(Math.min(0.98, e + 0.05), `rgba(${rgb},${(a * 0.32).toFixed(4)})`);
+        g.addColorStop(Math.min(0.99, e + 0.13), `rgba(${rgb},${a.toFixed(4)})`);
         g.addColorStop(1, `rgba(${rgb},${a.toFixed(4)})`);
         return g;
       }
@@ -383,14 +426,22 @@ export default function HeroCanvas() {
     let seeded = false;
 
     /** Where the composition rests when nothing is pointing at it. On narrow
-     *  viewports that is low-centre (under the copy); on wide, right-of-centre. */
-    const home = () => (narrow ? { x: cssW * 0.5, y: cssH * 0.82 } : { x: cssW * 0.7, y: cssH * 0.5 });
+     *  viewports that is the centre of the reserved band below the copy; on
+     *  wide, right-of-centre. Derived rather than fixed at 0.82, which sat
+     *  inside the copy. */
+    const home = () =>
+      narrow
+        ? { x: cssW * 0.5, y: cssH * (copyBottom + (1 - copyBottom) * 0.52) }
+        : { x: cssW * 0.7, y: cssH * 0.5 };
 
     const orbit = (t: number) => {
       const hm = home();
+      // Narrow drift is scaled to the BAND, not the whole hero — a full-height
+      // amplitude would swing the focus back up into the copy.
+      const ampY = narrow ? (1 - copyBottom) * cssH * 0.16 : cssH * 0.2;
       return {
         x: hm.x + Math.cos(t * 0.17) * cssW * (narrow ? 0.09 : 0.14),
-        y: hm.y + Math.sin(t * 0.23) * cssH * (narrow ? 0.05 : 0.2),
+        y: hm.y + Math.sin(t * 0.23) * ampY,
       };
     };
 
@@ -426,7 +477,20 @@ export default function HeroCanvas() {
      */
     const playBox = () => {
       if (narrow) {
-        return { x: cssW * 0.1, y: cssH * 0.56, w: cssW * 0.8, h: cssH * 0.34 };
+        /* The band BELOW the copy, measured — not the old fixed
+           y 0.56 -> 0.90, which at 390x844 put the box at 472->760 while the
+           intro paragraph ran 382->666 and the explore cue 702->750. The green
+           was laid out on top of the body copy.
+           layout.css reserves the space this now sits in; the 130px floor keeps
+           the hole playable if a short landscape viewport squeezes the band. */
+        /* 0.022 not 0.015: at 360x780 the tighter value left only a 5px gap,
+           because `copyBottom` is a fraction captured at the last layout() and
+           a late reflow can move the real copy edge a few px. This is the
+           slack that absorbs that without eating the band. */
+        const pad = Math.max(18, cssH * 0.022);
+        const top = copyBottom * cssH + pad;
+        const h = Math.max(130, cssH - top - pad);
+        return { x: cssW * 0.08, y: top, w: cssW * 0.84, h };
       }
       return { x: cssW * 0.48, y: cssH * 0.16, w: cssW * 0.46, h: cssH * 0.68 };
     };
@@ -763,7 +827,10 @@ export default function HeroCanvas() {
       // One editorial hairline — the descendant of the motif's `M40 250 L360 250`
       // baseline. Bows gently toward the focus.
       if (decorative && hairGrad) {
-        const hy = narrow ? cssH * 0.66 + (focusY - cssH * 0.66) * 0.1 : cy + cssH * 0.33;
+        // Narrow: sit inside the reserved band below the copy. The old fixed
+        // 0.66 landed in the middle of the intro paragraph.
+        const hBase = narrow ? cssH * (copyBottom + (1 - copyBottom) * 0.4) : 0;
+        const hy = narrow ? hBase + (focusY - hBase) * 0.1 : cy + cssH * 0.33;
         ctx.beginPath();
         for (let j = 0; j < HAIR_NODES; j++) {
           const t = j / (HAIR_NODES - 1);
@@ -1133,6 +1200,7 @@ export default function HeroCanvas() {
           // The measured copy extent the ink fade is derived from, so a test can
           // assert the fade adapts instead of inferring it from pixel sampling.
           copyEdge,
+          copyBottom,
           narrow,
         };
       },
