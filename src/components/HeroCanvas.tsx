@@ -1090,6 +1090,48 @@ export default function HeroCanvas() {
            no visible border. */
         const LEVELS = 9;
         ctx.lineWidth = 1;
+
+        /* THE CUP IS THE DATUM, and each quantity gets ITS OWN CHANNEL.
+
+             contour SPACING   steepness        (tight = steep)
+             contour DASHING   elevation sign   (dashed = below the hole)
+             arrow LENGTH+WEIGHT  steepness     (same signal as spacing)
+             arrow DIRECTION   the fall line
+
+           The first attempt at this put elevation on contour WEIGHT — darker
+           above the cup, lighter below. It was measured and it worked, and it was
+           still wrong: arrow weight already means steepness, so "boldness" carried
+           two unrelated meanings on the same drawing. Height and gradient are
+           mathematically independent (you can be high on flat ground, or low on a
+           steep face), so the two never correlated and the whole thing read as
+           noise. Reported as exactly that — "no behavior from the dark vs light
+           lines impacting the magnitude nor direction of the arrows". Correct
+           observation; the encoding was the bug, not the rendering.
+
+           Dashing is a free channel and a real cartographic convention for
+           below-datum contours, so elevation moved there and weight is now used
+           for one thing only.
+
+           Ridge and valley still fall out of it: a closed loop of solid bands IS
+           a rise, a closed loop of dashed bands IS a hollow.
+
+           This replaces an "index contour every 3rd line" rule borrowed from
+           topo maps. That convention only works because a real map LABELS its
+           index contours with an elevation; unlabelled it carried no information
+           at all. It was also barely visible — with LEVELS = 9 the loop draws 8
+           lines and `li % 3 === 0` matched exactly two of them, so there was no
+           rhythm to read. And because the levels are re-normalised to each
+           frame's hMin..hMax, those two lines drifted as the field moved, so
+           they were not even a stable landmark. */
+        const hCup = heightAt(cupX, cupY, hm2.x, hm2.y, span2, tiltAng, tiltMag, gSeed);
+        // Which band lands closest to cup height — drawn as the waterline.
+        let datumLi = -1;
+        let datumGap = Infinity;
+        for (let li = 1; li < LEVELS; li++) {
+          const g = Math.abs(hMin + ((hMax - hMin) * li) / LEVELS - hCup);
+          if (g < datumGap) { datumGap = g; datumLi = li; }
+        }
+
         for (let li = 1; li < LEVELS; li++) {
           const lv = hMin + ((hMax - hMin) * li) / LEVELS;
           ctx.beginPath();
@@ -1113,14 +1155,29 @@ export default function HeroCanvas() {
               }
             }
           }
-          // Every third band is inked a little stronger — an index contour, the
-          // way a real slope chart marks its major intervals.
-          // Index contours (every 3rd) are heavier — standard slope-chart
-          // convention, giving the eye a rhythm to judge steepness by.
-          const major = li % 3 === 0;
-          ctx.lineWidth = major ? 1.4 : 0.85;
-          ctx.strokeStyle = `rgba(${major ? SAGE_DEEP : SAGE},${((major ? 0.5 : 0.28) * globalAlpha).toFixed(3)})`;
+          /* ONE QUANTITY PER VISUAL CHANNEL. See the note above the level loop —
+             weight is NOT used here, because weight already means steepness on
+             the arrows. Elevation gets its own channel: dash pattern.
+
+               solid            at or above cup height
+               dashed           below cup height  (an uphill putt from there)
+               solid + heavier  the one band through cup height — the landmark
+
+             Steepness is left entirely to contour SPACING, which encodes it
+             exactly and for free: iso-lines of a fixed interval crowd together
+             where the surface is steep. That is also why spacing agrees with the
+             arrows automatically — both are reading the gradient. */
+          if (li === datumLi) {
+            ctx.setLineDash([]);
+            ctx.lineWidth = 1.5;
+            ctx.strokeStyle = `rgba(${SAGE_DEEP},${(0.55 * globalAlpha).toFixed(3)})`;
+          } else {
+            ctx.setLineDash(lv < hCup ? [3, 5] : []);
+            ctx.lineWidth = 0.9;
+            ctx.strokeStyle = `rgba(${SAGE},${(0.3 * globalAlpha).toFixed(3)})`;
+          }
           ctx.stroke();
+          ctx.setLineDash([]);
         }
 
         /* Fall-line arrows on a sparse grid. Contours tell you WHERE it is
@@ -1152,8 +1209,12 @@ export default function HeroCanvas() {
            is re-rolled per round and moves the whole range. */
         const arrows: Array<{ px: number; py: number; ux: number; uy: number; m: number }> = [];
         let mMax = 0;
-        for (let r = 1; r < rowsN; r += 4) {
-          for (let c = 1; c < cols; c += 4) {
+        /* Every 7th cell, not every 4th. At 4 the desktop box carried ~36
+           arrows, which fought the contours for attention and read as clutter;
+           7 gives ~12-16 and lets the bands do the talking. The arrows are the
+           annotation, not the drawing. */
+        for (let r = 2; r < rowsN; r += 7) {
+          for (let c = 2; c < cols; c += 7) {
             const px = b.x + c * gw;
             const py = b.y + r * gh;
             const sg = slopeAt(px, py, hm2.x, hm2.y, span2, tiltAng, tiltMag, gSeed);
