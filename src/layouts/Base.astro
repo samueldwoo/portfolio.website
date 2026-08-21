@@ -58,6 +58,17 @@ const spy = (hash: string) => (isHome ? { 'data-nav': hash } : {});
          global sheet. Deliberately NOT imported through Astro/Vite: no
          scoping, no splitting, no hashing — same file, same cascade. -->
     <link rel="stylesheet" href="styles.css">
+
+    <!-- Domain-split overhaul layer, loaded in cascade order AFTER styles.css
+         so each file wins on equal specificity. One file per domain because
+         styles.css is ~2400 lines and is the repo's worst merge-conflict
+         surface — the split is what lets navigation, scroll, layout and
+         micro-interaction work proceed in parallel without rewriting the same
+         hunks. Each file documents what it owns; keep edits inside your file. -->
+    <link rel="stylesheet" href="css/layout.css">
+    <link rel="stylesheet" href="css/nav.css">
+    <link rel="stylesheet" href="css/scroll.css">
+    <link rel="stylesheet" href="css/motion.css">
 </head>
 <body>
     <!-- Fixed background atmosphere: faint sage radial wash + abstract shapes -->

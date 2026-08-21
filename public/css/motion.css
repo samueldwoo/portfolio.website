@@ -1,0 +1,21 @@
+/* ==========================================================================
+   motion.css — micro-interaction surface
+   --------------------------------------------------------------------------
+   Loaded LAST, after styles.css, layout.css, nav.css and scroll.css. See
+   layout.css for why the CSS is split by domain rather than kept in styles.css.
+
+   OWNS: hover/press/focus affordances, cursor treatments, magnetic and spring
+         target hooks, transition tokens for interaction state.
+   DOES NOT OWN: page structure (layout.css), nav chrome (nav.css),
+         scroll-driven state (scroll.css).
+
+   Hard constraints — these encode bugs already paid for:
+     - TWO SYSTEMS ANIMATING ONE PROPERTY ALWAYS FIGHT. This bit the project
+       three times. Motion owns `transform` on hover/press ONLY, gated behind
+       html.motion-on + .motion-spring. If magnetism and a spring must
+       coexist, partition by axis: magnetism drives x/tilt, the spring owns y.
+     - Motion.press() sets tabIndex=0 on its target. Gate it to natively
+       focusable elements or it injects <li> and <article> into the tab order.
+     - prefers-reduced-motion: no transforms, no cursor effects, resting state
+       must already be the finished state.
+   ========================================================================== */

@@ -1,0 +1,24 @@
+/* ==========================================================================
+   layout.css — structure, display and texture
+   --------------------------------------------------------------------------
+   Loaded AFTER styles.css, so anything here wins on equal specificity.
+
+   WHY THIS FILE EXISTS: styles.css is ~2400 hand-written lines and is the
+   single worst merge-conflict surface in the repo. Splitting the overhaul
+   into one file per domain lets parallel work proceed without four branches
+   rewriting the same hunks. Do not "tidy" these back into styles.css
+   without a reason — the split is load-bearing for how this repo is worked on.
+
+   OWNS: page structure, grid/bento composition, section rhythm, the grain
+         and texture layer, band variants, responsive display rules.
+   DOES NOT OWN: nav chrome (nav.css), scroll-driven state (scroll.css),
+         hover/press micro-interaction (motion.css).
+
+   Constraints that apply to every rule below:
+     - The sage/olive identity and the Space Grotesk / Inter / DM Mono stack
+       are FIXED. No palette or family changes.
+     - Small sage text must use --sage-deep (#4e6640); plain --sage fails AA.
+     - Author the FINISHED state here. Never author an invisible or zero-area
+       resting state — that is how elements got stranded under
+       prefers-reduced-motion in the past.
+   ========================================================================== */

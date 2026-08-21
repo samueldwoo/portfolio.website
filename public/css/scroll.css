@@ -1,0 +1,22 @@
+/* ==========================================================================
+   scroll.css — scroll-driven presentation
+   --------------------------------------------------------------------------
+   Loaded AFTER styles.css, layout.css and nav.css. See layout.css for why the
+   CSS is split by domain rather than kept in styles.css.
+
+   OWNS: resting + finished states for scroll-triggered content, pinned
+         section scaffolding, sticky rails, horizontal-scroll tracks, parallax
+         containers, scroll-linked SVG/line-art.
+   DOES NOT OWN: the GSAP timelines themselves (gsap-motion.js), nav chrome
+         (nav.css), hover/press springs (motion.css).
+
+   Hard constraints:
+     - Lenis is REJECTED. Native scroll + CSS `scroll-behavior: smooth` only.
+       Four smooth-scroll approaches were measured and rejected; its
+       virtual-scroll event is notify-only so momentum cannot be clamped.
+       Do not reintroduce a scroll-hijacking library.
+     - prefers-reduced-motion must land every element in its FINAL state.
+       Author finished states here; from-states belong in JS at runtime only.
+     - No horizontal overflow at 1440 / 820 / 390. Horizontal-scroll tracks
+       must be opt-in containers, never the document.
+   ========================================================================== */

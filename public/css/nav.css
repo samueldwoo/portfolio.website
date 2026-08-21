@@ -1,0 +1,20 @@
+/* ==========================================================================
+   nav.css — navigation chrome
+   --------------------------------------------------------------------------
+   Loaded AFTER styles.css and layout.css. See layout.css for why the CSS is
+   split by domain rather than kept in styles.css.
+
+   OWNS: topbar, brand wordmark, nav links + active state, the mobile
+         drawer/toggle, scroll-progress bar, and any new navigation affordance
+         (command palette, section rail, breadcrumb, keyboard hints).
+   DOES NOT OWN: page structure (layout.css), scroll-driven animation
+         (scroll.css), hover/press springs (motion.css).
+
+   Non-negotiables carried from the design brief:
+     - Primary navigation is ALWAYS VISIBLE and obvious. An auto-hide-on-hover
+       nav was built and rejected once already for being undiscoverable.
+     - The active state is a clearly filled marker, not a subtle underline.
+     - Sage identity and type stack are FIXED. Small sage text uses --sage-deep.
+     - Every control must be keyboard operable with a visible :focus-visible
+       ring, and must not regress the existing skip-link.
+   ========================================================================== */
