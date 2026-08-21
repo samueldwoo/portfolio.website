@@ -1112,8 +1112,37 @@ export default function HeroCanvas() {
            below-datum contours, so elevation moved there and weight is now used
            for one thing only.
 
-           Ridge and valley still fall out of it: a closed loop of solid bands IS
-           a rise, a closed loop of dashed bands IS a hollow.
+           HONEST LIMIT — do NOT claim ridge/valley readability from this field.
+           A closed loop of solid bands would be a rise and a closed loop of
+           dashed bands a hollow, but this terrain has almost no closed loops.
+           Measured over the play box, 44x44 grid, three rounds:
+
+             plane share of relief   70% / 62% / 77%
+             local peaks              1  /  4  /  0
+             local hollows            1  /  5  /  2
+             arrow direction spread  34.7 / 68.1 / 22.7 deg (circular SD)
+
+           It is a tilted plane with a light dressing of noise, so contours run
+           near-parallel and nearly every arrow points the same way. The
+           consequence, raised in review: arrows never diverge across a ridge or
+           converge into a valley, because there is no ridge and no valley. The
+           encoding above is coherent — arrows are perpendicular to contours
+           (mean 1.8% tangential height change) and |gradient| tracks contour
+           spacing at r = -0.81 — but coherent about a surface with little to say.
+
+           This is a side effect of a deliberate earlier fix: raw fbm basins acted
+           as gravity wells (every putt converged within 5px) and letting a plane
+           dominate cured it, because a plane has no local minima. It also removed
+           the structure worth reading.
+
+           The distinction that fix missed: HOLLOWS are the problem, ridges and
+           saddles are not. A local minimum traps the ball; a ridge only deflects
+           it, and a channel draining toward the cup is good golf. So the
+           undulation amplitude (0.42 + 0.16 against a plane of 0.62-1.10) CAN
+           rise — it must simply not form a closed basin away from the cup. Any
+           such change needs the soft-lock suite plus a putt-endpoint spread test
+           to prove no new attractor, and a one-stroke solvability check to prove
+           the green is still winnable.
 
            This replaces an "index contour every 3rd line" rule borrowed from
            topo maps. That convention only works because a real map LABELS its
