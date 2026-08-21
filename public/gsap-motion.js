@@ -8,15 +8,48 @@
                       line-draw (the .motif-draw paths), .kicker-num
                       count-ups, and every .reveal EXCEPT .gsap-reveal.
      CSS       owns : .reveal-clip clip-wipe, all :hover states.
+     Motion    owns : `transform` on hover/press for .pass, .project-card,
+                      .favorite-item, .bubble, .skills-list li (motion-ux.js).
+                      NOTHING here may write transform on those nodes — see
+                      the .pass-depth wrapper in section 6b for how the
+                      scrubbed 3D depth and the hover lift are kept apart.
      GSAP (here) owns: the brand springy wordmark, the decorative
-                      .shape-field line-art layer, hero/glow parallax,
-                      the timeline progress rail, chip staggers, every
-                      element tagged .gsap-reveal, and — via SplitText
-                      (section 8) — the masked line-rise on
+                      .shape-field line-art layer (its scroll-linked
+                      self-draw AND its parallax plane), the pinned hero
+                      depth stack, the pinned horizontal boarding-pass
+                      track, hero/glow parallax, contour density from
+                      scroll velocity, the timeline progress rail, chip
+                      staggers, every element tagged .gsap-reveal, and —
+                      via SplitText (section 8) — the masked line-rise on
                       .section-title / .case-title / .case-tagline /
                       .subhead / .case-head. Section 8 STRIPS .reveal
                       and .reveal-clip off those nodes at init so
                       anime.js and the CSS clip-wipe never see them.
+
+   SCROLL IS THE SUBJECT. Three things carry it, and each one is a
+   scroll-linked mechanism rather than a triggered fade:
+
+     1. A PINNED, SCRUBBED HERO (§4a). The section holds still while five
+        layers separate at different rates. The five were chosen by
+        elimination: they are the only hero nodes that neither `.reveal`
+        (which owns transform + a .6s CSS transition on it) nor Motion
+        writes to.
+     2. A PINNED HORIZONTAL TRACK (§6b). The 11-card boarding-pass wall
+        becomes a filmstrip scrubbed sideways by vertical scroll, with a
+        per-card 3D tilt away from the reading centre. >=1024px only, and
+        the only over-wide box on the site — clipped by its own container,
+        never by the document.
+     3. SCROLL-LINKED LINE-ART (§2). `.shape-field` strokes draw themselves
+        against scroll progress instead of playing a fixed tween on enter,
+        parallax on an injected plane, and thicken with scroll VELOCITY via
+        one inherited `--contour` custom property (§2b).
+
+   NO SMOOTH-SCROLL LIBRARY. Lenis was measured and rejected: its
+   virtual-scroll event is notify-only, so momentum cannot be clamped and
+   the pinned sections above drift out of sync with the scrollbar. Native
+   scroll + CSS `scroll-behavior: smooth` only. ScrollTrigger's own `scrub`
+   supplies all the smoothing this page needs, and it is applied to the
+   ANIMATION, never to the scroll position.
 
    The handoff is explicit: this file adds `html.gsap-on` and script.js
    only skips .gsap-reveal elements when that class is present. If GSAP
@@ -42,7 +75,21 @@
 
     var ScrollTrigger = window.ScrollTrigger;
     var hasST = !!ScrollTrigger;
-    if (hasST) gsap.registerPlugin(ScrollTrigger);
+    if (hasST) {
+        gsap.registerPlugin(ScrollTrigger);
+        /* Mobile browsers fire `resize` every time the URL bar slides, which
+           on a page with two pins means a full recalculation (and a visible
+           re-snap of the pinned section) mid-gesture. Height-only resizes are
+           ignored; width changes still refresh, which is what the pin
+           measurements actually depend on. */
+        ScrollTrigger.config({ ignoreMobileResize: true });
+    }
+
+    /* The horizontal track's breakpoint. Spelled ONCE here and mirrored
+       verbatim in scroll.css §3 — if the two diverge, CSS collapses the
+       strip back to a grid while JS keeps translating it, and the `x` lands
+       on an unclipped element: document-level horizontal overflow. */
+    var TRACK_MQ = "(min-width: 1024px)";
 
     // Tell script.js it is safe to hand .gsap-reveal elements over to us.
     document.documentElement.classList.add("gsap-on");
@@ -136,13 +183,35 @@
 
 
     /* ============================================================
-       2. Decorative line-art shape fields
-       Same visual language as the existing .motif-draw signature:
-       sage strokes that draw themselves in. Each field draws once on
-       enter, then drifts forever on an inner <g> (drifting the <g> in
-       SVG user units means we never collide with the CSS transform
-       used to position the field itself).
+       2. Decorative line-art shape fields — SCROLL-LINKED self-draw
+       Same visual language as the existing .motif-draw signature: sage
+       strokes that draw themselves in. What changed is WHAT drives them.
+
+       Before: a fixed 1.9s tween on a `once: true` trigger. The draw was
+       an event that happened near the section, and after that the field
+       was inert scenery for the rest of the scroll.
+
+       Now: `scrub` against the band's own pass through the viewport, so
+       the stroke length IS the scroll position. Scroll down and the
+       contours extend under your gesture; scroll back and they retract.
+       That is the difference between decoration that reacts to scrolling
+       and decoration that reacts to *scroll*.
+
+       THREE PROPERTIES, THREE NODES. The field carries a CSS transform
+       already (`.shape-field--travel` is centred with translateY(-50%)),
+       and GSAP resolves an existing computed transform into px — so a
+       single `y` write on the field itself would silently destroy that
+       centring. So each field gets a two-group spine, injected here:
+
+         <svg class="shape-field">            <- CSS transform (untouched)
+           <g class="shape-plx">              <- scroll parallax plane
+             <g class="shape-drift">          <- endless ambient drift
+               ...strokes...                  <- scrubbed dash-draw
+
+       One property per node, so no two timelines ever share a matrix.
        ============================================================ */
+    var SVGNS = "http://www.w3.org/2000/svg";
+
     toArray(".shape-field").forEach(function (field, fi) {
         var strokes = toArray(field.querySelectorAll(".shape-line, .shape-ring"));
         var dots = toArray(field.querySelectorAll(".shape-dot"));
@@ -150,33 +219,73 @@
         var drifter = field.querySelector(".shape-drift") || field;
         var band = field.closest(".band") || field;
 
+        /* Inject the parallax plane between the field and its drift group.
+           Only if there IS a drift group — otherwise the field's own node is
+           the drifter and wrapping it would put us back on the contested
+           transform. */
+        var plx = null;
+        if (drifter !== field && drifter.parentNode) {
+            plx = document.createElementNS(SVGNS, "g");
+            plx.setAttribute("class", "shape-plx");
+            drifter.parentNode.insertBefore(plx, drifter);
+            plx.appendChild(drifter);
+        }
+
         // Arm the dash-draw. Guard getTotalLength: it throws on some
         // shapes in older engines, and a 0 length would mean an
         // invisible stroke — so we simply skip drawing that one.
+        var lens = [];
         strokes = strokes.filter(function (el) {
             var len = 0;
             try { len = el.getTotalLength(); } catch (e) { len = 0; }
             if (!len) return false;
             gsap.set(el, { strokeDasharray: len, strokeDashoffset: len });
+            lens.push(len);
             return true;
         });
 
+        /* Seal / unseal the dash.
+
+           A scrubbed dash-draw cannot use the old `onComplete: clearProps`
+           trick, because "complete" is not a one-way door any more — scroll
+           back up and the tween runs in reverse. But leaving `dasharray`
+           on forever reintroduces the sub-pixel seam at the joins that the
+           clearProps was there to avoid in the first place.
+
+           So the dash is sealed only once the band is genuinely BEHIND you
+           (`onLeave`), where the stroke is fully drawn and the seam would
+           show, and re-armed the moment you come back (`onEnterBack`) so
+           the retraction still works. Both directions end in a fully-drawn
+           stroke; neither can leave a stroke part-drawn at rest. */
+        var seal = function () {
+            if (strokes.length) gsap.set(strokes, { clearProps: "strokeDasharray,strokeDashoffset" });
+        };
+        var unseal = function () {
+            strokes.forEach(function (el, i) { gsap.set(el, { strokeDasharray: lens[i] }); });
+        };
+
         var tl = gsap.timeline({
+            defaults: { ease: "none" },
             scrollTrigger: hasST
-                ? { trigger: band, start: "top 88%", once: true }
-                : undefined,
-            onComplete: function () {
-                // Remove the dash props so the strokes are plain again
-                // (also avoids any sub-pixel dash seam on the joins).
-                if (strokes.length) gsap.set(strokes, { clearProps: "strokeDasharray,strokeDashoffset" });
-            }
+                ? {
+                    trigger: band,
+                    /* The band's own pass, front-loaded: fully drawn by the
+                       time its top third is at the reading line, so the art
+                       is finished scenery while you read the copy. */
+                    start: "top 94%",
+                    end: "top 24%",
+                    scrub: 0.8,
+                    invalidateOnRefresh: true,
+                    onLeave: seal,
+                    onEnterBack: unseal
+                }
+                : undefined
         });
 
         if (strokes.length) {
             tl.to(strokes, {
                 strokeDashoffset: 0,
                 duration: 1.9,
-                ease: "sine.inOut",
                 stagger: 0.22
             }, 0);
         }
@@ -188,7 +297,7 @@
                 ease: "back.out(2.2)",
                 stagger: 0.1,
                 transformOrigin: "50% 50%"
-            }, 0.55);
+            }, 1.4);
         }
         if (ticks.length) {
             // Tick grids are too small to read a dash-draw, so they
@@ -201,6 +310,27 @@
                 stagger: { each: 0.045, from: "random" },
                 transformOrigin: "50% 50%"
             }, 0);
+        }
+
+        /* Parallax plane. Runs across the band's WHOLE pass (not the draw's
+           window) so the field keeps travelling against the copy long after
+           it has finished drawing — that separation is what reads as depth.
+           SVG user units, so the amount scales with each field's viewBox
+           rather than being a px value tuned for one of them. */
+        if (hasST && plx) {
+            gsap.fromTo(plx,
+                { y: -26 },
+                {
+                    y: 26,
+                    ease: "none",
+                    scrollTrigger: {
+                        trigger: band,
+                        start: "top bottom",
+                        end: "bottom top",
+                        scrub: 0.9
+                    }
+                }
+            );
         }
 
         // Slow ambient drift — long durations + yoyo so it never draws
@@ -217,6 +347,60 @@
             delay: fi * 0.9
         });
     });
+
+    /* ============================================================
+       2b. Contour density — scroll VELOCITY, not scroll position
+       The line-art layer thickens while you are moving fast and settles
+       back to its resting hairline when you coast. It is the one effect
+       on the page that reads your *speed*, which is what makes the
+       scroll feel like it has weight.
+
+       ONE VALUE, NOT N INLINE STYLES. Velocity drives a single inherited
+       custom property on <html>; scroll.css multiplies the resting
+       stroke-widths by it. Three consequences that all matter:
+         - `opacity` on every stroke is left completely alone, so
+           styles.css keeps ownership of the .24/.18/.2 register and the
+           `.band--dark` overrides still apply.
+         - the resting value 1 reproduces the original weights exactly,
+           so "no velocity" is byte-identical to "no effect".
+         - it is one tweened number for the whole page instead of ~40
+           inline stroke-widths written per frame.
+
+       The property is tweened on a PLAIN OBJECT and written out in
+       onUpdate rather than tweened on the element directly — a numeric
+       value is unambiguous to interpolate, and the write is a single
+       setProperty call we control.
+
+       SETTLING IS GUARANTEED BY A TIMER, not by the velocity reaching 0.
+       `getVelocity()` is only sampled while scroll events arrive, so the
+       last sample before you stop is a large number, not zero. Without
+       the timer the contours would stay thick forever after a hard flick
+       — a half-animated resting state, which is the failure mode this
+       repo cares most about.
+       ============================================================ */
+    if (hasST) {
+        var root = document.documentElement;
+        var contour = { v: 1 };
+        var writeContour = function () { root.style.setProperty("--contour", contour.v.toFixed(3)); };
+        var setContour = gsap.quickTo(contour, "v", {
+            duration: 0.5,
+            ease: "power2.out",
+            onUpdate: writeContour
+        });
+        var calmTimer = null;
+
+        ScrollTrigger.create({
+            trigger: root,
+            start: 0,
+            end: "max",
+            onUpdate: function (self) {
+                var v = Math.abs(self.getVelocity());
+                setContour(1 + gsap.utils.clamp(0, 0.55, v / 4200));
+                if (calmTimer) clearTimeout(calmTimer);
+                calmTimer = setTimeout(function () { setContour(1); }, 120);
+            }
+        });
+    }
 
     /* ============================================================
        3. Travel page — a dot flying the arc
@@ -272,6 +456,187 @@
         if (document.querySelector(".glow-olive")) {
             gsap.to(".glow-olive", { yPercent: -9, ease: "none", scrollTrigger: glowST });
         }
+
+        /* Content plane. Each section's head leads its band very slightly
+           against the shape-field behind it, which is what turns two
+           independently-moving layers into a readable depth order. Range is
+           deliberately tiny (±11px): `.section-head` contains the
+           SplitText-claimed `.section-title`, whose trigger is measured from
+           the element's rect, so a large offset would drag its start line
+           around. 11px against a `top 86%` start is noise.
+
+           `.section-head` itself is a plain wrapper — its children are the
+           `.reveal`s. That is the whole reason it, and not the title or the
+           intro, is the node that moves. */
+        toArray(".section-head").forEach(function (head) {
+            var band = head.closest(".band") || head;
+            gsap.fromTo(head,
+                { y: 11 },
+                {
+                    y: -11,
+                    ease: "none",
+                    scrollTrigger: { trigger: band, start: "top bottom", end: "bottom top", scrub: 0.8 }
+                }
+            );
+        });
+    }
+
+    /* ============================================================
+       4a. PINNED HERO — a five-plane depth stack, scrubbed
+       The first gesture on the site should be the site reacting to you.
+       So `#home` pins at the top of the scroll and, while it holds still,
+       its layers separate at five different rates: the generative canvas
+       sinks and pushes in, the whole block drifts up, the wordmark leads
+       it, the intro column drags behind it, and an injected line-art
+       plane races past in FRONT of the copy. Then it releases and the
+       page scrolls on normally.
+
+       WHICH NODES ARE LEGAL TO MOVE — this is the whole design of the
+       block. `transform` on this page is contested by two other systems:
+         - `.reveal` carries `transform: translateY(22px)` AND a .6s CSS
+           transition on transform. A per-frame inline transform on a
+           `.reveal` node puts GSAP in a race with that transition on the
+           same property. That is the exact bug this repo has paid for
+           three times.
+         - Motion (motion-ux.js) owns transform on hover for the cards.
+       Of everything in the hero, only these five are written by neither:
+         .hero-canvas-wrap  positioned box, no .reveal, no hover claim
+         .home-inner        the band-inner wrapper
+         .hero-name         the <h1>; its `.hero-line` CHILDREN are .reveals
+         .hero-lower        plain grid wrapper; its children are .reveals
+         .hero-fg           injected below, owned by nobody else
+       `.hero-meta`, `.hero-subtitle`, `.hero-intro` and `.explore-cue`
+       are all `.reveal`, so they are NOT animated here — they ride
+       `.home-inner`, which is why it is the plane that carries the most
+       of the movement.
+
+       NO OPACITY, ANYWHERE. Every plane moves and scales only. A scrubbed
+       opacity would rest at whatever value the scroll position implies,
+       and the resting value at the end of a pin is exactly the state a
+       stranding check reads — so the <h1> and every `.reveal` in the hero
+       stay at full opacity through the entire pin, by construction rather
+       than by a safety net.
+       ============================================================ */
+    if (hasST) {
+        (function pinnedHero() {
+            var heroBand = document.querySelector(".band-home");
+            if (!heroBand) return;
+            var heroInner = heroBand.querySelector(".home-inner");
+            var heroName = heroBand.querySelector(".hero-name");
+            var heroLower = heroBand.querySelector(".hero-lower");
+            var heroCanvas = heroBand.querySelector(".hero-canvas-wrap");
+            if (!heroInner) return;
+
+            /* Foreground plane, built here rather than in the markup: it
+               exists ONLY when we are allowed to animate, so there is no
+               static state of it to get wrong, and a reduced-motion visitor
+               never has an inert decorative overlay sitting on their copy.
+               aria-hidden + pointer-events:none (scroll.css) — it is
+               atmosphere, not content. */
+            var fg = document.createElementNS(SVGNS, "svg");
+            fg.setAttribute("class", "hero-fg");
+            fg.setAttribute("viewBox", "0 0 300 220");
+            fg.setAttribute("fill", "none");
+            fg.setAttribute("aria-hidden", "true");
+            fg.innerHTML =
+                '<g class="hero-fg-plx">' +
+                '<path class="hero-fg-line" d="M12 196 C 74 120, 150 176, 214 96"/>' +
+                '<path class="hero-fg-line" d="M46 214 C 108 138, 184 194, 248 114"/>' +
+                '<path class="hero-fg-line" d="M232 24 L 232 208"/>' +
+                '<path class="hero-fg-line" d="M262 52 L 262 208"/>' +
+                '<circle class="hero-fg-dot" cx="214" cy="96" r="4"/>' +
+                '<circle class="hero-fg-dot" cx="232" cy="24" r="3"/>' +
+                '</g>';
+            heroBand.appendChild(fg);
+            var fgPlx = fg.querySelector(".hero-fg-plx");
+
+            var planes = [heroInner, heroName, heroLower, heroCanvas, fgPlx].filter(Boolean);
+
+            /* Short viewports opt out. A pin needs a viewport tall enough
+               that holding the section still reads as intent rather than as
+               a stuck page; below ~560px (landscape phones, split-screen)
+               the hero barely fits as it is. gsap.matchMedia's revert also
+               clears every inline prop when the query stops matching, so a
+               rotate-to-landscape cannot leave a plane offset. */
+            var mmHero = gsap.matchMedia();
+            mmHero.add("(min-height: 560px)", function () {
+                /* Pin length in viewport heights. Shorter on narrow screens:
+                   the same 0.85 that reads as a considered hold at 1440
+                   reads as a page that will not move on a phone. */
+                var narrow = function () { return window.innerWidth < 820 ? 0.62 : 1; };
+                var span = function () {
+                    return Math.round(window.innerHeight * 0.85 * narrow());
+                };
+                /* Plane travel scales with the pin length, not just with the
+                   viewport height. Measured at 390x844: at full desktop
+                   amplitude the block drifts 130px up inside a 506px pin,
+                   which slides the `.hero-meta` line under the sticky topbar
+                   and reads as the page having scrolled when it has not.
+                   Same factor for the pin and the planes keeps the ratio of
+                   "distance travelled per pixel scrolled" identical at every
+                   width, which is what makes the effect feel like one
+                   mechanism rather than two tunings. */
+                var vh = function (f) {
+                    return function () { return Math.round(window.innerHeight * f * narrow()); };
+                };
+
+                var tl = gsap.timeline({
+                    defaults: { ease: "none" },
+                    scrollTrigger: {
+                        trigger: heroBand,
+                        /* `top top`: the pin engages at the exact scroll
+                           position where the hero's top already IS the
+                           viewport top, so engaging it cannot cause a jump.
+                           scroll.css gives `.band-home` a 100svh min-height
+                           under html.gsap-on for the same reason — otherwise
+                           a topbar-tall sliver of the next band shows under
+                           the pinned hero for the whole hold. */
+                        start: "top top",
+                        end: function () { return "+=" + span(); },
+                        pin: true,
+                        pinSpacing: true,
+                        anticipatePin: 1,
+                        scrub: 1,
+                        invalidateOnRefresh: true,
+                        /* MUST refresh before every other trigger on the
+                           page. ScrollTrigger measures with all pins
+                           reverted and re-applies each pin's spacing as it
+                           refreshes THAT trigger — so any trigger refreshed
+                           before this one measures a document that is ~765px
+                           shorter than the real one, and every start/end
+                           below the hero lands that much too early.
+
+                           This was not theoretical: with the default
+                           priority, `#interests`'s line-art draw was
+                           measured at scroll 123 instead of 887 and the
+                           strokes drew themselves while the section was
+                           still 1134px below the fold. Verified in-browser
+                           before and after. */
+                        refreshPriority: 1
+                    }
+                });
+
+                // Back to front. Ordered by how much each plane travels,
+                // which IS the depth cue: the canvas moves least (and the
+                // wrong way, so it reads as further off), the injected
+                // foreground moves ~4x the block itself.
+                if (heroCanvas) {
+                    tl.fromTo(heroCanvas,
+                        { y: 0, scale: 1 },
+                        { y: vh(0.06), scale: 1.12, transformOrigin: "50% 42%" }, 0);
+                }
+                tl.fromTo(heroInner, { y: 0 }, { y: vh(-0.1) }, 0);
+                if (heroName) tl.fromTo(heroName, { y: 0 }, { y: vh(-0.055) }, 0);
+                if (heroLower) tl.fromTo(heroLower, { y: 0 }, { y: vh(0.045) }, 0);
+                if (fgPlx) tl.fromTo(fgPlx, { y: 0 }, { y: vh(-0.26) }, 0);
+
+                return function () {
+                    // Belt: matchMedia reverts its own tweens, but the planes
+                    // must provably end with no inline transform at all.
+                    gsap.set(planes, { clearProps: "all" });
+                };
+            });
+        })();
     }
 
     /* ============================================================
@@ -437,6 +802,285 @@
     }
 
     /* ============================================================
+       6b. PINNED HORIZONTAL TRACK — the boarding-pass filmstrip
+       The 11-card wall stops being a wall. `.pass-wall` is re-laid-out as
+       a single row wider than the viewport, its section pins, and vertical
+       scroll is remapped to horizontal travel along the strip — with each
+       card tilting away from the reading centre in 3D as it passes.
+
+       ---- Why it cannot overflow the document ----
+       `.pass-wall` becomes the only box on the site wider than the
+       viewport, and it lives inside `.hviewport`, which uses
+       `overflow: clip`. `clip` rather than `hidden` on purpose: `hidden`
+       makes the element a scroll container, so a fragment jump or a focus
+       inside it could scroll it and desync it from the ScrollTrigger that
+       owns its `x`. `clip` cannot be scrolled by anything. (Nothing inside
+       a pass is focusable — they are <article>s of text and one <img> —
+       so no focus can be trapped off-screen.)
+
+       ---- Why the DOM is built unconditionally ----
+       The three wrappers are created once, for every viewport, and default
+       to `display: contents` in scroll.css — layout-transparent, so `.pass`
+       stays a direct grid item and the original 3/2/1-column wall renders
+       exactly as before. Only `TRACK_MQ` promotes them to real boxes. A
+       resize across the breakpoint is therefore a pure CSS switch: no
+       re-parenting, no re-measure, and nothing to unwind if the resize
+       lands mid-tween. Building the DOM in a matchMedia callback instead
+       would mean re-parenting eleven cards during a drag-resize.
+
+       ---- Why each card gets a wrapper ----
+       motion-ux.js claims `.pass` for its hover lift, i.e. Motion owns
+       `transform` on that node. The scrubbed 3D depth is therefore written
+       to an injected `.pass-depth` parent instead. Two systems, two nodes,
+       one property each — the hover spring and the depth tilt compose
+       instead of fighting. This is the single most repeated bug in this
+       repo and the wrapper is the whole fix.
+       ============================================================ */
+    var track = null;
+    if (hasST) {
+        (function buildTrack() {
+            var wall = document.querySelector(".pass-wall");
+            if (!wall || !wall.parentNode) return;
+            var cards = toArray(wall.children).filter(function (el) {
+                return el.classList && el.classList.contains("pass");
+            });
+            // Under four cards there is no strip worth scrubbing.
+            if (cards.length < 4) return;
+
+            var stage = document.createElement("div");
+            stage.className = "hstage";
+            var view = document.createElement("div");
+            view.className = "hviewport";
+            wall.parentNode.insertBefore(stage, wall);
+            stage.appendChild(view);
+            view.appendChild(wall);
+
+            var depths = cards.map(function (card) {
+                var d = document.createElement("div");
+                d.className = "pass-depth";
+                wall.insertBefore(d, card);
+                d.appendChild(card);
+                return d;
+            });
+
+            /* Read-position affordance. A scrubbed track has no scrollbar of
+               its own, so without a rail there is no way to tell how much
+               strip is left — the pin would just feel like the page had
+               stopped. Purely decorative, hence aria-hidden: the passes
+               themselves are unchanged in the accessibility tree, still in
+               DOM order, still fully readable. */
+            var pad = function (n) { return (n < 10 ? "0" : "") + n; };
+            var foot = document.createElement("div");
+            foot.className = "hstage-foot";
+            foot.setAttribute("aria-hidden", "true");
+            foot.innerHTML =
+                '<span class="hstage-rail"><span class="hstage-fill"></span></span>' +
+                '<span class="hstage-count">' +
+                '<span class="hstage-now">01</span>' +
+                '<span class="hstage-sep">/</span>' +
+                '<span class="hstage-tot">' + pad(cards.length) + '</span>' +
+                '</span>';
+            stage.appendChild(foot);
+
+            track = {
+                stage: stage,
+                view: view,
+                wall: wall,
+                cards: cards,
+                depths: depths,
+                fill: foot.querySelector(".hstage-fill"),
+                now: foot.querySelector(".hstage-now")
+            };
+        })();
+    }
+
+    if (hasST && track) {
+        (function trackMotion() {
+            var T = track;
+            var topbar = document.querySelector(".topbar");
+            var mmTrack = gsap.matchMedia();
+
+            mmTrack.add(TRACK_MQ, function () {
+                /* Geometry is MEASURED, never assumed. Card width is a
+                   clamp() on vw and the gap is a clamp() too, so the travel
+                   distance differs at every window size — and the airline
+                   logos are images, so the strip's real width only exists
+                   after they decode. `invalidateOnRefresh` + re-measuring in
+                   onRefresh is what makes the pin length deterministic
+                   (see §9). */
+                var geo = { dist: 0, mid: 0, vw: 1, centres: [] };
+                var measure = function () {
+                    geo.vw = T.view.clientWidth || 1;
+                    // offsetWidth is layout width — unaffected by the `x` we
+                    // are writing, so this is safe to re-read mid-tween.
+                    geo.dist = Math.max(0, T.wall.offsetWidth - geo.vw);
+                    geo.mid = T.view.offsetLeft + geo.vw / 2;
+                    geo.centres = T.depths.map(function (d) {
+                        return d.offsetLeft + d.offsetWidth / 2;
+                    });
+                };
+
+                var clamp = gsap.utils.clamp;
+                var lastLabel = "";
+
+                /* Per-frame depth. Driven off the tween's OWN x rather than
+                   the trigger's raw progress, so it inherits `scrub: 1`'s
+                   smoothing instead of snapping a frame ahead of the strip.
+                   No getBoundingClientRect in here: every card centre is a
+                   static layout number measured once per refresh, so the
+                   loop is pure arithmetic and cannot thrash layout. */
+                var paint = function () {
+                    var x = parseFloat(gsap.getProperty(T.wall, "x")) || 0;
+                    var best = 0, bestD = Infinity;
+                    for (var i = 0; i < T.depths.length; i++) {
+                        // -1 .. +1 across the visible frame, 0 at the centre.
+                        var d = (geo.centres[i] + x - geo.mid) / geo.vw;
+                        var ad = Math.abs(d);
+                        if (ad < bestD) { bestD = ad; best = i; }
+                        gsap.set(T.depths[i], {
+                            rotationY: clamp(-17, 17, -d * 27),
+                            scale: 1 - Math.min(0.13, ad * 0.17),
+                            y: Math.min(24, ad * 32)
+                            // No opacity: a `.pass` must read >= 0.99 at rest
+                            // no matter where the strip stopped.
+                        });
+                    }
+                    var frac = geo.dist ? clamp(0, 1, -x / geo.dist) : 1;
+                    if (T.fill) gsap.set(T.fill, { scaleX: frac });
+
+                    /* Nearest-to-centre is the honest answer in the middle of
+                       the strip, but not at its ends: at rest the leftmost
+                       card sits AT the left edge, so card 2 is the one
+                       centred and the counter would open on "02" and close
+                       on "10 / 11". Pinning the two extremes to the first
+                       and last card makes the readout agree with the rail. */
+                    var idx = best;
+                    if (frac <= 0.002) idx = 0;
+                    else if (frac >= 0.998) idx = T.depths.length - 1;
+                    var label = (idx + 1 < 10 ? "0" : "") + (idx + 1);
+                    if (T.now && label !== lastLabel) {
+                        T.now.textContent = label;
+                        lastLabel = label;
+                    }
+                };
+
+                gsap.set(T.depths, { transformPerspective: 1100, transformOrigin: "50% 50%" });
+                measure();
+
+                var tl = gsap.timeline({
+                    defaults: { ease: "none" },
+                    onUpdate: paint,
+                    scrollTrigger: {
+                        trigger: T.stage,
+                        /* Park the strip just clear of the sticky topbar
+                           rather than flush at `top top`, or the cards spend
+                           the whole pin sliding under a translucent bar. */
+                        start: function () {
+                            return "top " + ((topbar ? topbar.offsetHeight : 68) + 12) + "px";
+                        },
+                        /* Pin exactly as long as the strip needs, plus a
+                           beat at the end so the last card is readable
+                           before the page moves on. Hard-coding `+=150%`
+                           here would either cut the strip short or stall. */
+                        end: function () {
+                            return "+=" + Math.round(geo.dist + window.innerHeight * 0.45);
+                        },
+                        pin: true,
+                        pinSpacing: true,
+                        anticipatePin: 1,
+                        scrub: 1,
+                        invalidateOnRefresh: true,
+                        // Same reason as the hero pin: this pin adds ~3000px
+                        // of spacing, and anything measured before it is
+                        // re-applied measures a document that short. The
+                        // `.pass` reveal (§7) triggers on this very stage.
+                        refreshPriority: 1,
+                        onRefresh: function () { measure(); paint(); }
+                    }
+                });
+                tl.fromTo(T.wall, { x: 0 }, { x: function () { return -geo.dist; } }, 0);
+
+                /* Velocity skew on the STRIP, not on the cards. The strip is
+                   our own injected node and GSAP is the only thing that ever
+                   writes its matrix, so `x` (from the scrub) and `skewY`
+                   (from velocity) are two components of one cached transform
+                   — they compose. The same skew written on `.pass` would
+                   collide with Motion's hover lift.
+
+                   The settle is a timer, not a velocity threshold:
+                   getVelocity() is only sampled while scroll events arrive,
+                   so the last sample after a flick is large, never zero.
+                   Without the timer the strip would stay sheared. */
+                var skew = gsap.quickTo(T.wall, "skewY", { duration: 0.45, ease: "power3.out" });
+                var settle = null;
+                var vST = ScrollTrigger.create({
+                    trigger: T.stage,
+                    start: "top bottom",
+                    end: "bottom top",
+                    onUpdate: function (self) {
+                        skew(clamp(-2.4, 2.4, self.getVelocity() / -900));
+                        if (settle) clearTimeout(settle);
+                        settle = setTimeout(function () { skew(0); }, 130);
+                    }
+                });
+
+                return function () {
+                    if (settle) clearTimeout(settle);
+                    vST.kill();
+                    // Provably no inline transform left on any of it.
+                    gsap.set(T.depths, { clearProps: "all" });
+                    gsap.set(T.wall, { clearProps: "all" });
+                    if (T.fill) gsap.set(T.fill, { clearProps: "all" });
+                };
+            });
+        })();
+    }
+
+    /* ============================================================
+       6c. Trip cadence — bars that grow under the gesture
+       The cadence strip's marks scrub up as the figure enters, staggered
+       across the real laid-out grid so the growth travels along the month
+       axis instead of arriving all at once.
+
+       The from-state is scaleY 0.18, NOT 0. A scrubbed tween's resting
+       value is wherever the scroll stopped, so its from-state has to be a
+       legitimate look on its own — 0.18 is a visible tick, 0 is a stranded
+       invisible element. Same reasoning as everywhere else in this file:
+       never author a zero-area start.
+       ============================================================ */
+    if (hasST) {
+        (function tripCadence() {
+            var plot = document.querySelector(".trip-plot");
+            if (!plot) return;
+            var marks = toArray(plot.querySelectorAll(".trip-mark"));
+            if (!marks.length) return;
+            gsap.fromTo(marks,
+                { scaleY: 0.18, transformOrigin: "50% 100%" },
+                {
+                    scaleY: 1,
+                    ease: "none",
+                    stagger: { each: 0.05, grid: "auto", from: "start" },
+                    scrollTrigger: {
+                        trigger: plot.closest(".trip-summary") || plot,
+                        /* Measured, not guessed: at 1440x900 this figure
+                           already sits at 58% of the viewport on first paint,
+                           so the usual `top 90%` start is behind the scroll
+                           position before the user has touched anything and
+                           the bars are done growing within 113px. Starting at
+                           `top 62%` puts nearly the whole growth in front of
+                           the reader instead — it becomes the first thing on
+                           the travel page that answers a scroll. */
+                        start: "top 62%",
+                        end: "bottom 24%",
+                        scrub: 0.5,
+                        invalidateOnRefresh: true
+                    }
+                }
+            );
+        })();
+    }
+
+    /* ============================================================
        7. .gsap-reveal — elements handed over from script.js
        Two flavours: boarding passes get a slight card-flip depth;
        everything else (case-study prose) gets a clean rise. Both add
@@ -480,7 +1124,14 @@
        the real one and the diagonal would break at every batch boundary.
        start:"top 78%" keeps the first row from firing before it's in view. */
     if (hasST && passes.length) {
-        var wall = passes[0].closest(".pass-wall") || passes[0].parentElement;
+        /* In track mode the wall is a strip wider than the viewport and most
+           of it is off to the right, so `.pass-wall` is the wrong thing to
+           measure a start line against — the pinned STAGE is the box that
+           actually enters the viewport. `grid: 'auto'` still does the right
+           thing on a single row: it measures one row and the wave runs
+           left-to-right along the strip. */
+        var wall = (track && track.stage) ||
+            passes[0].closest(".pass-wall") || passes[0].parentElement;
         gsap.set(passes, { opacity: 0, y: 34, scale: 0.97, rotateX: -6, transformPerspective: 800 });
         gsap.to(passes, {
             opacity: 1, y: 0, scale: 1, rotateX: 0,
@@ -559,45 +1210,98 @@
        at measure time) means the tween never runs and the copy is simply
        gone.
 
-       So we verify instead of assuming. Once the page has settled, any
-       element that GSAP hid, is inside the viewport, and is still
-       transparent gets snapped to its final state. A no-op in the normal
-       case; the difference between "a subtle bug" and "unreadable content"
-       in the abnormal one.
+       So we verify instead of assuming. Any element that GSAP hid and that
+       the reader has already reached — on screen, or ALREADY SCROLLED PAST —
+       gets snapped to its final state. A no-op in the normal case; the
+       difference between "a subtle bug" and "unreadable content" in the
+       abnormal one.
+
+       TWO CHANGES THIS PASS, both because the page now pins:
+
+       1. `r.bottom <= 0` (scrolled past) is rescued as well as on-screen.
+          Previously an element that was hidden and then jumped over — a
+          fragment link, a restored scroll position, a fast flick through a
+          pin — stayed hidden forever, because it was never "on screen"
+          during a sweep. Something behind the reader is unambiguously
+          overdue: there is no legitimate reason for it to still be at
+          opacity 0. Only what is still BELOW the fold is left alone,
+          because that is genuinely awaiting its trigger.
+       2. The scroll listener is no longer `once`. A single sweep on the
+          first scroll event cannot cover a pinned page, where the interesting
+          failures happen hundreds of pixels later. It self-removes instead
+          as soon as the guarded set is clean, so the steady state is still
+          zero listeners and zero work.
        ============================================================ */
     if (hasST) {
         var guarded = passes.concat(prose);
         if (guarded.length) {
+            /* NOT named `pending`: section 9 declares a `pending` of its own
+               and every `var` in this file shares one function scope, so the
+               image counter there would silently overwrite this array (and
+               `overdue.splice` would throw on a number). */
+            var overdue = guarded.slice();
+            var scrollBound = false;
+            var scheduled = false;
+
             var sweep = function () {
-                guarded.forEach(function (el) {
-                    if (parseFloat(gsap.getProperty(el, "opacity")) >= 0.99) return;
+                for (var i = overdue.length - 1; i >= 0; i--) {
+                    var el = overdue[i];
+                    if (parseFloat(gsap.getProperty(el, "opacity")) >= 0.99) {
+                        overdue.splice(i, 1);
+                        continue;
+                    }
                     var r = el.getBoundingClientRect();
-                    // Only rescue what should already be on screen; anything
-                    // still below the fold has a legitimate reason to be hidden.
-                    var onScreen = r.top < window.innerHeight && r.bottom > 0;
-                    if (!onScreen) return;
+                    var reached = r.top < window.innerHeight;   // on screen or above it
+                    if (!reached) continue;                     // still below the fold: not due yet
                     gsap.killTweensOf(el);
                     finish([el]);
-                });
+                    overdue.splice(i, 1);
+                }
+                if (!overdue.length && scrollBound) {
+                    window.removeEventListener("scroll", onScroll);
+                    scrollBound = false;
+                }
             };
+
+            // rAF-coalesced: a sweep is a handful of rect reads, but it must
+            // not run twice in one frame during a thrash-scroll.
+            var onScroll = function () {
+                if (scheduled) return;
+                scheduled = true;
+                requestAnimationFrame(function () { scheduled = false; sweep(); });
+            };
+
             // After load, after fonts, and once more late for slow decodes.
             window.addEventListener("load", function () { setTimeout(sweep, 600); });
             setTimeout(sweep, 2500);
-            window.addEventListener("scroll", sweep, { passive: true, once: true });
+            window.addEventListener("scroll", onScroll, { passive: true });
+            scrollBound = true;
         }
     }
 
     /* ============================================================
-       8. Measurement hygiene
+       9. Measurement hygiene  —  NOW LOAD-BEARING, NOT HOUSEKEEPING
        Every scrubbed/sticky trigger above was measured against the page
        as it existed at parse time. Three things then change it:
          - webfonts swap (Space Grotesk/Inter/DM Mono + the travel page's
            airline display faces) and every text block re-measures;
          - the 11 airline logos decode and the pass wall's real geometry
-           (which the grid stagger reads) finally exists;
+           (which the grid stagger AND the strip's travel distance read)
+           finally exists;
          - the hero canvas sizes itself.
-       Without a refresh the case-study rails scrub against stale
-       start/end pixels and the grid stagger measures a collapsed grid.
+
+       This section was already needed for the rails. Now that two sections
+       PIN, it is the thing that makes their height deterministic. A pin's
+       `end` is resolved to a pixel scroll position, and both pins here
+       derive theirs from a measurement: the hero from `innerHeight`, the
+       filmstrip from `.pass-wall`'s laid-out width. Measure the strip
+       before the airline logos decode and the pin is too short — the strip
+       stops with cards still off-screen and the last third of the wall is
+       simply unreachable. Both triggers carry `invalidateOnRefresh`, so
+       every refresh below re-runs the functions that compute those ends.
+
+       This is why the refresh set is fonts + per-image + load + orientation
+       rather than a single `load` handler.
        ============================================================ */
     if (hasST) {
         var refresh = function () { ScrollTrigger.refresh(); };

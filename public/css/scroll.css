@@ -20,3 +20,353 @@
      - No horizontal overflow at 1440 / 820 / 390. Horizontal-scroll tracks
        must be opt-in containers, never the document.
    ========================================================================== */
+
+/* ==========================================================================
+   HOW THIS FILE STAYS REDUCED-MOTION SAFE
+   --------------------------------------------------------------------------
+   gsap-motion.js `return`s before it touches the DOM when
+   prefers-reduced-motion is set, which means `html.gsap-on` is never added
+   and none of the runtime scaffolding below is ever built.
+
+   So the rule for this file is mechanical:
+
+     * Anything that changes LAYOUT for a scroll effect is gated on
+       `html.gsap-on`. Without that class the page lays out exactly as
+       styles.css + layout.css describe it.
+     * Every gated rule still describes a FINISHED, VISIBLE state. There is
+       no `opacity: 0`, no `transform` that parks content off-screen and no
+       zero-area box anywhere in this file. The from-states live only in
+       gsap.set() calls at runtime, and every one of them is either scrubbed
+       (so its resting value IS the finished value) or covered by the
+       anti-stranding watchdog in gsap-motion.js.
+     * The horizontal track is an OPT-IN container: `.hviewport` clips, and
+       the only element wider than the viewport (`.pass-wall`) lives inside
+       it. The document itself is never made wider than its own scrollport.
+   ========================================================================== */
+
+
+/* ==========================================================================
+   1. Depth planes — the pinned hero
+   --------------------------------------------------------------------------
+   The hero is pinned and scrubbed (gsap-motion.js §4a): five layers separate
+   at different rates while the section holds still, so the first gesture on
+   the page is the page reacting to you rather than a list of fades.
+
+   The layers were chosen by ELIMINATION, not by taste. `transform` on this
+   page is contested — `.reveal` carries `transform: translateY(22px)` plus a
+   .6s CSS transition on transform, and motion.css/Motion owns transform on
+   hover for the cards. So the parallax may only touch nodes that neither
+   system writes:
+
+     .hero-canvas-wrap   plain positioned box, no .reveal, no hover spring
+     .home-inner         the band-inner wrapper
+     .hero-name          the <h1>; its .hero-line CHILDREN are the .reveals
+     .hero-lower         plain grid wrapper; its children are the .reveals
+     .hero-fg            injected at runtime, owned by nobody else
+
+   `.hero-meta` / `.hero-subtitle` / `.hero-intro` / `.explore-cue` are all
+   `.reveal` and are therefore deliberately NOT in that list — they ride
+   `.home-inner` instead. Animating them directly would put a per-frame
+   inline transform in a race with a .6s CSS transition on the same
+   property, which is the exact failure this repo has already paid for
+   three times.
+   ========================================================================== */
+
+/* The hero is pinned at `top top`, so it wants to be exactly one viewport
+   tall or a sliver of the next band shows under it for the whole pin.
+   This is a FINISHED state (a taller hero), not an animation state. */
+html.gsap-on .band-home {
+    min-height: 100vh;
+    /* The injected foreground plane travels past the section edges; clip so
+       it can never widen the document. `clip` (not `hidden`) so no scroll
+       container is created and the sticky topbar is unaffected. */
+    overflow: clip;
+}
+@supports (min-height: 100svh) {
+    html.gsap-on .band-home { min-height: 100svh; }
+}
+
+html.gsap-on .home-inner,
+html.gsap-on .hero-name,
+html.gsap-on .hero-lower,
+html.gsap-on .hero-canvas-wrap { will-change: transform; }
+
+/* Foreground line-art plane. Injected by gsap-motion.js, so it exists only
+   when we are allowed to animate — there is no reduced-motion state of it to
+   get wrong. Sits ABOVE the copy (z-index 2 vs `.home-inner > *`'s 1) because
+   a depth stack needs something in FRONT of the subject, not just behind it.
+
+   Placed lower-LEFT on purpose. The right half of the hero is already the
+   HeroCanvas contour field; a second set of sage curves over there simply
+   merged into it, and two planes reading as one plane is the opposite of
+   depth. On the left it crosses the intro column instead, so travelling ~4x
+   faster than the copy during the pin is unmistakable. Verified against the
+   copy it crosses in a real browser at 1440. */
+.hero-fg {
+    position: absolute;
+    left: -9%;
+    bottom: -14%;
+    width: min(58%, 620px);
+    height: auto;
+    z-index: 2;
+    pointer-events: none;
+    overflow: visible;
+    /* .36 x the strokes' own .5 => ~.18 effective alpha of --sage. Measured
+       against the intro copy it crosses: the type stays the figure, the
+       plane stays the ground. */
+    opacity: .36;
+}
+.hero-fg .hero-fg-line {
+    fill: none;
+    stroke: var(--sage);
+    stroke-width: 1.1;
+    stroke-linecap: round;
+    opacity: .5;
+}
+.hero-fg .hero-fg-dot { fill: var(--olive); stroke: none; opacity: .5; }
+
+/* Decoration is the first thing to go when space is tight — same rule the
+   `.shape-field` layer already follows. */
+@media (max-width: 900px) {
+    .hero-fg { opacity: .26; }
+}
+@media (max-width: 700px) {
+    .hero-fg { display: none; }
+}
+
+
+/* ==========================================================================
+   2. Scroll-linked line-art — contour density
+   --------------------------------------------------------------------------
+   The `.shape-field` strokes now DRAW THEMSELVES against scroll progress
+   (gsap-motion.js §2) instead of playing a fixed 1.9s tween on enter, and
+   their weight reacts to scroll velocity: scroll hard and the contours
+   thicken, coast and they settle back to their resting hairline.
+
+   Velocity is expressed as ONE inherited custom property on <html> rather
+   than N inline stroke-widths. That keeps the whole effect to a single
+   tweened value, leaves every stroke's `opacity` alone (styles.css still owns
+   the .24/.18/.2 register and the `.band--dark` overrides), and means the
+   resting value 1 reproduces the original weights exactly.
+
+   Gated on html.gsap-on: with motion off, `--contour` is never defined and
+   never referenced, so styles.css's plain stroke-widths apply untouched. */
+html.gsap-on { --contour: 1; }
+
+html.gsap-on .shape-field .shape-line,
+html.gsap-on .shape-field .shape-ring { stroke-width: calc(1.3px * var(--contour)); }
+html.gsap-on .shape-field .shape-tick { stroke-width: calc(1.1px * var(--contour)); }
+html.gsap-on .hero-fg .hero-fg-line { stroke-width: calc(1.1px * var(--contour)); }
+
+/* The parallax handle gsap-motion.js injects INSIDE each field's <svg>,
+   wrapping the existing `.shape-drift` group. Two nested groups so the
+   scroll-linked plane offset and the endless ambient drift are never the
+   same property on the same node. Nothing to declare visually — it exists
+   purely so the field's own CSS `transform` (`.shape-field--travel` is
+   centred with translateY(-50%)) is never clobbered by a GSAP write. */
+
+
+/* ==========================================================================
+   3. Horizontal boarding-pass track  (travel.html)
+   --------------------------------------------------------------------------
+   The 11-card wall becomes a pinned filmstrip you scrub sideways: the
+   section holds still, the strip travels, and each pass tilts away from the
+   reading centre in 3D. This is the one place on the site where vertical
+   scrolling is remapped to horizontal travel.
+
+   THE OVERFLOW CONTRACT. `.pass-wall` is the only box on the site allowed to
+   be wider than the viewport, and it is wrapped in `.hviewport`, which
+   clips. `overflow: clip` rather than `hidden` on purpose:
+     - `hidden` makes the element a scroll container, so a focus or a
+       fragment jump inside it would scroll it programmatically and desync it
+       from the ScrollTrigger that owns its x.
+     - `clip` cannot be scrolled by anything, so the pinned tween is the only
+       thing that can ever move the strip.
+   The passes contain no focusable descendants (they are <article>s with an
+   <img> and text), so nothing needs to be scrolled into view.
+
+   PROGRESSIVE ENHANCEMENT WITHOUT DOM CHURN. The wrappers are built once,
+   unconditionally, and default to `display: contents` — which makes them
+   layout-transparent, so `.pass` stays a direct grid item of `.pass-wall`
+   and the original 3/2/1-column wall renders byte-identically. Only the
+   >=1024px query turns them into real boxes. That means a resize across the
+   breakpoint is a pure CSS switch: no re-parenting, no re-measure, and
+   nothing to unwind if a resize lands mid-tween.
+   ========================================================================== */
+.hstage, .hviewport, .pass-depth { display: contents; }
+.hstage-foot { display: none; }
+
+@media (min-width: 1024px) {
+    html.gsap-on .hstage {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: clamp(18px, 2.4vw, 30px);
+        position: relative;
+        /* Tall enough that the pinned strip reads as a framed gallery band
+           rather than a floating row, capped so that once the pin releases
+           the stage does not leave a viewport-sized void above the footer.
+           Without any min-height the stage is ~430px and the strip clings to
+           the topbar with the rest of the viewport empty below it. */
+        min-height: min(calc(100vh - var(--topbar-h) - 34px), 620px);
+        margin-block: clamp(16px, 2vw, 28px) clamp(20px, 3vw, 40px);
+    }
+
+    html.gsap-on .hviewport {
+        display: block;
+        width: 100%;
+        min-width: 0;
+        /* See "THE OVERFLOW CONTRACT" above. */
+        overflow: clip;
+        /* Breathing room for the 3D tilt + the lift on hover, which would
+           otherwise be shaved off by the clip. */
+        padding: 26px 0 30px;
+        margin-block: -26px -30px;
+        /* The strip dissolves at the edges instead of being guillotined, so
+           the clip reads as a frame rather than a bug. The two stops are
+           paired with `.pass-wall`'s padding below: the feather must land on
+           empty track, never on the first or last card, or those two cards
+           are permanently half-transparent at the strip's resting positions.
+           Left feather ends at 2.4% (~29px at 1200); right feather starts at
+           94.5% (~66px in). */
+        -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 2.4%, #000 94.5%, transparent 100%);
+                mask-image: linear-gradient(90deg, transparent 0, #000 2.4%, #000 94.5%, transparent 100%);
+    }
+
+    html.gsap-on .hviewport .pass-wall {
+        display: flex;
+        grid-template-columns: none;
+        align-items: stretch;
+        gap: clamp(20px, 2vw, 30px);
+        /* Lead-in and run-out. These are what keep the first and last card
+           clear of the edge feather at x = 0 and x = -dist respectively —
+           without them card 01 opens half-faded and card 11 closes that way,
+           which looks exactly like a clipping bug. They are inside
+           `width: max-content`, so the measured travel distance accounts for
+           them automatically. */
+        padding-inline: 40px 76px;
+        /* The one intentionally-too-wide box on the site. Clipped by
+           `.hviewport`; never reachable by the document scrollport. */
+        width: max-content;
+        will-change: transform;
+    }
+
+    html.gsap-on .hviewport .pass-depth {
+        display: block;
+        flex: 0 0 auto;
+        width: clamp(316px, 26vw, 392px);
+        /* The per-card tilt is written HERE, not on `.pass` — Motion owns
+           `transform` on `.pass` for its hover lift (motion-ux.js claims
+           `.pass` with a -5px translate). One wrapper per card is what lets
+           a scrubbed 3D depth and a hover spring coexist without either
+           library ever reading the other's matrix. */
+        transform-style: preserve-3d;
+        will-change: transform;
+    }
+    html.gsap-on .hviewport .pass-depth > .pass {
+        height: 100%;
+        /* Bigger than the wall's 190px: a pinned frame shows three cards
+           instead of nine, so each one is the subject rather than a tile. */
+        min-height: clamp(250px, 38vh, 356px);
+    }
+
+    /* Read-position affordance. A scrubbed horizontal track has no
+       scrollbar, so without this there is no way to tell how much strip is
+       left. Both halves rest in a legible state (empty rail + "01") because
+       they are only ever built when motion is on. */
+    html.gsap-on .hstage-foot {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        width: 100%;
+    }
+    html.gsap-on .hstage-rail {
+        position: relative;
+        flex: 1 1 auto;
+        height: 2px;
+        border-radius: 2px;
+        background: var(--line);
+        overflow: hidden;
+    }
+    html.gsap-on .hstage-fill {
+        position: absolute;
+        inset: 0;
+        background: var(--sage);
+        transform: scaleX(0);
+        transform-origin: 0 50%;
+    }
+    html.gsap-on .hstage-count {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: baseline;
+        gap: 6px;
+        font-family: var(--mono);
+        font-size: .68rem;
+        letter-spacing: .14em;
+        color: var(--sage-deep);
+        font-variant-numeric: tabular-nums;
+    }
+    html.gsap-on .hstage-sep { opacity: .45; }
+    html.gsap-on .hstage-tot { opacity: .7; }
+}
+
+/* NOTE ON THE BREAKPOINT. `min-width: 1024px` is the ONLY condition, and
+   gsap-motion.js gates its pinned tween on the identical string. If the two
+   ever diverge — a CSS-only pointer/hover clause, say — the JS would
+   translate a strip that CSS had already collapsed back into a grid, and the
+   `x` would land on an unclipped element: instant document-level horizontal
+   overflow. One condition, spelled the same in both files. */
+
+
+/* ==========================================================================
+   4. Reduced motion — the safety net
+   --------------------------------------------------------------------------
+   Belt-and-braces only: gsap-motion.js returns before it adds `html.gsap-on`
+   or builds any of the scaffolding above, so under this query the selectors
+   in sections 1-3 match nothing at all. These rules exist for the one case
+   the class list can still be wrong — a preference flipped mid-session,
+   after the scaffolding was already built — and they all point the same way:
+   FINISHED AND VISIBLE.
+
+   Never add a `display: none`, an `opacity: 0` or an off-screen transform to
+   this block. Stranding content invisible is the #1 regression in this repo
+   and this is the last line of defence against it.
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+    /* Collapse the whole horizontal track back to the plain wall. */
+    .hstage, .hviewport, .pass-depth {
+        display: contents !important;
+        transform: none !important;
+        opacity: 1 !important;
+    }
+    .pass-wall {
+        display: grid !important;
+        width: auto !important;
+        transform: none !important;
+        will-change: auto !important;
+    }
+    .pass-depth > .pass { min-height: 190px; }
+    .hstage-foot { display: none !important; }
+
+    /* Parallax planes sit exactly where the static layout puts them. */
+    .home-inner, .hero-name, .hero-lower, .hero-canvas-wrap,
+    .section-head, .shape-plx, .hero-fg-plx {
+        transform: none !important;
+        opacity: 1 !important;
+        will-change: auto !important;
+    }
+    .hero-canvas-wrap { display: block !important; }
+
+    /* Contour density resets to the resting hairline: `--contour: 1`
+       reproduces styles.css's stroke-widths exactly. */
+    html, html.gsap-on { --contour: 1 !important; }
+
+    /* The injected foreground plane is decoration, and decoration that
+       cannot move has no reason to overlap the copy. Hidden rather than
+       shown ONLY because it is aria-hidden ornament that never existed in
+       the static markup — it carries no content. */
+    .hero-fg { display: none !important; }
+
+    /* Trip cadence marks rest at full height. */
+    .trip-mark { transform: none !important; opacity: 1 !important; }
+}
