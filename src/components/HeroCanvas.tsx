@@ -804,7 +804,9 @@ export default function HeroCanvas() {
     };
 
     const onDown = (e: PointerEvent) => {
-      if (phase === 'rolling') return;
+      // 'aiming' too: the press can reach us twice (handle target, then bubbling
+      // to host). Re-entering would reset the pull and re-capture mid-gesture.
+      if (phase === 'rolling' || phase === 'aiming') return;
       const p = localPt(e);
       if (!inBall(p.x, p.y)) return;
       // Only now do we capture the pointer — before this the event passes through.
@@ -1411,13 +1413,25 @@ export default function HeroCanvas() {
 
     /* onDown claims the gesture only when the press lands on the ball, so
        ordinary clicks, links and text selection are untouched. */
-    /* Aiming binds to the handle (it owns touch-action); the tap-to-re-tee
-       accelerator stays on the section so it works anywhere on the green. */
+    /* BIND ON BOTH THE HANDLE AND THE SECTION, and here is why.
+       The handle sits inside `.hero-canvas-wrap` at z-index 0, but `.band-inner`
+       is z-index 1 — so wherever the ball lies under the content column, the copy
+       wrapper is ON TOP of the handle and swallows the press. Binding aiming to
+       the handle alone broke desktop putting in 5 of 10 lies, with
+       elementFromPoint on the ball returning `DIV.band-inner home-inner`.
+
+       `host` is an ANCESTOR of both, so it receives the bubbled pointerdown no
+       matter which child was hit — that is what makes the gesture reliable. The
+       handle keeps its own listeners purely so that on touch the press lands on
+       an element that already declares `touch-action: none` (see its comment);
+       onDown's phase guard stops the two paths double-firing. */
     handle.addEventListener('pointerdown', onDown);
     handle.addEventListener('pointerup', onUp);
     handle.addEventListener('pointercancel', onUp);
+    host.addEventListener('pointerdown', onDown);
     host.addEventListener('pointerdown', onTapReset);
     host.addEventListener('pointerup', onUp);
+    host.addEventListener('pointercancel', onUp);
 
     /* THE DRAG MUST BEAT THE PAGE SCROLL.
        The window `pointermove` above is `passive: true`, which by definition
@@ -1452,7 +1466,9 @@ export default function HeroCanvas() {
       window.removeEventListener('mousemove', onPointer as EventListener);
       host.removeEventListener('pointerdown', onTapReset);
       host.removeEventListener('pointerup', onUp);
+      host.removeEventListener('pointerdown', onDown);
       host.removeEventListener('pointerup', onUp);
+      host.removeEventListener('pointercancel', onUp);
       host.removeEventListener('pointermove', onDragMove);
       host.style.touchAction = prevTouchAction;
       handle.removeEventListener('pointerdown', onDown);
