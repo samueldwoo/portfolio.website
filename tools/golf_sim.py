@@ -73,7 +73,12 @@ class Green:
     def __init__(self, css_w, css_h, copy_bottom, narrow, round_no,
                  cup_r=CUP_R, capture_speed=CAPTURE_SPEED, max_speed=MAX_SPEED,
                  friction=FRICTION, reach_safety=None,
-                 downhill_credit=1.0 / -math.log(FRICTION)):
+                 downhill_credit=1.0 / -math.log(FRICTION),
+                 undul_scale=1.0, tilt_scale=1.0):
+        # Slope-budget knobs: undul_scale multiplies BOTH fbm amplitudes
+        # (0.42 / 0.16), tilt_scale multiplies the plane's tiltMag.
+        self.undul_scale = undul_scale
+        self.tilt_scale = tilt_scale
         # None => the shipped (unbounded) tee rule; a float => the two-sided
         # rule under evaluation.
         self.reach_safety = reach_safety
@@ -103,7 +108,7 @@ class Green:
         if round_no == 0:
             # initial mount: layout(); placeCup(); resetBall(false)
             self.tilt_ang = 0.0
-            self.tilt_mag = 0.85
+            self.tilt_mag = 0.85 * tilt_scale
             self.g_seed = 3.1
             self._place_cup()
             self.start_fx, self.start_fy = 0.28, 0.72
@@ -112,7 +117,7 @@ class Green:
             r2 = hash2(round_no * 11 + 5, 29)
             r3 = hash2(round_no * 17 + 3, 71)
             self.tilt_ang = r1 * TAU
-            self.tilt_mag = 0.6 + r2 * 0.75
+            self.tilt_mag = (0.6 + r2 * 0.75) * tilt_scale
             self.g_seed = 2 + r3 * 9
             self._place_cup()
             self._pick_start()
@@ -203,7 +208,7 @@ class Green:
             * self.tilt_mag
         undul = (fbm(nx * 1.25 + self.g_seed, ny * 1.25 - self.g_seed) * 0.42
                  + fbm(nx * 2.9 - self.g_seed * 1.7,
-                       ny * 2.9 + self.g_seed * 1.3) * 0.16)
+                       ny * 2.9 + self.g_seed * 1.3) * 0.16) * self.undul_scale
         return plane + undul
 
     def slope_at(self, x, y):

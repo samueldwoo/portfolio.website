@@ -32,6 +32,7 @@ for x, y, cx, cy, span, ta, tm, sd, want in probe["field"]:
     g = Green.__new__(Green)
     g.hmx, g.hmy, g.span = cx, cy, span
     g.tilt_ang, g.tilt_mag, g.g_seed = ta, tm, sd
+    g.undul_scale = 1.0
     hw = max(hw, abs(g.height_at(x, y) - want))
 print(f"heightAt: {len(probe['field'])} samples, max abs delta {hw:.3e}")
 

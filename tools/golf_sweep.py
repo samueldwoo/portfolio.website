@@ -61,6 +61,7 @@ class Field:
         self.sa = math.sin(g.tilt_ang)
         self.tm = g.tilt_mag
         self.sd = g.g_seed
+        self.us = g.undul_scale
 
     def height(self, x, y):
         nx = (x - self.hmx) / self.span
@@ -68,7 +69,7 @@ class Field:
         plane = (nx * self.ca + ny * self.sa) * self.tm
         undul = (fbm_np(nx * 1.25 + self.sd, ny * 1.25 - self.sd) * 0.42
                  + fbm_np(nx * 2.9 - self.sd * 1.7,
-                          ny * 2.9 + self.sd * 1.3) * 0.16)
+                          ny * 2.9 + self.sd * 1.3) * 0.16) * self.us
         return plane + undul
 
     def slope(self, x, y):
@@ -250,6 +251,10 @@ def main():
     ap.add_argument("--selfcheck", action="store_true")
     ap.add_argument("--only", default=None,
                     help="comma-separated round numbers to sweep")
+    ap.add_argument("--undul", type=float, default=1.0,
+                    help="multiplier on BOTH fbm amplitudes (0.42/0.16)")
+    ap.add_argument("--tilt", type=float, default=1.0,
+                    help="multiplier on the plane's tiltMag")
     ap.add_argument("--downhill-credit", type=float, default=None,
                     help="seconds of downhill drift credited as reach "
                          "(default MAX_ROLL=7)")
@@ -277,7 +282,8 @@ def main():
     print(f"# capture<{a.capture:g}  MAX_SPEED={a.maxspeed:g}  "
           f"FRICTION={a.friction:g}  CUP_R={a.cupr:g}  "
           f"reachSafety={a.reach_safety} "
-          f"downhillCredit={a.downhill_credit}")
+          f"downhillCredit={a.downhill_credit} "
+          f"undul={a.undul} tilt={a.tilt}")
 
     if a.selfcheck:
         g0 = S.Green(w, h, cb, nr, 1, cup_r=a.cupr, capture_speed=a.capture,
@@ -303,8 +309,10 @@ def main():
         g = S.Green(w, h, cb, nr, rnd, cup_r=a.cupr, capture_speed=a.capture,
                     max_speed=a.maxspeed, friction=a.friction,
                     reach_safety=a.reach_safety,
-                    downhill_credit=(S.MAX_ROLL if a.downhill_credit is None
-                                     else a.downhill_credit))
+                    downhill_credit=(1.0 / -math.log(a.friction)
+                                     if a.downhill_credit is None
+                                     else a.downhill_credit),
+                    undul_scale=a.undul, tilt_scale=a.tilt)
         if rnd in measured and not a.recompute and a.reach_safety is None:
             m = measured[rnd]
             g.ball0 = (m["ball"][0], m["ball"][1])
@@ -342,7 +350,7 @@ def main():
             a_reach = v0 / k - (up / (k * k)) * math.log1p(k * v0 / up)
         elif up < -1e-6:
             a_reach = v0 / k + (-up / k) * (
-                S.MAX_ROLL if a.downhill_credit is None else a.downhill_credit)
+                1.0 / k if a.downhill_credit is None else a.downhill_credit)
         else:
             a_reach = v0 / k
         rows.append({
