@@ -501,9 +501,13 @@ html.nav-marker-js .nav-marker {
 }
 .drawer-group > .drawer-eyebrow { padding: 0 4px 6px; }
 
+/* 44px, not 40px: measured 40x40 and flagged as a sub-minimum tap target. This
+   is the close control of a modal drawer on a phone — the single most important
+   thing in it to be able to hit. The 15px glyph inside is unchanged, so it only
+   gains padding. */
 .drawer-close {
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -607,6 +611,9 @@ html.nav-marker-js .nav-marker {
     flex-wrap: wrap;
     gap: 8px;
 }
+/* 9px of padding on an 11px/1 line gave a 31px-tall pill — 13px under the 44px
+   minimum, measured. These are the drawer's only contact links, so raise the box
+   rather than the type: the label stays 11px mono, the target becomes 44px. */
 .drawer-foot a {
     font: 500 11px/1 var(--mono);
     letter-spacing: .1em;
@@ -615,7 +622,10 @@ html.nav-marker-js .nav-marker {
     background: var(--panel);
     border: 1px solid var(--line);
     border-radius: var(--r-pill);
-    padding: 9px 13px;
+    padding: 9px 15px;
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
 }
 .drawer-foot a:hover { background: var(--sage-soft); }
 
@@ -873,11 +883,19 @@ html:not(.nav-js) .nav-links {
     .section-rail { display: flex; }
 }
 
-/* Palette trigger loses its words before the link row loses its space. */
+/* Palette trigger loses its words before the link row loses its space.
+   Collapsed to a square icon button, it must still be a 44x44 tap target —
+   it was measured at 38x38 (6px under) on iphone14 and small360, which is a
+   real miss on the exact viewports where it is the ONLY way to reach the
+   palette without a keyboard. 44px matches .nav-toggle beside it. */
 @media (max-width: 1023px) {
     .nav-cmd { padding: 0 11px; gap: 0; }
     .nav-cmd-text, .nav-cmd kbd { display: none; }
-    .nav-cmd { width: 38px; justify-content: center; }
+    .nav-cmd {
+        width: 44px;
+        min-height: 44px;
+        justify-content: center;
+    }
 }
 
 /* ---- Drawer takes over. The link track is removed from the bar, not

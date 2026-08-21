@@ -185,12 +185,30 @@ window.__ovTouch = (function () {
     },
     navState: function () {
       var t = document.getElementById("nav-toggle");
-      var m = document.getElementById("nav-links");
+      /* WHICH ELEMENT IS "THE MENU" depends on which nav is shipped, and this
+         harness must not hard-code the older one.
+
+         The pre-overhaul nav revealed the #nav-links row in place, toggling
+         `.is-open` on it plus `body.nav-open`. The current nav instead opens a
+         native <dialog id="nav-drawer"> with showModal(), and #nav-links is
+         legitimately removed from the bar at mobile widths (opacity 0) — so
+         asserting `.is-open` on #nav-links reports a working drawer as a dead
+         menu. That exact false failure was hit once: the drawer demonstrably
+         opened on a real touch tap (dialog.open true, display block, 335x844,
+         scroll locked, focus moved to .drawer-close) while this check said
+         "tap did not open the menu".
+
+         So prefer the dialog when one exists, and fall back to the old
+         contract otherwise. `openState` is whichever notion of "open" applies. */
+      var dlg = document.getElementById("nav-drawer");
+      var usingDialog = !!(dlg && typeof dlg.showModal === "function");
+      var m = usingDialog ? dlg : document.getElementById("nav-links");
       if (!t || !m) return { present: false };
       var tr = t.getBoundingClientRect();
       var tcs = getComputedStyle(t);
       return {
         present: true,
+        menuKind: usingDialog ? "dialog#nav-drawer" : "panel#nav-links",
         toggleDisplay: tcs.display,
         toggleRendered: rendered(t),
         toggleRect: [Math.round(tr.left), Math.round(tr.top),
@@ -200,8 +218,18 @@ window.__ovTouch = (function () {
         toggleHit: hitTest(t),
         ariaExpanded: t.getAttribute("aria-expanded"),
         ariaLabel: t.getAttribute("aria-label"),
-        menuIsOpen: m.classList.contains("is-open"),
-        bodyNavOpen: document.body.classList.contains("nav-open"),
+        /* A <dialog> is open when its `open` property is set; the legacy panel
+           is open when it carries `.is-open`. */
+        menuIsOpen: usingDialog ? !!m.open : m.classList.contains("is-open"),
+        /* The legacy nav set body.nav-open to lock scrolling. The current nav
+           locks <html> instead, so for the dialog path report THAT — the
+           equivalent signal, which must track open/closed. Do not hardcode it
+           true: the close assertion reads this flag, so a constant makes
+           "did it close?" unfalsifiable. */
+        bodyNavOpen: usingDialog
+          ? (document.documentElement.classList.contains("nav-locked")
+             || !!document.documentElement.style.overflow)
+          : document.body.classList.contains("nav-open"),
         menuOpacity: parseFloat(getComputedStyle(m).opacity || "1"),
         menuVisibility: getComputedStyle(m).visibility,
         menuPointerEvents: getComputedStyle(m).pointerEvents,
@@ -259,8 +287,23 @@ window.__ovTouch = (function () {
     unreachable: function () {
       var els = Array.prototype.slice.call(document.querySelectorAll(SEL));
       var bad = [];
+      /* MODAL INERTNESS IS CORRECT BEHAVIOUR, NOT A DEFECT.
+         showModal() makes everything outside the dialog inert, so while a modal
+         is open the brand, the palette trigger and the hamburger behind it are
+         SUPPOSED to be untappable. Reporting them as "unreachable" inverts the
+         test: it fails the page precisely for implementing a focus trap
+         correctly. So while a modal dialog is open, only consider elements
+         inside it. (Observed: a.brand / #nav-cmd / #nav-toggle all flagged as
+         "covered by dialog#nav-drawer" — which is the dialog working.) */
+      var modal = null;
+      var dialogs = document.querySelectorAll("dialog[open]");
+      for (var d = 0; d < dialogs.length; d++) {
+        // Last open modal wins; a non-modal <dialog> does not make anything inert.
+        if (dialogs[d].matches(":modal")) modal = dialogs[d];
+      }
       for (var i = 0; i < els.length; i++) {
         var el = els[i];
+        if (modal && !modal.contains(el)) continue;
         if (!rendered(el) || !effectivelyVisible(el)) continue;
         if (parkedOffscreen(el)) continue;
         var cs = getComputedStyle(el);
