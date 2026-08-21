@@ -538,14 +538,22 @@
             fg.setAttribute("viewBox", "0 0 300 220");
             fg.setAttribute("fill", "none");
             fg.setAttribute("aria-hidden", "true");
+            /* The two long STRAIGHT VERTICALS this plane used to carry
+               (`M232 24 L 232 208` and `M262 52 L 262 208`) were removed after
+               review: they ran the full height of the copy column and read as
+               hard UI rules ruled straight through the subtitle and the intro
+               paragraph. Two organic curves and one terminal dot carry the same
+               parallax read without ever crossing a line of type as a
+               straight edge. Nothing else references them.
+
+               If a vertical accent is ever wanted back here, keep it SHORT and
+               out of the text block — a full-height rule over body copy is the
+               exact thing that failed. */
             fg.innerHTML =
                 '<g class="hero-fg-plx">' +
                 '<path class="hero-fg-line" d="M12 196 C 74 120, 150 176, 214 96"/>' +
                 '<path class="hero-fg-line" d="M46 214 C 108 138, 184 194, 248 114"/>' +
-                '<path class="hero-fg-line" d="M232 24 L 232 208"/>' +
-                '<path class="hero-fg-line" d="M262 52 L 262 208"/>' +
                 '<circle class="hero-fg-dot" cx="214" cy="96" r="4"/>' +
-                '<circle class="hero-fg-dot" cx="232" cy="24" r="3"/>' +
                 '</g>';
             heroBand.appendChild(fg);
             var fgPlx = fg.querySelector(".hero-fg-plx");

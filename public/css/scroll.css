@@ -91,29 +91,36 @@ html.gsap-on .hero-name,
 html.gsap-on .hero-lower,
 html.gsap-on .hero-canvas-wrap { will-change: transform; }
 
-/* Foreground line-art plane. Injected by gsap-motion.js, so it exists only
-   when we are allowed to animate — there is no reduced-motion state of it to
-   get wrong. Sits ABOVE the copy (z-index 2 vs `.home-inner > *`'s 1) because
-   a depth stack needs something in FRONT of the subject, not just behind it.
+/* Line-art plane. Injected by gsap-motion.js, so it exists only when we are
+   allowed to animate — there is no reduced-motion state of it to get wrong.
 
    Placed lower-LEFT on purpose. The right half of the hero is already the
    HeroCanvas contour field; a second set of sage curves over there simply
    merged into it, and two planes reading as one plane is the opposite of
-   depth. On the left it crosses the intro column instead, so travelling ~4x
-   faster than the copy during the pin is unmistakable. Verified against the
-   copy it crosses in a real browser at 1440. */
+   depth. So it travels through the left column at ~4x the copy's rate.
+
+   z-index 0 — BEHIND the copy (`.home-inner > *` is z-index 1).
+
+   It was originally z-index 2, deliberately in FRONT, on the reasoning that a
+   depth stack wants something nearer than the subject. Reviewed and reversed:
+   in front, the plane drew over the subtitle and the intro paragraph, and no
+   amount of alpha makes ink on top of body copy read as atmosphere — it reads
+   as damage. Behind the copy the parallax rate still separates it from every
+   other plane, which is the effect that mattered; occlusion was never the part
+   doing the work. Readability wins the tie.
+
+   (The two full-height straight verticals that made this worst are gone — see
+   the note in gsap-motion.js §4a.) */
 .hero-fg {
     position: absolute;
     left: -9%;
     bottom: -14%;
     width: min(58%, 620px);
     height: auto;
-    z-index: 2;
+    z-index: 0;
     pointer-events: none;
     overflow: visible;
-    /* .36 x the strokes' own .5 => ~.18 effective alpha of --sage. Measured
-       against the intro copy it crosses: the type stays the figure, the
-       plane stays the ground. */
+    /* .36 x the strokes' own .5 => ~.18 effective alpha of --sage. */
     opacity: .36;
 }
 .hero-fg .hero-fg-line {

@@ -374,8 +374,32 @@
    about 5:1 to about 8:1. Body sizes and .hero-lower's pinned 16px font
    are untouched: the hero's `ch` column must not move (see styles.css).
    ========================================================================== */
+/* ---- ONE DIAL FOR THE WHOLE DISPLAY SCALE ----------------------------------
+   The first cut of this pass shipped 1.0 and read as too loud in review — "way
+   too zoomed in", with `.hero-name` at 176px and `.section-title` at 134px on a
+   1440 viewport, an 7.7:1 display-to-body ratio.
+
+   Rather than bake in a second opinion, every oversized display size in this
+   file is multiplied by this one number, so the loudness of the whole site is a
+   single value to turn. Body copy, nav, kickers and everything driven by
+   styles.css's `--fs-*` tokens are deliberately NOT affected — this scales only
+   the display type this pass inflated, so turning it down walks back THIS
+   change and nothing else.
+
+     1.00  as the layout pass shipped it   hero 176px / title 134px  (8:1)
+     0.78  current                         hero 137px / title 105px  (6:1)
+     0.73  ~ the pre-overhaul scale        hero 128px / title  98px  (5.6:1)
+
+   Lower = calmer. Only edit this number; the rules below follow it.
+   NOTE: `.hero-name` feeds the HeroCanvas ink fade, which re-measures the copy
+   edge at runtime — so changing this cannot re-break the hero fade. Verified.
+   -------------------------------------------------------------------------- */
+:root {
+    --display-scale: .78;
+}
+
 .section-title {
-    font-size: clamp(3rem, 9.4vw, 8.4rem);
+    font-size: calc(clamp(3rem, 9.4vw, 8.4rem) * var(--display-scale));
     letter-spacing: -0.042em;
     text-wrap: balance;
 }
@@ -383,7 +407,7 @@
 /* The hero name is the loudest thing on the site; it should be obviously
    louder than a section title, not a near-match. */
 .hero-name {
-    font-size: clamp(3.6rem, 13.4vw, 11rem);
+    font-size: calc(clamp(3.6rem, 13.4vw, 11rem) * var(--display-scale));
     line-height: .96;
     letter-spacing: -0.048em;
     margin: 2px 0 26px;
@@ -598,7 +622,7 @@
 .bento-plate-n {
     font-family: var(--display);
     font-weight: 700;
-    font-size: clamp(3.6rem, 8vw, 7rem);
+    font-size: calc(clamp(3.6rem, 8vw, 7rem) * var(--display-scale));
     line-height: .82;
     letter-spacing: -0.05em;
     color: var(--sage-deep);
@@ -780,7 +804,7 @@
         margin-bottom: clamp(30px, 3.4vw, 46px);
     }
 }
-.case-title { font-size: clamp(2.2rem, 5.4vw, 4.2rem); }
+.case-title { font-size: calc(clamp(2.2rem, 5.4vw, 4.2rem) * var(--display-scale)); }
 .case-index { font-size: var(--fs-7); }
 
 /* Meta strip: a hairline row rather than three little cards, so the case
@@ -877,7 +901,7 @@
     }
     .bento-plate-k { flex: 1 0 100%; }
     .bento-plate-note { flex: 1 1 240px; }
-    .bento-plate-n { font-size: clamp(3rem, 13vw, 4.6rem); }
+    .bento-plate-n { font-size: calc(clamp(3rem, 13vw, 4.6rem) * var(--display-scale)); }
     .bento-plate-note { max-width: 34ch; }
     .connect-split::before { display: none; }
 }
