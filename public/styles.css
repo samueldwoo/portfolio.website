@@ -1777,6 +1777,89 @@ a.bubble.ticker:hover::after { transform: translate(2px, -2px); opacity: 1; }
     pointer-events: none;
 }
 
+/* ---------- Case-study marginalia rail ----------
+   A hairline read-progress marker that "pins" beside each case study and
+   scrubs as you read it. Pinning is done with `position: sticky` on the
+   inner track rather than ScrollTrigger's `pin:true` on purpose: a real
+   pin injects a pin-spacer into the flow, which is exactly the kind of
+   thing that produces horizontal overflow at narrow widths. Sticky is
+   native, costs no layout, and ScrollTrigger only scrubs the fill.
+
+   The whole thing is display:none until 1280px, so it exists only where
+   there is genuine gutter to hold it — it can never push the content
+   column or create a scrollbar on tablet/phone.
+
+   RESTING STATE IS THE FINISHED STATE: the fill sits at scaleY(1) and the
+   head sits at y=0 (top of a fully drawn rail). With motion off, or if
+   GSAP never loads, it reads as a static design hairline. No from-state
+   (scaleY:0 / opacity:0) lives in this stylesheet. */
+.case-rail { display: none; }
+
+@media (min-width: 1280px) {
+    .case-rail {
+        display: block;
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        /* Sits in the band's own left padding, never in the text column. */
+        left: calc(-1 * clamp(28px, 3vw, 52px));
+        width: 3px;
+        z-index: 0;
+        pointer-events: none;
+    }
+    .case-rail-track {
+        position: sticky;
+        top: calc(var(--topbar-h) + 96px);
+        display: block;
+        width: 3px;
+        height: clamp(140px, 18vh, 220px);
+        border-radius: 3px;
+        background: var(--line2);
+        overflow: visible;
+    }
+    .case-rail-fill {
+        position: absolute;
+        inset: 0;
+        border-radius: 3px;
+        background: linear-gradient(180deg, var(--sage), var(--sage-hi));
+        transform-origin: 50% 0%;
+        /* Full by default — the finished state (see note above). */
+        transform: scaleY(1);
+    }
+    .case-rail-head {
+        position: absolute;
+        top: 0;
+        left: 50%;
+        width: 9px;
+        height: 9px;
+        margin-left: -4.5px;
+        margin-top: -4.5px;
+        border-radius: 50%;
+        background: var(--bg);
+        border: 2px solid var(--sage);
+        box-shadow: 0 0 0 4px rgba(95, 122, 79, .10);
+    }
+}
+
+/* ---------- Timeline: current-entry emphasis ----------
+   ScrollTrigger adds `.is-current` to whichever .exp-item the reader is
+   level with. Colour/shadow only — no transform, no size change — so it
+   can never shift layout or trap an element in a half-state. Absence of
+   the class is a perfectly valid resting appearance. */
+.exp-item::before {
+    transition: border-color .45s ease, background-color .45s ease, box-shadow .45s ease;
+}
+.exp-item.is-current::before {
+    border-color: var(--sage);
+    background: var(--sage-soft);
+    box-shadow: 0 0 0 5px rgba(95, 122, 79, .12);
+}
+.band--dark .exp-item.is-current::before {
+    box-shadow: 0 0 0 5px rgba(169, 199, 140, .16);
+}
+.exp-item::after { transition: opacity .45s ease; }
+.exp-item.is-current::after { opacity: 1; }
+
 /* GSAP owns the brand mark once it has loaded — drop the CSS underline
    transition so the two never animate the rule at the same time. */
 html.gsap-on .brand:hover .brand-rule,
@@ -1993,6 +2076,16 @@ html.js-anim .reveal:not(.is-visible) { opacity: 0; }
         opacity: 1 !important;
         transform: none !important;   /* rails sit filled, as design elements */
     }
+    /* Case-study marginalia rail: same contract as .timeline-rail — the
+       fill sits full and the head parks at the top. Never hide it; a
+       stranded scaleY(0) fill is exactly the bug this guards against. */
+    .case-rail, .case-rail-track { opacity: 1 !important; }
+    .case-rail-fill {
+        opacity: 1 !important;
+        transform: scaleY(1) !important;
+    }
+    .case-rail-head { opacity: 1 !important; transform: none !important; }
+    .exp-item::before, .exp-item::after { transition: none !important; }
     .gsap-reveal { opacity: 1 !important; transform: none !important; }
 
     /* Split line masks: gsap-motion.js bails out before SplitText is
