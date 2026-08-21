@@ -116,12 +116,21 @@ const spy = (hash: string) => (isHome ? { 'data-nav': hash } : {});
          Order matters: GSAP + ScrollTrigger, then gsap-motion.js so it can
          claim its elements via html.gsap-on BEFORE script.js runs and decides
          whether to skip .gsap-reveal nodes. anime.min.js only has to precede
-         script.js. -->
+         script.js.
+
+         motion.min.js is Motion's (motion.dev) own UMD bundle — its
+         `dist/motion.js`, which exposes the whole vanilla API on
+         `window.Motion` from a plain <script>, so no bundler is involved.
+         motion-ux.js runs LAST: its nav-indicator watches the `is-active`
+         class that script.js's scroll-spy sets, so the spy must have run
+         and placed the initial active link first. -->
     <script is:inline src="gsap.min.js"></script>
     <script is:inline src="ScrollTrigger.min.js"></script>
     <script is:inline src="SplitText.min.js"></script>
     <script is:inline src="gsap-motion.js"></script>
     <script is:inline src="anime.min.js"></script>
     <script is:inline src="script.js"></script>
+    <script is:inline src="motion.min.js"></script>
+    <script is:inline src="motion-ux.js"></script>
 </body>
 </html>
