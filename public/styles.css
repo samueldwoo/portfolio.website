@@ -1790,6 +1790,117 @@ html.gsap-on .brand:focus-visible .brand-rule { transition: none; }
 html.gsap-on .gsap-busy { transition: none !important; }
 
 /* ============================================================
+   Motion layer — spring micro-interactions (motion-ux.js)
+
+   motion-ux.js adds `html.motion-on` only AFTER it has successfully
+   claimed its elements, and tags each one `.motion-spring`. Everything
+   below is scoped to BOTH flags, so if that script 404s, is blocked, or
+   bails out under reduced motion, none of it applies and the original
+   CSS hover states above are exactly what the reader gets.
+
+   The split is one owner per property:
+     JS  owns transform (lift / scale / magnetic offset)
+     CSS keeps colour, background, border-color and box-shadow
+   Hover colour and shadow therefore still work identically; only the
+   `transform` declaration is withdrawn, plus `transform` is dropped
+   from the transition list so a CSS transition is never chasing the
+   spring's per-frame inline transform (the same mushiness `.gsap-busy`
+   exists to prevent).
+   ============================================================ */
+html.motion-on .motion-spring {
+    /* JS writes transform; nothing else may. */
+    transform: none;
+}
+html.motion-on .project-card.motion-spring,
+html.motion-on .contact-link.motion-spring,
+html.motion-on .card.motion-spring {
+    transition: border-color .3s ease, box-shadow .3s ease;
+}
+html.motion-on .pass.motion-spring {
+    transition: box-shadow .3s ease;
+}
+html.motion-on .favorite-item.motion-spring {
+    transition: border-color .25s ease, box-shadow .25s ease;
+}
+html.motion-on .bubble.motion-spring,
+html.motion-on .skills-list li.motion-spring {
+    transition: border-color .2s ease, background .2s ease;
+}
+html.motion-on .btn-resume.motion-spring,
+html.motion-on .contact-form button.motion-spring {
+    transition: background .22s ease, box-shadow .22s ease;
+}
+html.motion-on .nav-cta.motion-spring {
+    transition: background .2s ease, color .2s ease;
+}
+html.motion-on .nav-toggle.motion-spring { transition: none; }
+
+/* Withdraw the CSS hover transforms for claimed elements only. The
+   `:hover` colour/border/shadow halves of these same rules are left
+   fully intact — see the transition lists above. */
+html.motion-on .project-card.motion-spring:hover,
+html.motion-on .contact-link.motion-spring:hover,
+html.motion-on .pass.motion-spring:hover,
+html.motion-on .favorite-item.motion-spring:hover,
+html.motion-on a.bubble.motion-spring:hover,
+html.motion-on .skills-list li.motion-spring:hover,
+html.motion-on .btn-resume.motion-spring:hover,
+html.motion-on .contact-form button.motion-spring:hover,
+html.motion-on .nav-cta.motion-spring:hover {
+    transform: none;
+}
+
+/* Sliding active-section indicator (desktop).
+   One shared hairline that travels between nav links, replacing the
+   per-link `::after` scaleX underline. Purely decorative: aria-hidden
+   in the markup and pointer-events:none here, so it can never swallow
+   a click meant for the link underneath it.
+   `left`/`width` are animated rather than a transform because the
+   element is absolutely positioned against the nav, and a scaleX would
+   distort the 2px cap radius. */
+html.motion-on .nav-links { position: relative; }
+html.motion-on .nav-indicator {
+    position: absolute;
+    bottom: 2px;
+    left: 0;
+    width: 0;
+    height: 2px;
+    border-radius: 2px;
+    background: var(--sage);
+    opacity: 0;
+    pointer-events: none;
+    z-index: 1;
+}
+/* The old per-link underline steps aside for the shared one. */
+html.motion-on .nav-link.is-active::after { transform: scaleX(0); }
+
+/* Mobile: no travelling indicator — the open panel is a vertical list
+   and the active row already reads via its filled background. */
+@media (max-width: 760px) {
+    html.motion-on .nav-indicator { display: none; }
+    /* The panel is fixed-position on mobile, so the relative nav host
+       above must not reintroduce a containing block. */
+    html.motion-on .nav-links { position: fixed; }
+    html.motion-on .nav-link.is-active::after { transform: scaleX(1); }
+}
+
+/* Belt and braces: motion-ux.js returns before it adds `motion-on`
+   under reduced motion, so these rules cannot apply in the first
+   place. Kept so that a stale flag (e.g. the reader toggles the OS
+   setting and something fails to unwind) still cannot strand an
+   element mid-lift or hide the indicator's host. */
+@media (prefers-reduced-motion: reduce) {
+    html.motion-on .motion-spring {
+        transform: none !important;
+        translate: none !important;
+        scale: none !important;
+        transition: none !important;
+    }
+    html.motion-on .nav-indicator { display: none !important; }
+    html.motion-on .nav-link.is-active::after { transform: scaleX(1) !important; }
+}
+
+/* ============================================================
    Reveal-on-scroll
    ============================================================ */
 .reveal {
