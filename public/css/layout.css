@@ -51,10 +51,15 @@
 
    OVERFLOW DISCIPLINE. --ed-hang is the only rule that puts ink outside
    the content column, and it is gated to >=1400px where .band-inner is
-   provably narrower than the band's content box (1400 - 128 padding =
-   1272 vs a 1200 cap => 36px of slack per side, growing with viewport,
-   against a max 2vw/56px hang). Everything else insets. Verified at
-   1440 / 820 / 390 on all three pages.
+   provably narrower than the band's content box. Since --content-max became
+   fluid the slack behind the hang only grows: the column takes 42% of each
+   extra viewport pixel and the margins take 58%, so slack per side runs
+   156px at the 1400px gate, 212px at 1512, 395px at 1920 and 585px at 2800,
+   against a hang of at most 56px. Everything else insets, and `max-width`
+   can only ever REDUCE a width, so the vw term in --content-max cannot
+   itself overflow. Verified zero horizontal document overflow at
+   3840 / 2560 / 1920 / 1512 / 1440 / 1280 / 1100 / 1024 / 820 / 390 on all
+   three pages.
    ========================================================================== */
 
 
@@ -71,7 +76,9 @@
        note in the header. */
     --ed-hang: 0px;
     /* Where the marginalia rail sits, measured back from .band-inner's left
-       edge. Lives inside the band's own padding, never in the text column. */
+       edge. Lives inside the band's own padding, never in the text column.
+       See the collision guard below the breakpoints — this base term is what
+       every viewport up to and including the 1512 reference uses. */
     --ed-rail: clamp(30px, 3.1vw, 54px);
     /* Column-rule pitch for the procedural grid texture. */
     --ed-pitch: clamp(72px, 7vw, 104px);
@@ -82,6 +89,40 @@
 }
 @media (min-width: 1400px) {
     .band { --ed-hang: clamp(0px, 2vw, 56px); }
+}
+
+/* ---- COLLISION GUARD: the rail label vs the hanging display title ----
+   --ed-rail's base term stops growing at a 1742px viewport (3.1vw hits its 54px
+   ceiling) while --ed-hang keeps growing to 2vw/56px. So on a big display the
+   title, pulled back out of the content column, was painting straight over the
+   rotated marginalia label sitting in the same gutter. Measured gap between the
+   10px-wide label's right edge and the title's left edge (negative = overlap):
+
+     viewport   before   after   binding term
+       1440      +5.9    +5.9    base (guard is gated off here)
+       1512      +6.7    +6.7    base (guard is gated off here)
+       1800      +8.1    +8.1    base   52.00 vs 54.00
+       2200      +0.1    +6.1    guard  60.00 vs 54.00
+       2560      -7.1    +6.1    guard  67.20 vs 54.00
+       3840     -11.9    +6.1    guard  72.00 vs 54.00
+
+   Not a new bug and not caused by the fluid column — it is a function of
+   viewport width and was live before this pass. It is fixed here because it
+   lands exactly on the 2560 display this pass is meant to make read well.
+
+   `max()` keeps the function continuous: at the 1513px boundary the base term
+   (46.9px) still wins over the guard (46.3px), so there is no step, and the
+   guard does not actually start binding until about 1800px. +16px is sized so
+   that wherever it binds it holds a 6.1px gutter — the same clearance the 1512
+   reference already has.
+
+   Gated to >=1513px so it cannot touch the reference viewport or anything below
+   it. Ungated, `max()` would have bound by up to 0.6px in the narrow 1400-1455px
+   window where --ed-hang has just switched on and 3.1vw has not yet overtaken
+   it. Sub-pixel and invisible, but this pass promised that range does not move,
+   and a promise with an asterisk is worse than a breakpoint. */
+@media (min-width: 1513px) {
+    .band { --ed-rail: max(clamp(30px, 3.1vw, 54px), calc(var(--ed-hang) + 16px)); }
 }
 
 
@@ -405,39 +446,198 @@
    If that becomes a problem, give narrow its own value rather than compromising
    desktop -- one extra rule, no other changes:
        @media (max-width: 899px) { :root { --display-scale: .78; } }
+
+   >>> DOES THIS NEED TO GROW NOW THAT --content-max IS FLUID? MEASURED: NO. <<<
+   The obvious worry when the column widens to 1400px at 2560 is that .50 leaves
+   the display type stranded in the wider measure. Three numbers say it does not:
+
+     1. THE HIERARCHY IS INVARIANT. Both of the sizes that matter top out BELOW
+        the reference viewport -- `.section-title`'s 9.4vw hits its 8.4rem
+        ceiling at 1430px and `.hero-name`'s 13.4vw hits 11rem at 1313px -- and
+        body copy is pinned in px. So at 1512, at 2560 and at 3840 the type is
+        byte-identical: title 67.2px, hero 88.0px, body 17.4px, a 3.85:1
+        display-to-body ratio at every one of them. Nothing about the type got
+        smaller on a big display; only the box around it got bigger.
+     2. NO READABILITY DRIVER. Real characters per line (counted from per-glyph
+        Range rects, not inferred from `ch`) stay under the ~85 ceiling at every
+        width the column grows through: the home card prose reaches 78 at 2560
+        and is held at 78 at 3840 by --card-measure, and the case blocks reach 75
+        at 2560 and 82 at 3840 against their existing 60ch cap. Widening the
+        column in fact IMPROVED the case blocks, which used to sit at 50
+        characters — under the comfortable band, not over it. Scaling the display
+        type up would not improve any measure.
+        (The site's genuine outlier, `.exp-item p` at 91 characters, is
+        font-relative and reads identically at 1512 and 3840 — see the `ch` note
+        under --card-measure. Not introduced or worsened here.)
+     3. THE ONE THING THAT DID MOVE is the title's ink as a fraction of its
+        column. Measured on #projects, "Projects" being 245px of ink:
+             viewport   before   after
+               3840      25.5%   15.7%
+               2560      25.5%   17.5%
+               1920      25.5%   21.7%
+               1512      25.5%   25.5%
+               1440      25.5%   25.5%
+               1280      22.9%   22.9%
+          1100..820      20.3%   20.3%
+                390      26.2%   26.2%
+        So the pre-change ladder held 20.3%-26.2% across its whole range, 1920
+        still lands inside that band, and only 2560 and above fall under it.
+
+   That third number is the honest argument FOR a bump, and it is a judgement
+   call, not a defect -- reviewed by screenshot at 2560, .50 reads restrained but
+   deliberate, .58 slightly more commanding, .66 the most balanced against the
+   1400px ruler and also the closest to the "way too zoomed in" note above.
+   Shipping .50: the request was for the COLUMN to grow, this dial has already
+   been turned down twice, and changing both at once makes it impossible to tell
+   which move the reviewer is reacting to.
+
+   If the wide layout does read under-scaled, this is the whole change -- gated
+   so the 1512 reference and everything below it cannot move (verified: a global
+   edit here WOULD move 1512, which is why it has to be gated):
+       @media (min-width: 1600px) { :root { --display-scale: .58; } }
+   Measured at 2560 -- .58: title 78.0px / hero 102.1px / 20.4% of column;
+                       .66: title 88.7px / hero 116.2px / 23.1% of column.
+   Safe with the hero: HeroCanvas.tsx re-measures the real glyph rects each
+   resize (`measureCopy`, clamped to 0.30-0.66 of the canvas) and expresses the
+   ink ramp as offsets from that edge, so a larger `.hero-name` moves the fade
+   rather than landing in it. Verified by reading the component, not assumed.
    -------------------------------------------------------------------------- */
 :root {
     --display-scale: .50;
 
-    /* ---- PAGE WIDTH ----
-       styles.css sets --content-max: 1200px, which at a 1440 viewport leaves
-       120px of margin per side and reads wide/edge-to-edge. Narrowing it pulls
-       every band, and the nav bar with it, into a more centred column.
+    /* ---- PAGE WIDTH — FLUID, NOT A FIXED CAP ----------------------------------
+       styles.css sets --content-max: 1200px. This file used to override it with a
+       flat 960px, which was right at 1440-1512 and wrong above it: a fixed cap
+       means the column stays 960px however big the display gets, so at 2560 the
+       page was a 960px strip inside 800px of empty margin per side. The reported
+       symptom was "the margins look really small at 2560" — the margins were in
+       fact enormous; what read as wrong was the column failing to grow.
 
-       Measured side margin at a 1440 viewport (the band's own
-       clamp(24px, 5vw, 64px) padding is the floor below that):
-         1200px  120px per side   as styles.css ships it
-         1120px  160px per side
-         1080px  180px per side
-         1040px  200px per side
-          960px  240px per side   current
+       So the cap is now a function of the viewport, written as an offset FROM the
+       reference viewport rather than as a bare slope-and-intercept:
 
-       Safe to lower: `--ed-hang` is gated to >=1400px against the band's content
-       box, so a NARROWER content column only increases its slack (at 960 the
-       hang has 156px per side to play with instead of 36px at 1200). The hero's
-       58ch measure is pinned in px and does not move, and the canvas ink fade
-       re-measures the copy edge at runtime.
+           clamp(960px, 960px + 0.42 * (100vw - 1512px), 1560px)
 
-       WHERE THE FLOOR ACTUALLY IS. An earlier draft of this note guessed that
-       960 was where "the 12-col bento starts to crowd". Measured, that was
-       wrong: at 960 the narrowest tile is 195px and the narrowest card
-       paragraph 271px (~40 characters), and the two-column interest blocks
-       still hold a comfortable measure. Verified by screenshot at 1440.
-       The real constraint is the card paragraphs — below roughly 900 they drop
-       under ~35 characters, which is where a measure starts to read as a
-       column of fragments. Re-measure before going lower rather than trusting
-       this line. */
-    --content-max: 960px;
+       Read it as: "960px at 1512, plus 42% of every pixel the viewport is wider
+       than 1512, up to 1560px."
+
+       WHY THIS FORM. The obvious spelling, `clamp(960px, 325px + 42vw, 1560px)`,
+       is the same line — except it evaluates to 960.04px at 1512, not 960px, and
+       that 0.04px of extra column width shifted eight elements across the three
+       pages by one rounded pixel. Pinning the curve to the reference viewport
+       algebraically makes the middle term EXACTLY 960px at 1512, so there is no
+       rounding to argue about. Verified by a full-page element-geometry diff
+       against the previous build: every element on all three pages at 1512 /
+       1440 / 1280 / 1100 / 1024 / 820 / 390 has an identical box.
+
+       WHY THESE THREE NUMBERS.
+
+       * MIN 960px is the OLD value, so the minimum holds everything BELOW the
+         reference flat. 1512x982 is the viewport this design was signed off on.
+         Consequence worth stating plainly: at 1512 and at every width under it
+         this token resolves to the same 960px it always did, so the whole
+         responsive range from phone to the owner's laptop renders identically.
+         Mobile (<1088px, where the band's own clamp(24px, 5vw, 64px) padding is
+         the real floor) cannot be affected by this change at all.
+
+       * SLOPE 0.42 splits each additional pixel of viewport 42/58 between the
+         column and the margins. Both keep growing, so the page never turns into
+         a full-bleed sheet, but the column stops being a fixed strip. 0.42 was
+         chosen to land the column on 1400px at 2560 (54.7% of the viewport,
+         580px margins): reviewed by screenshot, 1400px is the width at which the
+         featured bento's card title sets on two lines instead of three and the
+         section decks stop ragging badly. 960 does neither; 1626 (the slope that
+         would hold the 1512 ratio, 0.635) sets card prose at a measured 95
+         characters per line, which is a readability regression — see the
+         --card-measure note below.
+
+       * MAX 1560px, reached at about 2940px. Past ~1560 the 12-column bento reads
+         as a billboard rather than a mosaic, and the display type is clamped in
+         rem above a 1430px viewport (see --display-scale) so it cannot follow the
+         column any further. Turning this up is the dial to reach for if a very
+         wide display still reads empty.
+
+       ONE HONEST CAVEAT. `100vw` includes the classic scrollbar gutter, which the
+       old flat 960px did not depend on. On a platform with non-overlay scrollbars
+       a 1512px window therefore computes about 0.42 * 15 = 6px wider than 960.
+       macOS uses overlay scrollbars, so the reference machine is unaffected; the
+       alternative (resolving the fluid term as a percentage) is worse, because
+       `.topbar-inner` and `.band-inner` have different containing blocks and the
+       nav would stop tracking the page content.
+
+       MEASURED (index.html, .band-inner geometry, zero document overflow at
+       every row; "was" = the old flat 960px):
+         viewport   content   margin      was
+           3840       1560     1140    960 / 1440
+           2560       1400      580    960 /  800
+           1920       1131      394    960 /  480
+           1512        960      276    960 /  276   <- reference, unchanged
+           1440        960      240    960 /  240
+           1280        960      160    960 /  160
+           1100        960       70    960 /   70
+           1024        922       51    960 /   51   <- from here down the band's
+            820        738       41    960 /   41      own padding is the floor
+            390        354       18    960 /   18
+
+       WHAT THIS IS SAFE AGAINST.
+       `max-width` can only ever REDUCE a width, so a vw term here cannot cause
+       horizontal overflow no matter how large it computes — below ~1088px the
+       band's padding wins and the column is padding-floored exactly as before.
+       `--ed-hang` is the one rule that puts ink outside the column, and it is
+       gated on the band's content box, which grows FASTER than this cap (58% of
+       each viewport pixel goes to margin vs 42% to the column), so the slack
+       behind the hang only ever increases: 156px per side at the 1400px gate,
+       212px at 1512, 585px at 2800, against a hang of at most 56px.
+       The hero's 58ch column is pinned in px and does not move, and the canvas
+       ink fade re-measures the copy edge at runtime.
+
+       WHAT IT IS NOT SAFE AGAINST, AND WHAT WE DID ABOUT IT.
+       Body copy whose measure is capped in `ch` is font-relative and does not
+       move when the column grows. Body copy with NO cap does. The card prose was
+       the only uncapped body text on the site: measured, it goes from 46
+       characters per line at 960 to 78 at 2560 and 89 at 3840. It now carries its
+       own cap. See --card-measure below. */
+    --content-max: clamp(960px, calc(960px + 0.42 * (100vw - 1512px)), 1560px);
+
+    /* ---- BODY MEASURE INSIDE THE CARDS ----
+       The container is allowed to grow; the LINE is not. Every other body block
+       on the site already caps itself in `ch` (46/60/62/66/68ch across
+       styles.css) and is therefore immune to the column widening. `.card p` had
+       no cap at all, so its measure was whatever the bento tile happened to be.
+
+       Measured, real characters per line (counted from per-glyph Range rects,
+       not estimated from `ch`) in the featured tile, WITHOUT the cap:
+         viewport   column   tile    p box   longest line   characters
+           1512       960     471     381        357px          46
+           1920      1131     561     471        455px          57
+           2560      1400     718     628        620px          78
+           3840      1560     811     721        700px          89   <- over 85
+       and two slopes that were rejected, both at 2560:
+           column 1626 (the proportional 63.5vw slope)   756px          95
+           column 2000 (if the max dial were raised)     941px         115
+       With `max-width: 60ch` the box tops out at 660px and the longest realized
+       line at 620px / 78 characters — the top of the comfortable 60-80 range, and
+       the same cap value `.case-block p` already uses.
+
+       WHERE IT ACTUALLY BINDS, because this matters and an earlier draft of this
+       note guessed it wrong twice: in the featured tile the paragraph box does not
+       reach 60ch (660px) until the column reaches about 1452px, i.e. a viewport of
+       about 2680. Measured with and without the cap at 1512 / 1920 / 2560, the
+       wrap is identical — so within the fluid range it is a guard rail for the top
+       slice and for anyone who raises the --content-max ceiling, not a layout
+       change. It is nonetheless gated to >=1513px, because ungated it also caught
+       a 635px-wide card at an 820px viewport by 1px; see the rule itself.
+
+       NOTE, because `ch` flatters itself: `ch` is the advance of "0", which in
+       Inter is wider than the average lowercase glyph, so a `Nch` cap holds
+       about 1.34*N real characters. The site's existing 68ch caps
+       (`.exp-item p`) therefore already run 91 characters per line, and have
+       since before this change, at every width from 1024 up. That is a
+       pre-existing measure worth revisiting, but it is font-relative: it reads
+       identically at 1512 and at 3840 and is not something the fluid column
+       introduced or worsened. Left alone deliberately — tightening it would
+       rewrap the work band at 1512. */
+    --card-measure: 60ch;
 }
 
 .section-title {
@@ -593,6 +793,26 @@
        | plate (5)   |   see all (7)       |
        +-------------+---------------------+
    ========================================================================== */
+/* Cap the card measure, not the card. The tiles are allowed to grow with the
+   fluid --content-max; the line inside them is not. See the --card-measure note
+   in the token block for the measured characters-per-line that set this value.
+
+   GATED TO THE FLUID RANGE ON PURPOSE. This guard rail exists only because
+   --content-max grows above 1512, so it has no business being live below 1512.
+   Ungated it also bound at 820, where 60ch computes to 634px against a 635px
+   available width — a 1px squeeze with no rewrap, but still a change to a
+   viewport this pass promised not to touch. Gating it makes "nothing at or below
+   the reference moves" structural rather than a coincidence of the numbers.
+
+   `:not([class])` is the prose paragraph and only the prose paragraph. Audited
+   across all three pages: inside every `.card` the copy is an unclassed <p> and
+   the only classed one is `.project-tech`, a single-line mono label that a
+   measure cap has no business touching. A bare `.card p` also matched that
+   label. */
+@media (min-width: 1513px) {
+    .card p:not([class]) { max-width: var(--card-measure); }
+}
+
 /* styles.css sets `grid-auto-rows: 1fr` on .project-grid, which forces every
    row to the height of the tallest card — including once the grid collapses to
    one column, where it left the two short cards with hundreds of px of dead
