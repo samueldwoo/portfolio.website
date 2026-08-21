@@ -1315,7 +1315,20 @@ a.bubble.ticker:hover::after { transform: translate(2px, -2px); opacity: 1; }
     transition: gap .22s ease, color .22s ease;
 }
 .back-link:hover { gap: 14px; color: var(--sage); }
-.foot-link { color: var(--sage-deep); }
+/* "Back home ↗" in the footer. Measured at 81.4x14px — 30px under the 44px
+   minimum tap target, on projects.html and travel.html at both 390px and 360px,
+   because the rule used to set `color` alone and the box was exactly the text
+   line. Grow the hit area to 44px and cancel it out of the layout with equal
+   negative block margins (44 − 30 = 14px advance, identical to before), so the
+   footer looks unchanged but the target is actually reachable with a thumb.
+   Width already passed at 81.4px; only the height was failing. */
+.foot-link {
+    color: var(--sage-deep);
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    margin-block: -15px;
+}
 .foot-link:hover { color: var(--sage); }
 
 /* Projects hero band — taller presence to rhyme with the home hero, with a
@@ -2181,6 +2194,32 @@ html.js-anim .reveal:not(.is-visible) { opacity: 0; }
        own — they stand in for a line box and nothing more. */
     margin: 0;
     padding: 0;
+}
+
+/* Safari/WebKit implements `overflow: clip` but NOT `overflow-clip-margin`, so
+   the declaration above is a NO-OP there and every g/y/p tail in a revealing
+   heading is shaved for the whole ~1s tween. This affects EVERY Safari version,
+   not "Safari < 16.4" as previously assumed — WebKit bug 236153, and MDN
+   browser-compat-data records `version_added: false`.
+
+   Measured in WebKit 26.0: the masked line lost 7.0px of descender ink versus an
+   unclipped control — exactly equal to a deliberately-no-clip-margin positive
+   control, confirming zero effect. Chrome and Firefox lose 0px. Real headings
+   hit: "Interests", "Things I'm building", "Where I've been".
+
+   Replicate the clip margin geometrically instead. `overflow: clip` clips at the
+   padding box, so padding expands the clip edge exactly the way a clip margin
+   would, and equal negative margins keep the mask's layout advance identical
+   (1em content + 0.4em padding − 0.4em margin = 1em, as before). The resulting
+   clip edge sits 0.2em outside the content on both vertical edges — the same
+   geometry the supported path produces — so the original reasoning still holds:
+   the from-state sits 135% down, well past the 0.2em edge, and no line peeks
+   out early. */
+@supports not (overflow-clip-margin: 1px) {
+    .srline-mask {
+        padding-block: 0.2em;
+        margin-block: -0.2em;
+    }
 }
 
 /* ============================================================
