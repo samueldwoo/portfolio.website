@@ -34,6 +34,15 @@ import SiteFoot from '../components/SiteFoot.astro';
         <!-- CASE STUDY 01 — Finance dashboard -->
         <section class="band case-study" aria-labelledby="cs-finance-title">
             <div class="band-inner">
+                <!-- Marginalia read-progress rail. Purely decorative (aria-hidden),
+                     lives in the band's own left padding at wide widths and is
+                     display:none below 1100px, so it can never cause overflow.
+                     gsap-motion.js pins it and scrubs the fill; its CSS resting
+                     state is a fully-drawn rail, so no-JS / reduced-motion reads
+                     as finished artwork rather than an empty track. -->
+                <aside class="case-rail" aria-hidden="true">
+                    <span class="case-rail-track"><span class="case-rail-fill"></span><span class="case-rail-head"></span></span>
+                </aside>
                 <div class="case-head reveal">
                     <span class="case-index" aria-hidden="true">01</span>
                     <div class="case-head-main">
@@ -82,6 +91,9 @@ import SiteFoot from '../components/SiteFoot.astro';
         <!-- CASE STUDY 02 — Portfolio site -->
         <section class="band case-study" aria-labelledby="cs-site-title">
             <div class="band-inner">
+                <aside class="case-rail" aria-hidden="true">
+                    <span class="case-rail-track"><span class="case-rail-fill"></span><span class="case-rail-head"></span></span>
+                </aside>
                 <div class="case-head reveal">
                     <span class="case-index" aria-hidden="true">02</span>
                     <div class="case-head-main">

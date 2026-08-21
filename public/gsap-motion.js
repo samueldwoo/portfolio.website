@@ -284,9 +284,112 @@
                 {
                     scaleY: 1,
                     ease: "none",
-                    scrollTrigger: { trigger: tl, start: "top 72%", end: "bottom 62%", scrub: 0.5 }
+                    scrollTrigger: {
+                        trigger: tl,
+                        start: "top 72%",
+                        end: "bottom 62%",
+                        scrub: 0.5,
+                        // Re-measure on refresh: the rail's length depends on the
+                        // timeline's height, which webfonts change after load.
+                        invalidateOnRefresh: true
+                    }
                 }
             );
+        });
+    }
+
+    /* ============================================================
+       5b. Work timeline — the entry you are level with lights up
+       Scroll-driven storytelling on the career narrative: as each
+       .exp-item crosses the reading line its marker takes the "current"
+       treatment, so the rail's fill has something to point AT instead of
+       just being a bar that grows.
+
+       Deliberately class-only (colour + shadow, see styles.css). No
+       transform, no opacity: an element can never be left mid-flight or
+       invisible, and the class simply being absent is a valid resting
+       look. This is why it needs no reduced-motion unwind beyond killing
+       the CSS transition.
+       ============================================================ */
+    if (hasST) {
+        toArray(".timeline").forEach(function (timeline) {
+            var items = toArray(timeline.querySelectorAll(".exp-item"));
+            if (items.length < 2) return;
+
+            var clear = function () {
+                items.forEach(function (it) { it.classList.remove("is-current"); });
+            };
+
+            items.forEach(function (item) {
+                ScrollTrigger.create({
+                    trigger: item,
+                    // A band just under the sticky bar acts as the reading line.
+                    start: "top 42%",
+                    end: "bottom 42%",
+                    onToggle: function (self) {
+                        if (!self.isActive) return;
+                        clear();
+                        item.classList.add("is-current");
+                    }
+                });
+            });
+        });
+    }
+
+    /* ============================================================
+       5c. Case-study marginalia rail — "pinned" read progress
+       Each case study on projects.html gets a hairline in the left
+       gutter that stays put beside the prose and scrubs as you read.
+
+       Why NOT ScrollTrigger's pin:true — a real pin injects a
+       pin-spacer into the document flow. On a page whose whole point is
+       a calm editorial column, that is a needless overflow and
+       layout-shift risk at every breakpoint. `position: sticky` on the
+       track (styles.css) gives the identical "pinned marginalia" read
+       for free, natively, with zero effect on layout; ScrollTrigger is
+       then only responsible for the scrub. Same story, none of the risk.
+
+       Wrapped in gsap.matchMedia so it exists only at the widths where
+       the gutter does. matchMedia's revert() kills the tweens AND clears
+       the inline props when the query stops matching, so a resize down
+       cannot leave a scaleY(0) fill stranded behind a display:none rail.
+       ============================================================ */
+    if (hasST) {
+        var mm = gsap.matchMedia();
+        mm.add("(min-width: 1280px)", function () {
+            toArray(".case-rail").forEach(function (rail) {
+                var caseSection = rail.closest(".case-study");
+                var track = rail.querySelector(".case-rail-track");
+                var fill = rail.querySelector(".case-rail-fill");
+                var head = rail.querySelector(".case-rail-head");
+                if (!caseSection || !track || !fill) return;
+
+                // Measured, not hard-coded: the track height is a clamp() on
+                // vh, so it differs per window. invalidateOnRefresh below
+                // re-runs these functions after fonts/images settle.
+                var travel = function () {
+                    return Math.max(0, track.getBoundingClientRect().height - 9);
+                };
+
+                var st = {
+                    trigger: caseSection,
+                    start: "top 55%",
+                    end: "bottom 75%",
+                    scrub: 0.55,
+                    invalidateOnRefresh: true
+                };
+
+                gsap.fromTo(fill,
+                    { scaleY: 0 },
+                    { scaleY: 1, ease: "none", scrollTrigger: st }
+                );
+                if (head) {
+                    gsap.fromTo(head,
+                        { y: 0 },
+                        { y: travel, ease: "none", scrollTrigger: st }
+                    );
+                }
+            });
         });
     }
 
@@ -302,13 +405,21 @@
         chipGroups.forEach(function (group) {
             var chips = toArray(group.children);
             if (!chips.length) return;
+            /* These lists are flex-wrapped, so they occupy real rows —
+               `grid:'auto'` makes the pop travel along each wrapped row
+               instead of jumping between them in DOM order. The 11-item
+               skills list is the one where the difference is obvious. */
             gsap.from(chips, {
                 y: 12,
                 scale: 0.92,
                 opacity: 0,
-                duration: 0.5,
-                ease: "back.out(1.7)",
-                stagger: 0.055,
+                duration: 0.55,
+                ease: "back.out(1.6)",
+                stagger: {
+                    each: 0.05,
+                    grid: "auto",
+                    from: "start"
+                },
                 transformOrigin: "50% 50%",
                 scrollTrigger: { trigger: group, start: "top 92%", once: true },
                 onStart: function () { chips.forEach(function (c) { c.classList.add("gsap-busy"); }); },
@@ -346,57 +457,175 @@
     var passes = toArray(".pass.gsap-reveal");
     var prose = toArray(".gsap-reveal:not(.pass)");
 
+    /* ---- Boarding-pass wall: grid-aware stagger ----
+       The wall is an 11-card CSS grid (3 / 2 / 1 columns by breakpoint).
+       The old code batched by scroll proximity with a flat `stagger: 0.09`,
+       which reads as an arbitrary queue: DOM order, not the order your eye
+       actually travels the wall.
+
+       `stagger: { each, grid: 'auto', from: 'start' }` makes GSAP measure
+       the laid-out positions and stagger diagonally from the top-left — so
+       the cards arrive as a wave across the grid, matching how the wall is
+       read. `grid:'auto'` reads real geometry, so it adapts to 3/2/1
+       columns on its own with no breakpoint bookkeeping.
+
+       One whole-wall trigger rather than ScrollTrigger.batch: a grid
+       stagger is only meaningful over the full set. Batching hands GSAP
+       an arbitrary subset, so the measured grid would be a fragment of
+       the real one and the diagonal would break at every batch boundary.
+       start:"top 78%" keeps the first row from firing before it's in view. */
     if (hasST && passes.length) {
-        gsap.set(passes, { opacity: 0, y: 38, scale: 0.965, rotateX: -7, transformPerspective: 700 });
-        ScrollTrigger.batch(passes, {
-            interval: 0.12,
-            batchMax: 4,
-            start: "top 90%",
-            once: true,
-            onEnter: function (batch) {
-                gsap.to(batch, {
-                    opacity: 1, y: 0, scale: 1, rotateX: 0,
-                    duration: 0.85,
-                    ease: "power3.out",
-                    stagger: 0.09,
-                    onStart: function () { begin(batch); },
-                    onComplete: function () { finish(batch); }
-                });
-            }
+        var wall = passes[0].closest(".pass-wall") || passes[0].parentElement;
+        gsap.set(passes, { opacity: 0, y: 34, scale: 0.97, rotateX: -6, transformPerspective: 800 });
+        gsap.to(passes, {
+            opacity: 1, y: 0, scale: 1, rotateX: 0,
+            duration: 0.9,
+            // Gentle overshoot: a boarding pass settling onto the wall.
+            // Kept under 1.2 so it reads as a settle, not a bounce.
+            ease: "back.out(1.1)",
+            stagger: {
+                each: 0.075,
+                grid: "auto",
+                from: "start",
+                ease: "power1.inOut"
+            },
+            scrollTrigger: {
+                trigger: wall,
+                start: "top 78%",
+                once: true,
+                // The airline logos are images; a late decode changes the
+                // grid's measured geometry the stagger depends on.
+                invalidateOnRefresh: true
+            },
+            onStart: function () { begin(passes); },
+            onComplete: function () { finish(passes); }
         });
     } else if (passes.length) {
         // No ScrollTrigger for some reason — show them, don't hide them.
         finish(passes);
     }
 
+    /* ---- Case-study prose: staggered within its own block ----
+       These are the 2x2 .case-block grid on projects.html. Batching by
+       proximity is right here (they genuinely enter in clusters), but the
+       easing was a flat power2.out on both axes. Splitting the tween so
+       opacity uses a linear-ish fade while `y` carries the expressive
+       ease is what makes a rise read as "settling" rather than "sliding":
+       the element is fully opaque before it stops moving, so the eye
+       tracks the type, not the fade. */
     if (hasST && prose.length) {
-        gsap.set(prose, { opacity: 0, y: 28 });
+        gsap.set(prose, { opacity: 0, y: 26 });
         ScrollTrigger.batch(prose, {
             interval: 0.1,
             batchMax: 3,
-            start: "top 88%",
+            start: "top 86%",
             once: true,
             onEnter: function (batch) {
-                gsap.to(batch, {
-                    opacity: 1, y: 0,
-                    duration: 0.8,
-                    ease: "power2.out",
-                    stagger: 0.11,
+                gsap.timeline({
                     onStart: function () { begin(batch); },
                     onComplete: function () { finish(batch); }
-                });
+                })
+                    .to(batch, {
+                        y: 0,
+                        duration: 0.95,
+                        ease: "expo.out",
+                        stagger: 0.1
+                    }, 0)
+                    .to(batch, {
+                        opacity: 1,
+                        duration: 0.45,
+                        ease: "power1.out",
+                        stagger: 0.1
+                    }, 0);
             }
         });
     } else if (prose.length) {
         finish(prose);
     }
 
-    /* Late webfont/image loads shift layout; recalc so triggers that
-       were measured against the pre-layout page still fire correctly. */
+    /* ============================================================
+       7b. Anti-stranding watchdog
+       Sections 7 hides elements with gsap.set() and relies on a
+       ScrollTrigger to bring them back. That is a from-an-invisible-start
+       pattern, i.e. exactly the shape of the old bug where content was
+       left stranded at opacity 0. The trigger firing is an assumption,
+       and assumptions about layout are what broke it before: a mis-measured
+       start (fonts, a zero-height image, a container that was display:none
+       at measure time) means the tween never runs and the copy is simply
+       gone.
+
+       So we verify instead of assuming. Once the page has settled, any
+       element that GSAP hid, is inside the viewport, and is still
+       transparent gets snapped to its final state. A no-op in the normal
+       case; the difference between "a subtle bug" and "unreadable content"
+       in the abnormal one.
+       ============================================================ */
     if (hasST) {
-        window.addEventListener("load", function () { ScrollTrigger.refresh(); });
-        if (document.fonts && document.fonts.ready) {
-            document.fonts.ready.then(function () { ScrollTrigger.refresh(); });
+        var guarded = passes.concat(prose);
+        if (guarded.length) {
+            var sweep = function () {
+                guarded.forEach(function (el) {
+                    if (parseFloat(gsap.getProperty(el, "opacity")) >= 0.99) return;
+                    var r = el.getBoundingClientRect();
+                    // Only rescue what should already be on screen; anything
+                    // still below the fold has a legitimate reason to be hidden.
+                    var onScreen = r.top < window.innerHeight && r.bottom > 0;
+                    if (!onScreen) return;
+                    gsap.killTweensOf(el);
+                    finish([el]);
+                });
+            };
+            // After load, after fonts, and once more late for slow decodes.
+            window.addEventListener("load", function () { setTimeout(sweep, 600); });
+            setTimeout(sweep, 2500);
+            window.addEventListener("scroll", sweep, { passive: true, once: true });
         }
+    }
+
+    /* ============================================================
+       8. Measurement hygiene
+       Every scrubbed/sticky trigger above was measured against the page
+       as it existed at parse time. Three things then change it:
+         - webfonts swap (Space Grotesk/Inter/DM Mono + the travel page's
+           airline display faces) and every text block re-measures;
+         - the 11 airline logos decode and the pass wall's real geometry
+           (which the grid stagger reads) finally exists;
+         - the hero canvas sizes itself.
+       Without a refresh the case-study rails scrub against stale
+       start/end pixels and the grid stagger measures a collapsed grid.
+       ============================================================ */
+    if (hasST) {
+        var refresh = function () { ScrollTrigger.refresh(); };
+
+        window.addEventListener("load", refresh);
+        if (document.fonts && document.fonts.ready) {
+            document.fonts.ready.then(refresh);
+        }
+
+        /* Images specifically: `load` fires once for the document, but a
+           lazily-decoded logo can land after it. Refresh per image, but
+           coalesce — 11 passes would otherwise mean 11 full recalcs. */
+        var imgs = toArray(document.images).filter(function (img) { return !img.complete; });
+        if (imgs.length) {
+            var pending = imgs.length;
+            var coalesced = null;
+            var onImg = function () {
+                pending--;
+                if (coalesced) clearTimeout(coalesced);
+                // Refresh once the burst settles, and once more at the end.
+                coalesced = setTimeout(refresh, pending > 0 ? 120 : 0);
+            };
+            imgs.forEach(function (img) {
+                img.addEventListener("load", onImg, { once: true });
+                img.addEventListener("error", onImg, { once: true });
+            });
+        }
+
+        /* Orientation/soft-keyboard resizes change the sticky offsets the
+           case rails depend on. ScrollTrigger handles width resizes itself;
+           this covers the late-settling case. */
+        window.addEventListener("orientationchange", function () {
+            setTimeout(refresh, 250);
+        });
     }
 })();

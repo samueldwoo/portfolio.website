@@ -293,6 +293,60 @@
         reveals.forEach(function (el) { el.classList.add("is-visible"); });
     }
 
+    /* ---------- Reveal rescue sweep (anti-stranding) ----------
+       IntersectionObserver only reports what it actually sampled. A fast
+       scroll — a wheel fling, a hash jump, restored scroll on reload, or a
+       programmatic scrollTo — can carry a short element from below the
+       viewport to above it inside a single sample interval. The observer
+       then never sees `isIntersecting`, never fires, and because
+       `html.js-anim .reveal:not(.is-visible)` pins it to opacity 0, that
+       copy is invisible for the rest of the session.
+
+       Measured on the pristine baseline: 6 of 6 fast-scroll passes over
+       index.html left 1-3 `.reveal` blocks permanently at opacity 0
+       (section intros, subheads, a project card). It is scroll-rate
+       dependent, which is why it reads as intermittent rather than broken.
+
+       So the observer is treated as the fast path, not the source of
+       truth. This sweep is the backstop: anything at or above the fold
+       that is still hidden gets snapped to its final state. Elements the
+       reader scrolled past do not want an entrance animation anyway — they
+       want to be readable, so the rescue is instant and unanimated. */
+    function rescueStragglers() {
+        if (!reveals.length) return;
+        var vh = window.innerHeight;
+        var remaining = false;
+        reveals.forEach(function (el) {
+            if (el.classList.contains("is-visible")) return;
+            var r = el.getBoundingClientRect();
+            // Its top edge has reached the fold: it has been seen (or passed).
+            if (r.top < vh * 0.94) {
+                el.classList.add("is-visible");
+                // Drop any half-applied inline from-state so the CSS
+                // resting rule (.reveal.is-visible) fully governs it.
+                el.style.removeProperty("opacity");
+                el.style.removeProperty("transform");
+            } else {
+                remaining = true;
+            }
+        });
+        // Nothing left below the fold — stop paying for the listener.
+        if (!remaining) {
+            window.removeEventListener("scroll", onSweepScroll);
+            window.removeEventListener("resize", onSweepScroll);
+        }
+    }
+
+    var sweepScheduled = false;
+    function onSweepScroll() {
+        if (sweepScheduled) return;
+        sweepScheduled = true;
+        requestAnimationFrame(function () {
+            sweepScheduled = false;
+            rescueStragglers();
+        });
+    }
+
     if (reduceMotion || !("IntersectionObserver" in window)) {
         showAll();
     } else if (animate) {
@@ -316,18 +370,42 @@
                 });
                 if (blocks.length) {
                     blocks.forEach(function (e) { e.classList.add("is-visible"); });
+                    /* `easeOutElastic(1, .85)` overshot and wobbled every
+                       block back into place — too playful for an editorial
+                       page, and on a group of stacked prose it read as the
+                       whole column jiggling. `easeOutQuint` covers most of
+                       the distance early then decelerates hard, which is
+                       the "settles into place" feel with no overshoot.
+
+                       Opacity is deliberately shorter than the move (a
+                       separate, faster tween) so the text is legible while
+                       it is still travelling the last few pixels — the eye
+                       follows the words instead of waiting on the fade. */
                     window.anime({
                         targets: blocks,
                         translateY: [22, 0],
+                        duration: 820,
+                        delay: window.anime.stagger(70, { start: 30 }),
+                        easing: "easeOutQuint"
+                    });
+                    window.anime({
+                        targets: blocks,
                         opacity: [0, 1],
-                        duration: 720,
-                        delay: window.anime.stagger(80, { start: 40 }),
-                        easing: "easeOutElastic(1, .85)"
+                        duration: 420,
+                        delay: window.anime.stagger(70, { start: 30 }),
+                        easing: "easeOutSine"
                     });
                 }
             });
         }, { rootMargin: "0px 0px -8% 0px", threshold: 0.12 });
         reveals.forEach(function (el) { revObserver.observe(el); });
+        /* Backstop the observer (see rescueStragglers above). Debounced on
+           scroll so a fling that outruns IO is caught on the next frame,
+           plus fixed checks for the load/font/image settling window. */
+        window.addEventListener("scroll", onSweepScroll, { passive: true });
+        window.addEventListener("resize", onSweepScroll, { passive: true });
+        window.addEventListener("load", function () { setTimeout(rescueStragglers, 400); });
+        setTimeout(rescueStragglers, 2200);
     } else {
         var cssObs = new IntersectionObserver(function (entries, obs) {
             entries.forEach(function (entry) {
@@ -343,6 +421,11 @@
             });
         }, { rootMargin: "0px 0px -8% 0px", threshold: 0.12 });
         reveals.forEach(function (el) { cssObs.observe(el); });
+        // Same backstop for the CSS-transition path (anime.js absent).
+        window.addEventListener("scroll", onSweepScroll, { passive: true });
+        window.addEventListener("resize", onSweepScroll, { passive: true });
+        window.addEventListener("load", function () { setTimeout(rescueStragglers, 400); });
+        setTimeout(rescueStragglers, 2200);
     }
 
     /* ---------- Hero name + signature motif entrance (on load) ---------- */
