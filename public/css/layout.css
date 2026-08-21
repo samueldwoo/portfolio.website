@@ -395,7 +395,7 @@
    edge at runtime — so changing this cannot re-break the hero fade. Verified.
    -------------------------------------------------------------------------- */
 :root {
-    --display-scale: .78;
+    --display-scale: .70;
 }
 
 .section-title {
@@ -432,6 +432,30 @@
     .home-inner > .hero-name,
     .home-inner > .hero-subtitle,
     .home-inner > .hero-lower { margin-left: calc(-1 * var(--ed-hang)); }
+}
+
+/* ---- The scroll cue gets its own line ----
+   styles.css lays `.hero-lower` out as `minmax(0, 58ch) auto` with
+   `align-items: end`, which put "EXPLORE" in a second column just 48px right of
+   the intro's right edge AND bottom-aligned to the exact same baseline (measured
+   at 1440: intro right 677, cue left 725, both bottom 784, vertical offset 0).
+   At that position it stops reading as a separate affordance and starts reading
+   as a continuation of the paragraph — it crowded the copy it sat beside.
+
+   Collapse to one column so the cue drops below the measure, and give it real
+   space above. Left-aligned to the same edge as everything else in the block, so
+   the hero reads as one clean vertical rhythm: meta / name / subtitle / intro /
+   cue.
+
+   `.hero-lower`'s pinned 16px font-size is deliberately NOT touched — that is
+   what holds the 58ch column at 585px and keeps the copy out of the canvas ink
+   (see styles.css). Only the grid changes. */
+.hero-lower {
+    grid-template-columns: minmax(0, 58ch);
+    row-gap: clamp(36px, 3.6vw, 58px);
+}
+.hero-lower > .explore-cue {
+    justify-self: start;
 }
 
 /* The meta line now runs a hairline out to the right, across the empty
