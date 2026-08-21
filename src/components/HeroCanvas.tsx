@@ -217,13 +217,98 @@ export default function HeroCanvas() {
     let narrow = false;
 
     /**
-     * Wide viewports fade the ink out horizontally (left third is clean, so the
-     * name/subtitle/intro sit on empty canvas). Narrow viewports have no
-     * horizontal gutter, so they fade VERTICALLY instead — clean at the top
+     * How far right the hero copy actually reaches, as a fraction of the canvas
+     * box. Drives the WIDE horizontal ink fade.
+     *
+     * WHY MEASURED AND NOT HARDCODED: the fade used to be *calibrated* against a
+     * copy column assumed to end at x/W ~0.52. That assumption is fragile in a
+     * specific, already-observed way -- `.hero-lower` is sized in `ch`, and `ch`
+     * resolves against the inherited font-size, so raising body text once
+     * silently widened the column by 53px and pushed copy into the ink zone.
+     * Deriving the stop positions from a live measurement makes the fade
+     * self-correcting: change the type scale and the ink moves out of the way.
+     *
+     * Verified behaviour-preserving: at 1440 with the current type scale the
+     * measurement yields 0.515, producing stops 0.415 / 0.575 / 0.745 against
+     * the original hand-tuned 0.42 / 0.58 / 0.75. Inflating body text to 28px
+     * moves it to 0.658, which is the adaptation the old constants could not do.
+     *
+     * SCOPE: only the wide/horizontal fade is derived. The NARROW vertical fade
+     * keeps its original hand-tuned constants deliberately -- the documented
+     * failure mode is horizontal (a `ch` column widening), which only exists
+     * where there is a horizontal gutter. On narrow the copy is full-bleed and
+     * measuring its bottom edge just saturates the safety clamp without saying
+     * anything useful. Fix what was fragile; don't churn what was verified.
+     */
+    const COPY_EDGE_FALLBACK = 0.52;
+    let copyEdge = COPY_EDGE_FALLBACK;
+
+    /**
+     * Measures ranges over TEXT NODES -- not element boxes, and not a Range over
+     * an element's *contents*. This distinction is the whole trick and it has
+     * bitten this file before (see the lesson about measuring glyph boxes rather
+     * than element boxes): a block element's box, and a contents-Range over it,
+     * both span the full content width no matter how short the text is. That
+     * reports 0.917 here instead of the true 0.515.
+     *
+     * `.explore-cue` is deliberately EXCLUDED: it is a small secondary
+     * affordance sitting at 0.587, right of the copy block, and was never part
+     * of the original calibration. Including it would drag the fade rightward
+     * and thin the composition for no readability gain. The set below is exactly
+     * the copy the original comment named.
+     */
+    const COPY_SEL = '.hero-meta, .hero-name, .hero-subtitle, .hero-intro';
+
+    const measureCopy = () => {
+      const inner = document.querySelector('.home-inner');
+      const wrapRect = wrap.getBoundingClientRect();
+      if (!inner || !wrapRect.width) {
+        copyEdge = COPY_EDGE_FALLBACK;
+        return;
+      }
+      let right = -Infinity;
+      inner.querySelectorAll(COPY_SEL).forEach((el) => {
+        const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+        let node: Node | null;
+        while ((node = walker.nextNode())) {
+          if (!node.nodeValue || !node.nodeValue.trim()) continue;
+          let rects: DOMRect[] = [];
+          try {
+            const range = document.createRange();
+            range.selectNodeContents(node);
+            rects = Array.from(range.getClientRects());
+          } catch {
+            rects = [];
+          }
+          rects.forEach((r) => {
+            if (r.width <= 1 || r.height <= 1) return;
+            right = Math.max(right, r.right);
+          });
+        }
+      });
+      if (!Number.isFinite(right)) {
+        copyEdge = COPY_EDGE_FALLBACK;
+        return;
+      }
+      // Clamp so a pathological measurement can neither erase the composition
+      // (too high) nor expose copy to full ink (too low).
+      const frac = (right - wrapRect.left) / wrapRect.width;
+      copyEdge = Math.min(0.66, Math.max(0.3, frac));
+    };
+
+    /**
+     * Wide viewports fade the ink out horizontally (the left third stays clean,
+     * so the name/subtitle/intro sit on empty canvas). Narrow viewports have no
+     * horizontal gutter, so they fade VERTICALLY instead -- clean at the top
      * where the copy lives, ink only in the lower band.
+     *
+     * The wide ramp is expressed as offsets from the measured copy edge, so the
+     * copy always lands in the clear zone with the same relative margin it was
+     * originally calibrated with (<10% of ring alpha at the copy edge).
      */
     const grad = (rgb: string, a: number): CanvasGradient => {
       if (narrow) {
+        // Original hand-tuned narrow stops; intentionally not derived (see above).
         const g = ctx.createLinearGradient(0, 0, 0, cssH);
         g.addColorStop(0, `rgba(${rgb},0)`);
         g.addColorStop(0.5, `rgba(${rgb},0)`);
@@ -232,15 +317,13 @@ export default function HeroCanvas() {
         g.addColorStop(1, `rgba(${rgb},${a.toFixed(4)})`);
         return g;
       }
-      // Stops chosen so that at 1440 the copy column (which ends around x/W
-      // ~0.52 for the subtitle, ~0.41 for the intro) sits under <10% of the
-      // ring alpha even when the pointer drags contours leftward. Verified by
-      // check 4f, which samples real glyph rects.
+      // edge 0.52 reproduces the original 0.42 / 0.58 / 0.75.
+      const e = copyEdge;
       const g = ctx.createLinearGradient(0, 0, cssW, 0);
       g.addColorStop(0, `rgba(${rgb},0)`);
-      g.addColorStop(0.42, `rgba(${rgb},0)`);
-      g.addColorStop(0.58, `rgba(${rgb},${(a * 0.16).toFixed(4)})`);
-      g.addColorStop(0.75, `rgba(${rgb},${(a * 0.66).toFixed(4)})`);
+      g.addColorStop(Math.max(0.02, e - 0.1), `rgba(${rgb},0)`);
+      g.addColorStop(Math.min(0.98, e + 0.06), `rgba(${rgb},${(a * 0.16).toFixed(4)})`);
+      g.addColorStop(Math.min(0.99, e + 0.23), `rgba(${rgb},${(a * 0.66).toFixed(4)})`);
       g.addColorStop(1, `rgba(${rgb},${a.toFixed(4)})`);
       return g;
     };
@@ -260,6 +343,10 @@ export default function HeroCanvas() {
 
       narrow = cssW < 900;
       globalAlpha = narrow ? 0.72 : 1;
+
+      // Must run before any grad() call below — every ring caches its own
+      // gradient, so a stale copyEdge would be baked into all of them.
+      measureCopy();
 
       const maxR = narrow ? cssW * 0.78 : Math.min(cssW * 0.6, cssH * 1.0);
       rings = [];
@@ -1043,6 +1130,10 @@ export default function HeroCanvas() {
           cup: [cupX, cupY],
           speed: Math.sqrt(velX * velX + velY * velY),
           box: playBox(),
+          // The measured copy extent the ink fade is derived from, so a test can
+          // assert the fade adapts instead of inferring it from pixel sampling.
+          copyEdge,
+          narrow,
         };
       },
     };
@@ -1057,6 +1148,21 @@ export default function HeroCanvas() {
       if (!running) render(clock, Math.max(intro, 0.001));
     });
     ro.observe(wrap);
+
+    /* Re-measure once webfonts swap in. The ResizeObserver above cannot cover
+       this: a font swap changes the copy's GLYPH widths without changing the
+       canvas wrap's box, so the observer never fires and the fade would stay
+       calibrated against fallback-font metrics (Space Grotesk and Inter are
+       both meaningfully wider than the system fallbacks). Cheap and idempotent
+       — one extra layout() on the font-ready microtask. */
+    if (typeof document !== 'undefined' && document.fonts && document.fonts.ready) {
+      document.fonts.ready
+        .then(() => {
+          layout();
+          if (!running) render(clock, Math.max(intro, 0.001));
+        })
+        .catch(() => {});
+    }
 
     const io = new IntersectionObserver(
       (entries) => {
