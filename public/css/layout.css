@@ -418,16 +418,26 @@
        clamp(24px, 5vw, 64px) padding is the floor below that):
          1200px  120px per side   as styles.css ships it
          1120px  160px per side
-         1080px  180px per side   current
+         1080px  180px per side
          1040px  200px per side
-          960px  240px per side   quite narrow; the 12-col bento starts to crowd
+          960px  240px per side   current
 
        Safe to lower: `--ed-hang` is gated to >=1400px against the band's content
-       box, so a NARROWER content column only increases its slack (at 1080 the
-       hang has 116px per side to play with instead of 36px). The hero's 58ch
-       measure is pinned in px and does not move, and the canvas ink fade
-       re-measures the copy edge at runtime. */
-    --content-max: 1080px;
+       box, so a NARROWER content column only increases its slack (at 960 the
+       hang has 156px per side to play with instead of 36px at 1200). The hero's
+       58ch measure is pinned in px and does not move, and the canvas ink fade
+       re-measures the copy edge at runtime.
+
+       WHERE THE FLOOR ACTUALLY IS. An earlier draft of this note guessed that
+       960 was where "the 12-col bento starts to crowd". Measured, that was
+       wrong: at 960 the narrowest tile is 195px and the narrowest card
+       paragraph 271px (~40 characters), and the two-column interest blocks
+       still hold a comfortable measure. Verified by screenshot at 1440.
+       The real constraint is the card paragraphs — below roughly 900 they drop
+       under ~35 characters, which is where a measure starts to read as a
+       column of fragments. Re-measure before going lower rather than trusting
+       this line. */
+    --content-max: 960px;
 }
 
 .section-title {
