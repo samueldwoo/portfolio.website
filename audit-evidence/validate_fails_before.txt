@@ -1,0 +1,33 @@
+round 7 best-try-36px sim=stopped  browser=idle     AGREE    posErr=   0.0px
+round 7 best-try-36px sim=stopped  browser=idle     AGREE    posErr=   0.0px
+round 7 best-try-36px sim=timeout  browser=idle     AGREE    posErr=   0.1px
+round 7 best-try-37px sim=stopped  browser=idle     AGREE    posErr=   0.0px
+round 7 best-try-37px sim=timeout  browser=idle     AGREE    posErr=   0.2px
+round 7 best-try-37px sim=stopped  browser=idle     AGREE    posErr=   0.0px
+round 7 best-try-37px sim=timeout  browser=idle     AGREE    posErr=   0.0px
+round 7 best-try-38px sim=stopped  browser=idle     AGREE    posErr=   0.0px
+round 7 best-try-38px sim=timeout  browser=idle     AGREE    posErr=   0.2px
+round 7 best-try-39px sim=stopped  browser=idle     AGREE    posErr=   0.0px
+round 7 best-try-39px sim=timeout  browser=idle     AGREE    posErr=   0.0px
+round 7 best-try-40px sim=stopped  browser=idle     AGREE    posErr=   0.0px
+round 7 best-try-40px sim=stopped  browser=idle     AGREE    posErr=   0.0px
+round 7 best-try-40px sim=stopped  browser=idle     AGREE    posErr=   0.0px
+round 7 best-try-40px sim=stopped  browser=idle     AGREE    posErr=   0.0px
+round 12 best-try-39px sim=stopped  browser=idle     AGREE    posErr=   0.1px
+round 12 best-try-39px sim=stopped  browser=idle     AGREE    posErr=   0.1px
+round 12 best-try-39px sim=stopped  browser=idle     AGREE    posErr=   0.0px
+round 12 best-try-39px sim=stopped  browser=idle     AGREE    posErr=   0.0px
+round 12 best-try-40px sim=stopped  browser=idle     AGREE    posErr=   0.1px
+round 12 best-try-40px sim=stopped  browser=idle     AGREE    posErr=   0.0px
+round 12 best-try-40px sim=stopped  browser=idle     AGREE    posErr=   0.1px
+round 12 best-try-40px sim=stopped  browser=idle     AGREE    posErr=   0.3px
+round 12 best-try-41px sim=stopped  browser=idle     AGREE    posErr=   0.0px
+round 12 best-try-41px sim=stopped  browser=idle     AGREE    posErr=   0.2px
+round 12 best-try-41px sim=stopped  browser=idle     AGREE    posErr=   0.0px
+round 12 best-try-42px sim=stopped  browser=idle     AGREE    posErr=   0.1px
+round 12 best-try-42px sim=stopped  browser=idle     AGREE    posErr=   0.0px
+round 12 best-try-43px sim=stopped  browser=idle     AGREE    posErr=   0.0px
+round 12 best-try-43px sim=stopped  browser=idle     AGREE    posErr=   0.2px
+
+AGREEMENT 30/30 = 100.0%  (desyncs: 0)
+  resting-position error on agreeing misses: median 0.0px  max 0.3px

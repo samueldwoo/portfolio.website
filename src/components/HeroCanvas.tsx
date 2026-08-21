@@ -540,6 +540,78 @@ export default function HeroCanvas() {
     };
 
     /**
+     * How far a FULL-POWER putt from (px,py) can actually roll toward the cup.
+     *
+     * WHY THIS EXISTS: the tee used to be chosen on distance alone, and a green
+     * has a hard reach ceiling. Rolling friction is exponential, so a putt's
+     * total run is v0/k with k = -ln(FRICTION) — at MAX_SPEED that is
+     * 900/2.12 = 425px on the FLAT, and materially less uphill, where the fall
+     * line decelerates the ball as well. The play box at 1440x900 is 662x612,
+     * so the sampler below could and did deal an uphill cup ~470px away: a hole
+     * where no (aim, power) whatsoever sinks the ball. Audited exhaustively at
+     * 0.1deg x 0.002 power — 1.7M lines per hole — 18 of 301 consecutive rounds
+     * were unwinnable at 1440x900 and 78 of 201 at 1920x1080, where the box is
+     * bigger and the holes longer. The ball's closest possible approach on those
+     * was 20-114px on a 13px cup: it never even reached the lip, so this is a
+     * REACH failure, NOT the rim-out rule (`speed < 520` in stepBall). Raising
+     * that threshold, or MAX_SPEED, or FRICTION, cannot fix this and was
+     * measured not to: the tee has to be dealt inside the reach envelope.
+     *
+     * Closed form of dv/dt = -k*v - up, solved for v -> 0, where `up` is the
+     * mean slope acceleration OPPOSING the putt sampled along the line.
+     *
+     * Downhill (up < 0) the slope feeds the ball instead, and the credit it earns
+     * is deliberately SMALL — one time constant 1/k, the lifetime of the putt's
+     * own impulse. An earlier version credited the full MAX_ROLL of downhill
+     * drift and that was measurably wrong: a ball past its friction range
+     * (MAX_SPEED/k = 425px) is only still moving because the fall line is
+     * carrying it, and a ball carried by the fall line goes where the SLOPE
+     * points, not where it was aimed. Crediting that drift as reach left 7 of
+     * 201 rounds unwinnable at 1920x1080 — every one of them a cup 453-527px
+     * away, i.e. past 425px, "reachable" only by uncontrollable trickle.
+     */
+    const reachToward = (px: number, py: number): number => {
+      const hm = home();
+      const span = Math.min(cssW, cssH) * 0.5;
+      const dx = cupX - px;
+      const dy = cupY - py;
+      const d = Math.hypot(dx, dy) || 1;
+      const ux = dx / d;
+      const uy = dy / d;
+      let up = 0;
+      // Five samples, not one at the ball: the undulation means the slope the
+      // putt actually fights is the average over the line, not at the tee.
+      for (const f of [0.15, 0.35, 0.55, 0.75, 0.95]) {
+        const s = slopeAt(px + ux * d * f, py + uy * d * f, hm.x, hm.y, span, tiltAng, tiltMag, gSeed);
+        up -= s.gx * ux + s.gy * uy;
+      }
+      up /= 5;
+      const k = -Math.log(FRICTION);
+      const flat = MAX_SPEED / k;
+      if (up > 1e-6) return flat - (up / (k * k)) * Math.log1p((k * MAX_SPEED) / up);
+      return flat - up / (k * k);   // downhill: one time constant of help, no more
+    };
+
+    /**
+     * Fraction of the reach budget a hole is allowed to use.
+     *
+     * Calibrated, not guessed. Over 301 consecutive rounds at 1440x900 the ratio
+     * distance/reachToward separates the two populations cleanly: every solvable
+     * hole sat at <= 1.013 and every unsolvable one at >= 1.036 (bar one, round
+     * 157, whose line the fall line bent 54px wide — curvature, not reach). 0.90
+     * keeps margin under that boundary for the model's own approximation, since
+     * it assumes a straight line and a mean slope.
+     *
+     * Cost, measured, at 1440x900 over 301 rounds: 23% of tees move by a median
+     * 32px, median hole distance holds at 317px vs 318px, p10 distance and
+     * median aim tolerance are unchanged (267px, 9deg), and the WORST aim
+     * tolerance improves from 1deg to 4deg. 0.85 shortens more for no gain in
+     * solvability; 0.95 also reaches 100% here but leaves a 1deg hole and less
+     * margin, so 0.90 it is.
+     */
+    const REACH_BUDGET = 0.9;
+
+    /**
      * Re-tee. `vary` re-rolls the green and drops the ball at a random spot that
      * is far enough from the cup to be a real putt — rejection-sampled rather
      * than nudged, so the ball genuinely moves around the green between rounds.
@@ -562,8 +634,26 @@ export default function HeroCanvas() {
           if (dd > bestD) { bestD = dd; bestFx = fx; bestFy = fy; }
           if (dd > minD) break;   // good enough, stop early
         }
-        startFx = bestFx;
-        startFy = bestFy;
+        /* Then pull the tee IN along its own line until a full-power putt can
+           reach it. Moving the tee rather than touching the physics is the
+           point: the cup stays 13px, the rim-out speed stays 520, friction and
+           the slope are untouched, so nothing about how a putt PLAYS is made
+           easier — the only thing removed is holes that were never winnable.
+           `minD` is a hard floor, so this can never collapse into a gimme
+           (without it, one round in the sample teed off 4px from the cup). */
+        let px = b.x + b.w * bestFx;
+        let py = b.y + b.h * bestFy;
+        for (let i = 0; i < 6; i++) {
+          const dd = Math.hypot(px - cupX, py - cupY);
+          const cap = reachToward(px, py) * REACH_BUDGET;
+          if (dd <= cap || dd <= minD) break;
+          // Iterated because shortening the line changes the slope it crosses.
+          const t = Math.max(cap, minD) / dd;
+          px = cupX + (px - cupX) * t;
+          py = cupY + (py - cupY) * t;
+        }
+        startFx = (px - b.x) / b.w;
+        startFy = (py - b.y) / b.h;
       }
       ballX = b.x + b.w * startFx;
       ballY = b.y + b.h * startFy;

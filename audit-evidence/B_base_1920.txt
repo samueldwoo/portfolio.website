@@ -1,0 +1,208 @@
+# 1920x1080  narrow=False  dt=1/60s  grid=360ang x 37pow = 13320 putts/round
+# capture<520  MAX_SPEED=900  FRICTION=0.12  CUP_R=13  reachSafety=None
+rnd   dist  tilt  mag sunk?  hits bestP tolDeg minMiss hotPass maxReach  upAcc  aReach
+  0    132     0 0.85   YES   468 0.325   53.0     3.0    True      530  -32.2     531
+  1    476   285 1.33   YES   115 0.950   20.0    12.5   False      570  -37.0     547
+  2    417   334 1.11    no     0     -    0.0    15.4   False      604   -9.0     454
+  3    347    22 0.64   YES    43 0.825    5.0    10.4   False      555  -44.6     572
+  4    389   318 0.67    no     0     -    0.0    22.7   False      460   74.0     370
+  5    330    39 0.62   YES    28 0.900    6.0    10.7   False      453   54.7     381
+  6    327   332 0.77   YES    38 0.925    5.0    10.6   False      429    5.6     417
+  7    317   347 1.16   YES   113 0.750   26.0    10.0   False      597  -21.0     494
+  8    432    64 0.80    no     0     -    0.0    56.4   False      422   47.6     385
+  9    359   202 1.10   YES   274 0.450   23.0     9.7   False      622  -83.2     699
+ 10    326   158 0.68   YES    63 0.775    9.0     9.7   False      589  -34.4     538
+ 11    499   345 0.91    no     0     -    0.0    77.6   False      511  -24.7     506
+ 12    553    56 0.60    no     0     -    0.0   172.1   False      434   28.6     398
+ 13    457    20 1.16    no     0     -    0.0    78.4   False      404   77.4     369
+ 14    580    99 0.77    no     0     -    0.0   126.8   False      537  -35.7     542
+ 15    336   195 1.26   YES   123 0.700   31.0     9.7   False      658  -53.0     599
+ 16    453    68 0.68    no     0     -    0.0    70.6   False      517   30.0     397
+ 17    339   178 0.72   YES    37 0.825    5.0    10.3   False      430   15.0     408
+ 18    348   245 1.17   YES    38 0.825    6.0    10.6   False      551  -18.3     485
+ 19    398   214 0.76   YES    50 0.975   20.0    12.1   False      601  -17.1     481
+ 20    434   354 0.64    no     0     -    0.0    28.6   False      492   27.2     399
+ 21    351   217 1.31   YES   167 0.500    8.0    10.3   False      708  -81.6     694
+ 22    357   203 0.63   YES    12 0.950    3.0    11.9   False      576   40.8     389
+ 23    453   194 1.27   YES    47 1.000    4.0    12.0   False      634  -72.4     664
+ 24    479   133 1.09    no     0     -    0.0    77.1   False      592   14.3     409
+ 25    490   270 1.21    no     0     -    0.0   125.3   False      512   53.3     382
+ 26    462    65 0.94    no     0     -    0.0    54.8   False      496   -8.0     451
+ 27    459   124 1.34    no     0     -    0.0   114.9   False      375  103.2     356
+ 28    586   242 1.01    no     0     -    0.0   187.1   False      575    3.3     420
+ 29    357   275 1.19   YES    17 0.950    4.0    10.9   False      535   19.1     405
+ 30    410   264 1.31    no     0     -    0.0    46.9   False      426   73.0     371
+ 31    531   199 1.19    no     0     -    0.0   173.8   False      540   87.9     363
+ 32    317   191 0.99   YES    28 0.975    5.0    10.3   False      603   68.1     373
+ 33    456   164 0.79    no     0     -    0.0    65.4   False      434   39.5     390
+ 34    401   159 1.04   YES    39 0.825    4.0    11.6   False      499  -58.1     616
+ 35    322   343 1.24   YES    61 0.850    9.0    10.3   False      530   35.0     393
+ 36    586   301 0.66    no     0     -    0.0   164.0   False      432   16.3     407
+ 37    508   264 0.83    no     0     -    0.0   118.4   False      414   30.2     396
+ 38    408    54 1.25   YES    19 0.950    7.0    12.4   False      662  -17.3     482
+ 39    316   291 0.97   YES   179 0.325   14.0     8.7   False      652  -61.4     627
+ 40    316   216 0.65   YES    36 0.850    5.0     9.7   False      546   20.1     404
+ 41    414   160 0.98   YES    15 0.925    4.0    12.2   False      676  -30.8     526
+ 42    386   169 1.21   YES     4 1.000    3.0    12.4   False      429   56.4     380
+ 43    329   179 1.21   YES    68 0.925   16.0    11.0   False      485   49.9     384
+ 44    492   209 0.68    no     0     -    0.0   113.2   False      399   34.2     394
+ 45    356    71 1.27   YES     8 1.000    4.0    12.3   False      536   70.7     372
+ 46    348   179 1.18   YES   125 0.500    8.0     9.7   False      632  -59.0     619
+ 47    500   259 0.74    no     0     -    0.0   117.1   False      493    9.5     413
+ 48    471   100 0.84   YES     7 1.000    5.0    12.6   False      575   -4.1     438
+ 49    421    15 1.16    no     0     -    0.0    53.1   False      470   48.2     385
+ 50    560   188 0.80   YES     1 1.000    1.0    12.5   False      616  -52.4     598
+ 51    328   177 1.10   YES    71 0.675    5.0     9.9   False      618  -56.7     612
+ 52    376    97 0.63   YES    12 0.950    4.0    12.1   False      486   18.2     406
+ 53    584    20 0.81    no     0     -    0.0   201.3   False      403   30.7     396
+ 54    493   195 0.63    no     0     -    0.0    89.3   False      426   27.0     399
+ 55    424    59 1.15    no     0     -    0.0    58.5   False      370   62.0     377
+ 56    360   338 0.78   YES    24 0.950    7.0    11.4   False      473   19.9     404
+ 57    499    66 1.33    no     0     -    0.0    84.5   False      475   -3.4     436
+ 58    402   190 1.14   YES    32 0.875    4.0    11.5   False      634  -51.0     593
+ 59    442   278 1.35    no     0     -    0.0    14.6   False      526  -15.7     476
+ 60    341    23 0.77   YES    44 0.925    9.0    10.4   False      462   29.2     397
+ 61    437    20 0.98    no     0     -    0.0    57.6   False      419   31.9     395
+ 62    362   343 1.33   YES    12 1.000    7.0    12.2   False      451   73.0     371
+ 63    357     3 0.62   YES     9 1.000    5.0    12.2   False      436   59.9     378
+ 64    456   218 1.21    no     0     -    0.0    81.2   False      407   63.4     376
+ 65    324    60 0.73   YES    55 0.875    5.0    10.1   False      621  -27.2     514
+ 66    426   116 1.22    no     0     -    0.0    59.9   False      412   71.1     372
+ 67    387    57 1.30   YES   167 0.750   38.0    11.0   False      647  -75.6     674
+ 68    504   200 0.71    no     0     -    0.0    69.5   False      553  -26.7     513
+ 69    413   180 1.33    no     0     -    0.0    32.7   False      461   59.5     378
+ 70    311   291 0.71   YES   140 0.725   28.0     8.9   False      546  -41.0     560
+ 71    446   105 0.90    no     0     -    0.0    35.1   False      575  -15.2     475
+ 72    317   349 0.79   YES    49 0.800    5.0     9.4   False      425    0.0     424
+ 73    376   192 1.32   YES     5 1.000    5.0    12.6   False      499   65.5     375
+ 74    386   136 0.61   YES    29 0.875    4.0    11.3   False      526  -23.3     501
+ 75    384   146 0.84   YES    20 0.900    3.0    11.7   False      547  -25.8     510
+ 76    387    10 0.65   YES    25 0.950    4.0    11.3   False      549  -34.4     538
+ 77    361    64 1.12   YES    50 0.875   12.0    11.1   False      615  -50.6     592
+ 78    417    65 1.18   YES   229 0.825   27.0    11.8   False      587  -67.6     648
+ 79    425   243 0.89    no     0     -    0.0    24.1   False      477   -8.7     453
+ 80    340   353 0.97   YES    60 0.875   13.0    10.7   False      512   15.8     408
+ 81    348   135 0.77   YES    24 0.900    5.0    11.1   False      447   31.0     396
+ 82    499   211 0.89    no     0     -    0.0   119.3   False      424   34.8     393
+ 83    569   220 0.66    no     0     -    0.0   139.8   False      437  -42.4     565
+ 84    346    90 0.62   YES    78 0.725    8.0    10.4   False      425   -6.1     445
+ 85    317    66 0.96   YES    77 0.875   13.0     9.9   False      630   53.5     382
+ 86    345    38 1.15   YES   260 0.600   20.0     9.4   False      671  -78.0     682
+ 87    527   298 0.79    no     0     -    0.0    19.6   False      625  -80.0     689
+ 88    464    97 1.35    no     0     -    0.0    25.6   False      617  -51.2     593
+ 89    440    39 0.81    no     0     -    0.0    51.9   False      402   27.3     399
+ 90    416    54 0.64   YES     2 1.000    2.0    12.8   False      424    2.3     421
+ 91    452   358 0.67    no     0     -    0.0    55.8   False      519    7.8     415
+ 92    309   177 1.14   YES    57 0.800    8.0    11.0   False      415   15.6     408
+ 93    391    20 1.20   YES    24 0.900    6.0    11.9   False      545    2.3     421
+ 94    311   240 1.05   YES    27 0.875    4.0    10.8   False      448   62.0     377
+ 95    419   317 1.06    no     0     -    0.0    53.3   False      392   73.0     371
+ 96    355    72 1.29   YES    75 0.925   18.0    11.3   False      524   -5.3     442
+ 97    509   174 1.18    no     0     -    0.0   119.0   False      459   42.8     388
+ 98    567    81 0.82    no     0     -    0.0   114.0   False      538   -9.5     456
+ 99    443    38 1.21   YES     4 1.000    3.0    12.7   False      589  -54.6     605
+100    374   221 1.13   YES     5 1.000    3.0    12.5   False      391   59.7     378
+101    375   161 1.09   YES    11 1.000    5.0    12.1   False      400   48.4     385
+102    421   253 1.26   YES   152 0.925   33.0    11.4   False      556  -63.1     633
+103    365   253 0.66   YES    33 0.850    5.0    10.8   False      600  -41.4     561
+104    434   325 0.85    no     0     -    0.0    53.2   False      440   44.8     387
+105    392   184 1.13    no     0     -    0.0    22.4   False      435   57.3     379
+106    433   316 0.85   YES    22 0.950    6.0    12.5   False      572  -46.3     577
+107    388   137 0.73   YES   112 0.550    7.0    10.9   False      507  -63.1     633
+108    323   134 0.87   YES    33 0.925    5.0    10.1   False      477   27.8     398
+109    484   337 0.84    no     0     -    0.0    57.5   False      532   -6.2     445
+110    406    85 0.62   YES    54 1.000   23.0    11.9   False      459  -23.6     502
+111    444   280 1.05   YES     3 1.000    3.0    12.6   False      639  -45.3     574
+112    360   206 1.31   YES   164 0.525    6.0    10.1   False      662  -97.0     745
+113    323    84 0.90   YES    47 0.925    5.0    10.2   False      569   -4.1     438
+114    483   331 0.96   YES    34 0.850    5.0    12.6   False      629  -57.3     614
+115    434    24 0.92   YES    20 1.000   11.0    12.4   False      584  -10.1     458
+116    596   350 1.14   YES    55 1.000   15.0    12.3   False      677  -67.5     647
+117    353    20 1.22   YES    31 0.875    6.0    11.5   False      483    9.3     413
+118    477   283 0.71    no     0     -    0.0    15.1   False      542  -15.6     476
+119    416   254 1.00   YES    39 0.875    9.0    12.1   False      602  -25.8     510
+120    390    55 1.01   YES   220 0.625   28.0    11.5   False      659  -68.0     649
+121    470     2 1.10    no     0     -    0.0    92.7   False      429   30.2     396
+122    332    53 1.15   YES    73 0.875   13.0    10.3   False      538    6.0     417
+123    456   318 1.20    no     0     -    0.0    49.2   False      611   -0.4     426
+124    317   265 1.11   YES    32 0.875    5.0    11.2   False      524   56.1     380
+125    466    71 1.28   YES    28 0.950    3.0    12.2   False      581  -63.6     634
+126    374   273 0.90   YES    29 1.000   11.0    12.0   False      472   -9.6     456
+127    482   214 0.90   YES    41 0.875    4.0    12.3   False      553  -77.5     680
+128    327   201 1.04   YES    48 0.875    7.0     9.8   False      422   35.3     393
+129    325   249 1.23   YES    96 0.725   21.0     9.9   False      574   -6.9     447
+130    350   103 0.95   YES    37 0.850    5.0    10.6   False      594  -24.3     505
+131    339   350 1.11   YES   147 0.400   10.0    10.7   False      673  -61.5     628
+132    423   302 1.13    no     0     -    0.0    42.9   False      464   35.4     393
+133    376   180 1.09   YES    48 0.750    4.0    11.0   False      643  -54.2     603
+134    497   351 0.82    no     0     -    0.0   115.6   False      426   48.2     385
+135    407    70 0.65    no     0     -    0.0    37.2   False      441   41.0     389
+136    575    23 0.65    no     0     -    0.0    57.2   False      581  -30.1     524
+137    398   279 0.81   YES    14 1.000    6.0    12.4   False      566  -18.2     485
+138    502   343 0.72    no     0     -    0.0   100.6   False      467   15.9     408
+139    442   299 0.62    no     0     -    0.0    34.4   False      467    1.4     422
+140    356   302 1.20   YES    65 0.675    4.0    10.2   False      736  -59.7     622
+141    317    56 0.98   YES    59 0.925   10.0    11.2   False      408   66.3     374
+142    470   227 0.88    no     0     -    0.0    59.9   False      432   10.6     412
+143    343   186 1.34   YES    32 0.900    7.0    11.1   False      493   27.3     399
+144    427   101 0.99   YES    10 0.975    4.0    12.5   False      515  -32.8     533
+145    505   162 0.76    no     0     -    0.0   109.7   False      523   18.7     405
+146    320   285 0.81   YES   108 0.650    8.0     8.9   False      561  -25.4     508
+147    575   283 0.69    no     0     -    0.0   119.8   False      602  -39.2     554
+148    473   186 0.80   YES     4 1.000    3.0    12.7   False      562  -41.7     562
+149    410   290 1.26   YES    59 0.750    6.0    11.2   False      645  -77.2     679
+150    311    57 1.05   YES    77 0.825    9.0    10.2   False      461   19.8     404
+151    454   360 0.85    no     0     -    0.0    85.2   False      416   46.4     386
+152    456   114 1.03    no     0     -    0.0    68.0   False      495   50.5     383
+153    331   355 1.14   YES    61 0.800    9.0    10.7   False      562  -19.9     490
+154    347   169 1.24   YES     9 1.000    5.0    12.3   False      461   93.7     361
+155    514   274 0.80    no     0     -    0.0   117.7   False      495   26.1     399
+156    429   343 1.30   YES    14 0.925    3.0    12.0   False      564  -86.1     709
+157    574    20 0.80    no     0     -    0.0   147.9   False      568  -10.9     460
+158    399   193 0.70   YES     3 1.000    3.0    12.5   False      434    9.1     414
+159    443   184 0.99    no     0     -    0.0    61.2   False      443   49.0     384
+160    316   172 1.05   YES   440 0.500   58.0     8.9   False      606  -48.6     585
+161    461   338 0.77    no     0     -    0.0    65.8   False      396   27.7     398
+162    350   349 1.26   YES    37 0.925    5.0    11.2   False      616  -45.8     576
+163    384    22 1.19   YES    33 0.900    4.0    11.4   False      687  -50.7     592
+164    405    55 0.93    no     0     -    0.0    26.9   False      419   53.6     382
+165    331    65 1.04   YES   153 0.775   34.0    10.3   False      578   -9.9     457
+166    434   141 1.19    no     0     -    0.0    60.2   False      396   50.3     383
+167    344   119 0.68   YES    37 0.875    6.0    10.6   False      436   16.0     407
+168    432   205 0.62    no     0     -    0.0    53.1   False      502   39.7     390
+169    402    37 1.02   YES     1 1.000    1.0    12.9   False      499   20.0     404
+170    418    75 1.03   YES    23 0.900    6.0    12.3   False      618  -22.5     499
+171    422    40 0.93    no     0     -    0.0    32.4   False      563   34.3     394
+172    391   359 0.85   YES     4 1.000    4.0    12.7   False      485   40.7     389
+173    360   134 0.84   YES    16 0.950    6.0    11.5   False      471   42.6     388
+174    433   235 1.24   YES   168 0.950   32.0    12.2   False      705  -47.5     581
+175    369   120 0.69   YES   140 0.850   30.0    11.4   False      443   -8.4     452
+176    309   191 0.66   YES    92 0.825   14.0     9.3   False      456   -0.1     425
+177    401   313 0.96    no     0     -    0.0    21.0   False      405   34.7     393
+178    486    95 0.95    no     0     -    0.0   112.8   False      406   52.6     382
+179    318   101 1.24   YES   153 0.700   49.0     9.9   False      607  -28.1     517
+180    486   222 1.31    no     0     -    0.0   131.4   False      383   89.0     363
+181    423    10 1.09    no     0     -    0.0    56.7   False      408   69.1     373
+182    375     8 0.71   YES    72 0.925   17.0    11.6   False      506    9.1     414
+183    343    80 0.72   YES    24 0.900    5.0    11.2   False      463   12.2     411
+184    405    69 1.17   YES    24 0.900    6.0    11.9   False      644  -59.9     622
+185    415   124 1.05    no     0     -    0.0    25.5   False      634   19.6     404
+186    436   321 0.76    no     0     -    0.0    28.3   False      410   39.7     390
+187    333   197 1.11   YES    26 0.900    5.0    11.4   False      445   42.0     389
+188    349     8 0.72   YES    21 1.000    8.0    11.2   False      445   48.1     385
+189    369     9 0.90   YES    20 0.900    4.0    11.2   False      486   19.2     405
+190    407    67 1.31   YES   157 0.625   20.0    11.2   False      655  -79.8     688
+191    381   345 1.33   YES    58 0.975   19.0    11.6   False      571   15.0     408
+192    355    24 0.63   YES    39 0.800    4.0    10.7   False      652  -61.4     627
+193    521   188 0.69   YES     2 0.950    1.0    12.9   False      535  -31.9     530
+194    428   299 1.00    no     0     -    0.0    55.9   False      552   55.5     380
+195    324   269 0.91   YES    59 0.850   15.0    10.9   False      457   27.6     398
+196    476    52 1.06    no     0     -    0.0   116.8   False      388   88.1     363
+197    329   128 0.77   YES    24 1.000    5.0    11.1   False      472   52.6     382
+198    346   219 1.13   YES   145 0.750   27.0    10.0   False      611  -75.1     672
+199    404   124 1.02    no     0     -    0.0    15.8   False      409   48.1     385
+200    406     1 1.17    no     0     -    0.0    42.9   False      546   50.6     383
+
+SOLVABLE 123/201 = 61.2%
+aim tolerance on solvable rounds: min 1.0deg  median 6.0deg  max 58.0deg
+UNSOLVABLE rounds: 2 (dist 417px, closest miss 15.4px, maxReach 604px, hotPass=False), 4 (dist 389px, closest miss 22.7px, maxReach 460px, hotPass=False), 8 (dist 432px, closest miss 56.4px, maxReach 422px, hotPass=False), 11 (dist 499px, closest miss 77.6px, maxReach 511px, hotPass=False), 12 (dist 553px, closest miss 172.1px, maxReach 434px, hotPass=False), 13 (dist 457px, closest miss 78.4px, maxReach 404px, hotPass=False), 14 (dist 580px, closest miss 126.8px, maxReach 537px, hotPass=False), 16 (dist 453px, closest miss 70.6px, maxReach 517px, hotPass=False), 20 (dist 434px, closest miss 28.6px, maxReach 492px, hotPass=False), 24 (dist 479px, closest miss 77.1px, maxReach 592px, hotPass=False), 25 (dist 490px, closest miss 125.3px, maxReach 512px, hotPass=False), 26 (dist 462px, closest miss 54.8px, maxReach 496px, hotPass=False), 27 (dist 459px, closest miss 114.9px, maxReach 375px, hotPass=False), 28 (dist 586px, closest miss 187.1px, maxReach 575px, hotPass=False), 30 (dist 410px, closest miss 46.9px, maxReach 426px, hotPass=False), 31 (dist 531px, closest miss 173.8px, maxReach 540px, hotPass=False), 33 (dist 456px, closest miss 65.4px, maxReach 434px, hotPass=False), 36 (dist 586px, closest miss 164.0px, maxReach 432px, hotPass=False), 37 (dist 508px, closest miss 118.4px, maxReach 414px, hotPass=False), 44 (dist 492px, closest miss 113.2px, maxReach 399px, hotPass=False), 47 (dist 500px, closest miss 117.1px, maxReach 493px, hotPass=False), 49 (dist 421px, closest miss 53.1px, maxReach 470px, hotPass=False), 53 (dist 584px, closest miss 201.3px, maxReach 403px, hotPass=False), 54 (dist 493px, closest miss 89.3px, maxReach 426px, hotPass=False), 55 (dist 424px, closest miss 58.5px, maxReach 370px, hotPass=False), 57 (dist 499px, closest miss 84.5px, maxReach 475px, hotPass=False), 59 (dist 442px, closest miss 14.6px, maxReach 526px, hotPass=False), 61 (dist 437px, closest miss 57.6px, maxReach 419px, hotPass=False), 64 (dist 456px, closest miss 81.2px, maxReach 407px, hotPass=False), 66 (dist 426px, closest miss 59.9px, maxReach 412px, hotPass=False), 68 (dist 504px, closest miss 69.5px, maxReach 553px, hotPass=False), 69 (dist 413px, closest miss 32.7px, maxReach 461px, hotPass=False), 71 (dist 446px, closest miss 35.1px, maxReach 575px, hotPass=False), 79 (dist 425px, closest miss 24.1px, maxReach 477px, hotPass=False), 82 (dist 499px, closest miss 119.3px, maxReach 424px, hotPass=False), 83 (dist 569px, closest miss 139.8px, maxReach 437px, hotPass=False), 87 (dist 527px, closest miss 19.6px, maxReach 625px, hotPass=False), 88 (dist 464px, closest miss 25.6px, maxReach 617px, hotPass=False), 89 (dist 440px, closest miss 51.9px, maxReach 402px, hotPass=False), 91 (dist 452px, closest miss 55.8px, maxReach 519px, hotPass=False), 95 (dist 419px, closest miss 53.3px, maxReach 392px, hotPass=False), 97 (dist 509px, closest miss 119.0px, maxReach 459px, hotPass=False), 98 (dist 567px, closest miss 114.0px, maxReach 538px, hotPass=False), 104 (dist 434px, closest miss 53.2px, maxReach 440px, hotPass=False), 105 (dist 392px, closest miss 22.4px, maxReach 435px, hotPass=False), 109 (dist 484px, closest miss 57.5px, maxReach 532px, hotPass=False), 118 (dist 477px, closest miss 15.1px, maxReach 542px, hotPass=False), 121 (dist 470px, closest miss 92.7px, maxReach 429px, hotPass=False), 123 (dist 456px, closest miss 49.2px, maxReach 611px, hotPass=False), 132 (dist 423px, closest miss 42.9px, maxReach 464px, hotPass=False), 134 (dist 497px, closest miss 115.6px, maxReach 426px, hotPass=False), 135 (dist 407px, closest miss 37.2px, maxReach 441px, hotPass=False), 136 (dist 575px, closest miss 57.2px, maxReach 581px, hotPass=False), 138 (dist 502px, closest miss 100.6px, maxReach 467px, hotPass=False), 139 (dist 442px, closest miss 34.4px, maxReach 467px, hotPass=False), 142 (dist 470px, closest miss 59.9px, maxReach 432px, hotPass=False), 145 (dist 505px, closest miss 109.7px, maxReach 523px, hotPass=False), 147 (dist 575px, closest miss 119.8px, maxReach 602px, hotPass=False), 151 (dist 454px, closest miss 85.2px, maxReach 416px, hotPass=False), 152 (dist 456px, closest miss 68.0px, maxReach 495px, hotPass=False), 155 (dist 514px, closest miss 117.7px, maxReach 495px, hotPass=False), 157 (dist 574px, closest miss 147.9px, maxReach 568px, hotPass=False), 159 (dist 443px, closest miss 61.2px, maxReach 443px, hotPass=False), 161 (dist 461px, closest miss 65.8px, maxReach 396px, hotPass=False), 164 (dist 405px, closest miss 26.9px, maxReach 419px, hotPass=False), 166 (dist 434px, closest miss 60.2px, maxReach 396px, hotPass=False), 168 (dist 432px, closest miss 53.1px, maxReach 502px, hotPass=False), 171 (dist 422px, closest miss 32.4px, maxReach 563px, hotPass=False), 177 (dist 401px, closest miss 21.0px, maxReach 405px, hotPass=False), 178 (dist 486px, closest miss 112.8px, maxReach 406px, hotPass=False), 180 (dist 486px, closest miss 131.4px, maxReach 383px, hotPass=False), 181 (dist 423px, closest miss 56.7px, maxReach 408px, hotPass=False), 185 (dist 415px, closest miss 25.5px, maxReach 634px, hotPass=False), 186 (dist 436px, closest miss 28.3px, maxReach 410px, hotPass=False), 194 (dist 428px, closest miss 55.9px, maxReach 552px, hotPass=False), 196 (dist 476px, closest miss 116.8px, maxReach 388px, hotPass=False), 199 (dist 404px, closest miss 15.8px, maxReach 409px, hotPass=False), 200 (dist 406px, closest miss 42.9px, maxReach 546px, hotPass=False)

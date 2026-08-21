@@ -1,0 +1,79 @@
+round 1 sink-centre  sim=sunk     browser=sunk     AGREE    posErr=   0.0px
+round 1 sink-edge    sim=sunk     browser=sunk     AGREE    posErr=   0.0px
+round 1 miss-edge    sim=timeout  browser=idle     AGREE    posErr=   0.3px
+round 1 miss-far     sim=timeout  browser=idle     AGREE    posErr=   0.0px
+round 2 sink-centre  sim=sunk     browser=sunk     AGREE    posErr=   0.0px
+round 2 sink-edge    sim=sunk     browser=sunk     AGREE    posErr=   0.0px
+round 2 miss-edge    sim=timeout  browser=idle     AGREE    posErr=   0.3px
+round 2 miss-far     sim=stopped  browser=idle     AGREE    posErr=   0.0px
+round 3 sink-centre  sim=sunk     browser=sunk     AGREE    posErr=   0.0px
+round 3 sink-edge    sim=sunk     browser=sunk     AGREE    posErr=   0.0px
+round 3 miss-edge    sim=stopped  browser=idle     AGREE    posErr=   0.0px
+round 3 miss-far     sim=stopped  browser=idle     AGREE    posErr=   0.0px
+round 4 sink-centre  sim=sunk     browser=sunk     AGREE    posErr=   0.0px
+round 4 sink-edge    sim=sunk     browser=sunk     AGREE    posErr=   0.0px
+round 4 miss-edge    sim=stopped  browser=idle     AGREE    posErr=   0.0px
+round 4 miss-far     sim=timeout  browser=idle     AGREE    posErr=   0.2px
+round 5 sink-centre  sim=sunk     browser=sunk     AGREE    posErr=   0.0px
+round 5 sink-edge    sim=sunk     browser=sunk     AGREE    posErr=   0.0px
+round 5 miss-edge    sim=stopped  browser=idle     AGREE    posErr=   0.2px
+round 5 miss-far     sim=stopped  browser=idle     AGREE    posErr=   0.1px
+round 6 sink-centre  sim=sunk     browser=sunk     AGREE    posErr=   0.0px
+round 6 sink-edge    sim=sunk     browser=sunk     AGREE    posErr=   0.0px
+round 6 miss-edge    sim=stopped  browser=idle     AGREE    posErr=   0.0px
+round 6 miss-far     sim=stopped  browser=idle     AGREE    posErr=   0.1px
+round 8 sink-centre  sim=sunk     browser=sunk     AGREE    posErr=   0.0px
+round 8 sink-edge    sim=sunk     browser=sunk     AGREE    posErr=   0.0px
+round 8 miss-edge    sim=timeout  browser=idle     AGREE    posErr=   0.3px
+round 8 miss-far     sim=stopped  browser=idle     AGREE    posErr=   0.0px
+round 9 sink-centre  sim=sunk     browser=sunk     AGREE    posErr=   0.0px
+round 9 sink-edge    sim=sunk     browser=sunk     AGREE    posErr=   0.0px
+round 9 miss-edge    sim=stopped  browser=idle     AGREE    posErr=   0.2px
+round 9 miss-far     sim=stopped  browser=idle     AGREE    posErr=   0.1px
+round 10 sink-centre  sim=sunk     browser=sunk     AGREE    posErr=   0.0px
+round 10 sink-edge    sim=sunk     browser=sunk     AGREE    posErr=   0.0px
+round 10 miss-edge    sim=stopped  browser=idle     AGREE    posErr=   0.2px
+round 10 miss-far     sim=stopped  browser=idle     AGREE    posErr=   0.0px
+round 11 sink-centre  sim=sunk     browser=sunk     AGREE    posErr=   0.0px
+round 11 sink-edge    sim=sunk     browser=sunk     AGREE    posErr=   0.0px
+round 11 miss-edge    sim=stopped  browser=idle     AGREE    posErr=   0.0px
+round 11 miss-far     sim=stopped  browser=idle     AGREE    posErr=   0.0px
+round 13 sink-centre  sim=sunk     browser=sunk     AGREE    posErr=   0.0px
+round 13 sink-edge    sim=sunk     browser=sunk     AGREE    posErr=   0.0px
+round 13 miss-edge    sim=stopped  browser=idle     AGREE    posErr=   0.2px
+round 13 miss-far     sim=timeout  browser=idle     AGREE    posErr=   0.0px
+round 14 sink-centre  sim=sunk     browser=sunk     AGREE    posErr=   0.0px
+round 14 sink-edge    sim=sunk     browser=sunk     AGREE    posErr=   0.0px
+round 14 miss-edge    sim=stopped  browser=idle     AGREE    posErr=   0.0px
+round 14 miss-far     sim=stopped  browser=idle     AGREE    posErr=   0.4px
+round 15 sink-centre  sim=sunk     browser=sunk     AGREE    posErr=   0.0px
+round 15 sink-edge    sim=sunk     browser=sunk     AGREE    posErr=   0.0px
+round 15 miss-edge    sim=timeout  browser=idle     AGREE    posErr=   0.0px
+round 15 miss-far     sim=timeout  browser=idle     AGREE    posErr=   0.2px
+round 16 sink-centre  sim=sunk     browser=sunk     AGREE    posErr=   0.0px
+round 16 sink-edge    sim=sunk     browser=sunk     AGREE    posErr=   0.0px
+round 16 miss-edge    sim=timeout  browser=idle     AGREE    posErr=   0.0px
+round 16 miss-far     sim=stopped  browser=idle     AGREE    posErr=   0.1px
+round 17 sink-centre  sim=sunk     browser=sunk     AGREE    posErr=   0.0px
+round 17 sink-edge    sim=sunk     browser=sunk     AGREE    posErr=   0.0px
+round 17 miss-edge    sim=sunk     browser=sunk     AGREE    posErr=   0.0px
+round 17 miss-far     sim=stopped  browser=idle     AGREE    posErr=   0.0px
+round 18 sink-centre  sim=sunk     browser=sunk     AGREE    posErr=   0.0px
+round 18 sink-edge    sim=sunk     browser=sunk     AGREE    posErr=   0.0px
+round 18 miss-edge    sim=stopped  browser=idle     AGREE    posErr=   0.0px
+round 18 miss-far     sim=stopped  browser=idle     AGREE    posErr=   0.0px
+round 19 sink-centre  sim=sunk     browser=sunk     AGREE    posErr=   0.0px
+round 19 sink-edge    sim=sunk     browser=sunk     AGREE    posErr=   0.0px
+round 19 miss-edge    sim=stopped  browser=idle     AGREE    posErr=   0.0px
+round 19 miss-far     sim=stopped  browser=idle     AGREE    posErr=   0.2px
+round 20 sink-centre  sim=sunk     browser=sunk     AGREE    posErr=   0.0px
+round 20 sink-edge    sim=sunk     browser=sunk     AGREE    posErr=   0.0px
+round 20 miss-edge    sim=stopped  browser=idle     AGREE    posErr=   0.0px
+round 20 miss-far     sim=stopped  browser=idle     AGREE    posErr=   0.1px
+
+AGREEMENT 72/72 = 100.0%  (desyncs: 0)
+  sink-centre  18/18
+  sink-edge    18/18
+  miss-edge    18/18
+  miss-far     18/18
+  resting-position error on agreeing misses: median 0.0px  max 0.4px
