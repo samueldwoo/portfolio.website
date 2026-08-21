@@ -10,8 +10,13 @@
      CSS       owns : .reveal-clip clip-wipe, all :hover states.
      GSAP (here) owns: the brand springy wordmark, the decorative
                       .shape-field line-art layer, hero/glow parallax,
-                      the timeline progress rail, chip staggers, and
-                      every element tagged .gsap-reveal.
+                      the timeline progress rail, chip staggers, every
+                      element tagged .gsap-reveal, and — via SplitText
+                      (section 8) — the masked line-rise on
+                      .section-title / .case-title / .case-tagline /
+                      .subhead / .case-head. Section 8 STRIPS .reveal
+                      and .reveal-clip off those nodes at init so
+                      anime.js and the CSS clip-wipe never see them.
 
    The handoff is explicit: this file adds `html.gsap-on` and script.js
    only skips .gsap-reveal elements when that class is present. If GSAP
@@ -389,6 +394,203 @@
         });
     } else if (prose.length) {
         finish(prose);
+    }
+
+    /* ============================================================
+       8. Masked line-rise on the display type  (SplitText)
+       .section-title / .case-title / .subhead / .case-tagline rise
+       line-by-line out of an overflow-clipped mask. Line-rise rather
+       than a per-character cascade on purpose: at 90px, characters
+       read as confetti, whereas whole lines climbing out of the
+       measure reads like a masthead settling. No opacity is tweened —
+       the mask does all the work, so a line can never be left
+       stranded at opacity 0.
+
+       OWNERSHIP. Every .section-title and .subhead in the markup ships
+       with `.reveal .reveal-clip`, and .case-title/.case-tagline live
+       inside a `.case-head.reveal`. Two systems on one node is the bug
+       we are avoiding, so this block STRIPS the conflicting classes at
+       init — synchronously, before script.js runs and queries
+       `.reveal`. anime.js therefore never sees these nodes and the CSS
+       clip-wipe never arms. Stripping (rather than excluding) is the
+       safe direction: losing `.reveal` means losing `opacity: 0`, so a
+       claimed element's resting state is *visible*. The classes are
+       only stripped once we know SplitText is actually here, so a 404
+       on the plugin leaves the markup untouched and anime.js reveals
+       everything exactly as before.
+
+       The split is created at trigger time and REVERTED on complete,
+       so: no wrappers exist before the reveal, none after it, the
+       original innerHTML (and `text-wrap: balance`) comes back, and
+       text selection is only unusual for the ~1s the line is moving.
+       SplitText's default `aria: "auto"` puts an aria-label on the
+       element and aria-hidden on the wrappers for that window, so the
+       accessible name never fragments; revert() restores both.
+       ============================================================ */
+    var SplitText = window.SplitText;
+    if (hasST && SplitText) {
+        gsap.registerPlugin(SplitText);
+
+        // yPercent overshoot must clear the mask's overflow-clip-margin
+        // (see .sr-line-mask in styles.css) or the line peeks below the
+        // clip edge in its from-state. The tightest case is
+        // .section-title at line-height 1.0: 135% of a 1em line box vs a
+        // clip edge 0.18em past it, so ~0.17em of headroom.
+        var RISE = 135;
+
+        var recipes = [
+            { sel: ".section-title", dur: 1.00, stag: 0.12, ease: "power3.out", start: "top 86%", delay: 0 },
+            { sel: ".case-title",    dur: 0.90, stag: 0.10, ease: "power3.out", start: "top 88%", delay: 0 },
+            { sel: ".subhead",       dur: 0.75, stag: 0.08, ease: "power3.out", start: "top 90%", delay: 0 },
+            { sel: ".case-tagline",  dur: 0.70, stag: 0.06, ease: "power2.out", start: "top 90%", delay: 0.12 }
+        ];
+
+        var claims = [];
+        recipes.forEach(function (r) {
+            toArray(r.sel).forEach(function (el) {
+                if (el.__srClaimed) return;          // one owner per node
+                el.__srClaimed = true;
+                el.classList.remove("reveal", "reveal-clip", "is-visible");
+                claims.push({ el: el, r: r });
+            });
+        });
+
+        /* The case-study head is a single .reveal wrapping the index,
+           the title and the tagline. Now that we own two of its three
+           children, hand the whole block over: anime.js fading the
+           parent to opacity 0 would swallow our line rise, and its
+           translateY would drag the lines mid-tween. */
+        claims.forEach(function (c) {
+            var head = c.el.closest(".case-head");
+            if (!head || head.__srHead) return;
+            head.__srHead = true;
+            head.classList.remove("reveal", "reveal-clip", "is-visible");
+        });
+
+        /* Hold the claimed headings at opacity 0 until their split is
+           built. Without this, stripping `.reveal` leaves them painted
+           in plain text from first paint, and the reveal then reads as a
+           flash followed by the lines dropping to their from-state and
+           climbing back — worse than no animation.
+
+           This is the one dangerous moment in the file: these nodes are
+           now invisible and only JS can bring them back. Three
+           independent belts guarantee it, in order of preference:
+             1. play() clears opacity on the way in — including its
+                catch path, so a SplitText throw still reveals.
+             2. `once`/`arm()` is capped by a timer, so a font request
+                that never settles cannot prevent arming.
+             3. reveal() below force-clears anything still hidden after
+                4s regardless of scroll position or trigger state.
+           Belt 3 is what makes stranding impossible: worst case the
+           text appears with no animation, which is the correct failure
+           direction. */
+        var hidden = [];
+        claims.forEach(function (c) {
+            hidden.push(c.el);
+            var head = c.el.closest(".case-head");
+            var idx = head && c.el.classList.contains("case-title")
+                ? head.querySelector(".case-index")
+                : null;
+            if (idx) { c.idx = idx; hidden.push(idx); }
+        });
+        gsap.set(hidden, { opacity: 0 });
+
+        function reveal(el) {
+            gsap.set(el, { clearProps: "opacity" });
+            var i = hidden.indexOf(el);
+            if (i > -1) hidden.splice(i, 1);
+        }
+
+        function play(claim) {
+            var el = claim.el, r = claim.r;
+            var split;
+            try {
+                split = new SplitText(el, {
+                    type: "lines",
+                    mask: "lines",         // wraps each line in an overflow-clipped div
+                    // SINGLE TOKEN, no hyphen, on purpose. SplitText derives
+                    // the mask's class by suffixing every \b\w+\b of this
+                    // string with "-mask", so a hyphenated "sr-line" would
+                    // yield "sr-mask-line-mask" — which silently matched no
+                    // CSS rule and left the clip margin at 0, shaving the
+                    // descenders off every line mid-tween. "srline" yields
+                    // exactly "srline-mask".
+                    linesClass: "srline",
+                    tag: "div"
+                });
+            } catch (err) {
+                reveal(el);                 // belt 1: never leave it hidden
+                if (claim.idx) reveal(claim.idx);
+                return;
+            }
+
+            var lines = split.lines;
+            if (!lines.length) {
+                split.revert();
+                reveal(el);
+                if (claim.idx) reveal(claim.idx);
+                return;
+            }
+
+            // Lines start below the mask, so the element itself is safe
+            // to show the instant the wrappers exist.
+            reveal(el);
+
+            var tl = gsap.timeline({
+                onComplete: function () {
+                    // Put the DOM back the way we found it. clearProps
+                    // first so no inline transform survives the revert.
+                    gsap.set(lines, { clearProps: "all" });
+                    split.revert();
+                }
+            });
+            tl.from(lines, {
+                yPercent: RISE,
+                duration: r.dur,
+                ease: r.ease,
+                stagger: r.stag
+            }, r.delay);
+
+            // The case index rides along with its title.
+            if (claim.idx) {
+                reveal(claim.idx);
+                tl.from(claim.idx, {
+                    opacity: 0, y: 14, duration: 0.6, ease: "power2.out",
+                    onComplete: function () { gsap.set(claim.idx, { clearProps: "all" }); }
+                }, 0);
+            }
+        }
+
+        function arm() {
+            claims.forEach(function (claim) {
+                ScrollTrigger.create({
+                    trigger: claim.el,
+                    start: claim.r.start,
+                    once: true,
+                    onEnter: function () { play(claim); }
+                });
+            });
+            ScrollTrigger.refresh();
+        }
+
+        /* Line breaks must be measured against the real webfont. Split
+           before Space Grotesk swaps in and the masks are cut to the
+           fallback's metrics. Wait for fonts, but never longer than
+           1.2s — a stalled font request must not mean no reveal. */
+        var armed = false;
+        var once = function () { if (!armed) { armed = true; arm(); } };
+        if (document.fonts && document.fonts.ready) {
+            document.fonts.ready.then(once);
+            setTimeout(once, 1200);
+        } else {
+            once();
+        }
+
+        // Belt 3 — the unconditional safety net described above.
+        setTimeout(function () {
+            hidden.slice().forEach(reveal);
+        }, 4000);
     }
 
     /* Late webfont/image loads shift layout; recalc so triggers that

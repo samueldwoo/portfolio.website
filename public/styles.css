@@ -1813,6 +1813,29 @@ html.gsap-on .gsap-busy { transition: none !important; }
 html.js-anim .reveal:not(.is-visible) { opacity: 0; }
 
 /* ============================================================
+   SplitText line masks  (gsap-motion.js, section 8)
+   These classes only exist while a heading is mid-reveal —
+   SplitText builds the wrappers at trigger time and revert()
+   deletes them on complete, so nothing here is ever the resting
+   state of any content. SplitText sets `overflow: clip` inline on
+   each .srline-mask; the rules below only tune that clip.
+   ============================================================ */
+.srline { will-change: transform; }
+/* `.section-title` sets line-height 1.0, so the line box is exactly
+   1em and Space Grotesk's descenders fall outside it — a bare
+   `overflow: clip` would shave the tail off every g, y and p for the
+   duration of the tween. The clip margin gives those descenders room.
+   It applies to all four edges, which is fine: the from-state sits
+   135% down, far past a .2em edge, so no line peeks out early. */
+.srline-mask {
+    overflow-clip-margin: 0.2em;
+    /* Masks must not become flex/grid items or add spacing of their
+       own — they stand in for a line box and nothing more. */
+    margin: 0;
+    padding: 0;
+}
+
+/* ============================================================
    Responsive
    ============================================================ */
 @media (max-width: 1080px) {
@@ -1971,6 +1994,19 @@ html.js-anim .reveal:not(.is-visible) { opacity: 0; }
         transform: none !important;   /* rails sit filled, as design elements */
     }
     .gsap-reveal { opacity: 1 !important; transform: none !important; }
+
+    /* Split line masks: gsap-motion.js bails out before SplitText is
+       ever constructed under reduced motion, so these wrappers do not
+       exist here at all. This is the belt-and-braces guarantee that IF
+       one ever did (a split racing a mid-session preference change),
+       the line reads as finished text rather than a stranded
+       from-state: no clip to hide it, no transform to hold it off
+       screen. Never `overflow: clip` or hide these. */
+    .srline, .srline-mask {
+        opacity: 1 !important;
+        transform: none !important;
+        overflow: visible !important;
+    }
     .bubble-list > *, .skills-list > *, .feature-chips > * {
         opacity: 1 !important; transform: none !important;
     }
