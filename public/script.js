@@ -1,9 +1,15 @@
 /* ============================================================
    Samuel Woo — portfolio interactions (light sage, top-bar nav)
    Vanilla JS + one local dependency (anime.min.js).
-   - Scroll-spy top-bar links (IntersectionObserver)
-   - Mobile hamburger menu (aria-expanded, esc to close)
-   - Scroll-progress line under the top bar
+   - Section model harvested from the page's own `.band` elements,
+     shared by the scroll-spy, the rail, the drawer and the palette
+   - Scroll-spy top-bar links + a travelling FILLED active marker
+   - Right-edge section rail (>=1024px) with progress spine
+   - Command palette on Cmd/Ctrl-K (and `/`)
+   - Mobile drawer: native <dialog>, so focus trap + Escape are the
+     platform's, not ours
+   - Scroll-direction-aware chrome: the bar condenses, never hides
+   - Segmented scroll-progress on the bar's edge
    - anime.js staggered reveals on scroll (falls back to CSS)
    - Hero name entrance + signature line-draw motif
    - Ambient drifting background shapes (pause when tab hidden)
@@ -34,22 +40,106 @@
     var yearEl = document.getElementById("year");
     if (yearEl) yearEl.textContent = String(new Date().getFullYear());
 
-    /* ---------- URL hash helpers ----------
-       Declared up here because the scroll-spy below uses them and `var`
-       initialisation does not hoist (only the `function` declaration does). */
-    var lastSpyId = null;
-    /* The spy must not touch the URL until the reader has actually scrolled.
+    /* ============================================================
+       NAVIGATION
+       ------------------------------------------------------------
+       One section model, four affordances. Everything below reads
+       from `sections`, which is harvested from the page's own
+       `.band` elements — so a page that gains a section gains a
+       scroll-spy entry, a rail tick, a drawer row, a progress tick
+       and a palette result with no edit anywhere else.
+
+       Ordering note: the id backfill has to happen HERE, above the
+       cross-page anchor-landing block further down, because that
+       block does `document.querySelector(location.hash)` at parse
+       time and would miss a section whose id we had not written yet.
+
+       Why native <dialog> for the drawer and the palette: showModal()
+       is what gives us a real focus trap, Escape-to-close, top-layer
+       stacking above the fixed bar, and focus restoration on close.
+       Hand-rolling those four is where DIY modals go wrong.
+       ============================================================ */
+    var root = document.documentElement;
+    function slice(nl) { return Array.prototype.slice.call(nl); }
+    function clamp01(n) { return n < 0 ? 0 : n > 1 ? 1 : n; }
+
+    var navTrack   = document.getElementById("nav-links");
+    var marker     = document.getElementById("nav-marker");
+    var navToggle  = document.getElementById("nav-toggle");
+    var navCmd     = document.getElementById("nav-cmd");
+    var railEl     = document.getElementById("section-rail");
+    var drawer     = document.getElementById("nav-drawer");
+    var palette    = document.getElementById("cmdk");
+    var progressEl = document.getElementById("scroll-progress");
+    var barProgress = progressEl ? progressEl.parentNode : null;
+
+    var navLinks = navTrack ? slice(navTrack.querySelectorAll(".nav-link, .nav-cta")) : [];
+    var canDialog = typeof window.HTMLDialogElement === "function" &&
+        !!(drawer && typeof drawer.showModal === "function");
+
+    /* ---------- 1. Section model ----------
+       Label priority: the nav link that already points at this section (so
+       the rail says "Work", not "Work — 2021 → now"), then the heading named
+       by aria-labelledby, then aria-label, then the first heading inside.
+       Sub-page bands carry no id, so we mint a slug from the label; those
+       slugs are deterministic, which makes case studies deep-linkable. */
+    function textOf(el) {
+        return el ? String(el.textContent || "").replace(/\s+/g, " ").trim() : "";
+    }
+    function labelFor(sec) {
+        if (sec.id === "home") return "Home";
+        for (var i = 0; i < navLinks.length; i++) {
+            if (sec.id && navLinks[i].getAttribute("data-nav") === sec.id) {
+                return textOf(navLinks[i]);
+            }
+        }
+        var t = textOf(document.getElementById(sec.getAttribute("aria-labelledby") || ""));
+        if (!t) t = String(sec.getAttribute("aria-label") || "").trim();
+        if (!t) t = textOf(sec.querySelector("h1, h2"));
+        /* "Ka-ching — Personal Finance Dashboard" is a title, not a label.
+           Keep the part before the em dash; it is what people would type. */
+        var head = t.split(/\s+[—–-]{1,2}\s+/)[0];
+        if (head && head.length >= 3) t = head;
+        return t || "Section";
+    }
+    function slugify(s) {
+        return String(s).toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-+|-+$/g, "")
+            .slice(0, 32) || "section";
+    }
+
+    var sections = slice(document.querySelectorAll(".band")).map(function (el, i) {
+        var label = labelFor(el);
+        if (!el.id) {
+            var base = slugify(label), id = base, n = 2;
+            while (document.getElementById(id)) { id = base + "-" + (n++); }
+            el.id = id;
+        }
+        return {
+            el: el,
+            id: el.id,
+            label: label,
+            short: label.length > 22 ? label.slice(0, 21).replace(/\s+$/, "") + "…" : label,
+            index: i
+        };
+    });
+    var sectionIds = sections.map(function (s) { return s.id; });
+
+    /* ---------- 2. URL hash ----------
+       We preventDefault() in-page clicks to run our own scroll, which also
+       cancels the browser's URL update — so the hash has to be written by
+       hand or it goes stale (sitting on #work, clicking Interests left #work
+       in the URL, and a refresh then pulled the reader back to Work).
+
+       The spy must not touch the URL until the reader has actually scrolled.
        Its first run happens at load while scrollY is still 0, so it concluded
        "home" and cleared an incoming #work — destroying the anchor target
        before the cross-page landing code could use it (measured: hash gone at
        t=0.2s, page never scrolled). */
+    var lastSpyId = null;
     var spyMayWriteHash = false;
-
-    /* Write the hash without a history entry or a re-jump. We preventDefault()
-       on in-page links to run our own smooth scroll, which also suppresses the
-       browser's own URL update — so we have to do it ourselves or the hash goes
-       stale (sitting on #work, clicking Interests left #work in the URL, and a
-       refresh then pulled the reader back to Work). */
+    /* Write the hash without a history entry or a re-jump. */
     function setHash(hash) {
         if (!window.history || !window.history.replaceState) return;
         var base = window.location.pathname + window.location.search;
@@ -59,160 +149,722 @@
     }
 
     /* The hero is the page's default state, so it clears the hash entirely
-       rather than showing #home. Only sections that have a nav link are
-       written, so scrolling through an unlinked band does not invent a hash. */
+       rather than showing #home. Every other band has an id now (authored or
+       minted above), and those ids are stable, so a case study is linkable. */
     function syncHashToSection(id) {
         if (!id || id === "home") { setHash(""); return; }
-        var linked = navLinks.some(function (l) { return l.getAttribute("data-nav") === id; });
-        if (linked) setHash("#" + id);
+        if (sectionIds.indexOf(id) < 0) return;
+        setHash("#" + id);
     }
 
-    /* ---------- Scroll-spy: highlight active top-bar link ---------- */
-    var navLinks = Array.prototype.slice.call(document.querySelectorAll(".nav-link, .nav-cta"));
-    var sections = Array.prototype.slice.call(document.querySelectorAll(".band"));
+    /* ---------- 3. One scroll to a section, used by every affordance ---------- */
+    function goToSection(id) {
+        var target = document.getElementById(id);
+        if (!target) return;
+        target.scrollIntoView({
+            behavior: reduceMotion ? "auto" : "smooth",
+            block: "start"
+        });
+        /* Move focus with the viewport or a keyboard reader is left behind at
+           the top of the document. -1 keeps the band out of the tab order. */
+        target.setAttribute("tabindex", "-1");
+        target.focus({ preventScroll: true });
+        if (id === "home") setHash(""); else setHash("#" + id);
+    }
+
+    /* ---------- 4. Active state ----------
+       ONE filled marker on screen at a time. Priority: the nav link that
+       points at the current section; failing that, the link for the page you
+       are on (`data-nav-page`). That fallback is why projects.html no longer
+       drops its own highlight the moment you scroll past its first band.
+       `aria-current="page"` is authored in the markup for the page link and is
+       never touched here; section links get aria-current="true". */
+    var railTicks = [];
+    var drawerSecRows = [];
 
     function setActive(id) {
+        var claimed = navLinks.some(function (l) { return l.getAttribute("data-nav") === id; });
         navLinks.forEach(function (link) {
-            var isActive = link.getAttribute("data-nav") === id;
-            link.classList.toggle("is-active", isActive);
-            if (isActive) {
-                link.setAttribute("aria-current", "true");
-            } else {
-                link.removeAttribute("aria-current");
-            }
+            var isSection = link.getAttribute("data-nav") === id;
+            var isPageLink = link.hasAttribute("data-nav-page");
+            link.classList.toggle("is-active", isSection || (isPageLink && !claimed));
+            if (isPageLink) return;                 // keeps aria-current="page"
+            if (isSection) link.setAttribute("aria-current", "true");
+            else link.removeAttribute("aria-current");
         });
-    }
-
-    if (sections.length) {
-        // Scroll-spy by PROXIMITY, not intersection ratio: a tall section yields a
-        // smaller self-relative ratio than a short one at the same scroll position,
-        // which mislabeled adjacent sections. Instead, pick the section whose top
-        // edge is closest to a reading line just below the sticky top bar.
-        var updateSpy = function () {
-            var line = (parseFloat(getComputedStyle(document.documentElement)
-                .getPropertyValue("--topbar-h")) || 68) + 24;
-            var best = sections[0].id, bestDist = Infinity;
-            sections.forEach(function (sec) {
-                var top = sec.getBoundingClientRect().top;
-                // prefer the last section whose top has passed the reading line
-                var dist = top <= line ? line - top : (top - line) * 4; // penalize sections still below
-                if (dist < bestDist) { bestDist = dist; best = sec.id; }
+        [railTicks, drawerSecRows].forEach(function (group) {
+            group.forEach(function (el) {
+                var on = el.getAttribute("data-sec") === id;
+                el.classList.toggle("is-active", on);
+                if (on) el.setAttribute("aria-current", "true");
+                else el.removeAttribute("aria-current");
             });
-            // bottom-of-page guard: if scrolled to the very bottom, force last section
-            if (window.innerHeight + window.scrollY >= document.body.scrollHeight - 2) {
-                best = sections[sections.length - 1].id;
-            }
-            setActive(best);
-            /* Keep the URL honest while the reader scrolls by hand, so a
-               refresh or a copied link reflects where they actually are
-               instead of whatever hash they originally arrived with. Only
-               write on an actual change — replaceState every frame would be
-               wasteful. The hero is the default state, so it clears the hash. */
-            if (best !== lastSpyId) {
-                lastSpyId = best;
-                if (spyMayWriteHash) syncHashToSection(best);
-            }
-        };
-        var spyScheduled = false;
-        var onScrollSpy = function () {
-            if (spyScheduled) return;
-            spyScheduled = true;
-            requestAnimationFrame(function () { spyScheduled = false; updateSpy(); });
-        };
-        window.addEventListener("scroll", onScrollSpy, { passive: true });
-        window.addEventListener("resize", onScrollSpy, { passive: true });
-        updateSpy();
-
-        /* Arm hash-writing only once the reader drives the page themselves.
-           Real user input (wheel / touch / keyboard) is the signal — a
-           programmatic scroll from the anchor-landing code must not count. */
-        var armSpyHash = function () {
-            spyMayWriteHash = true;
-            window.removeEventListener("wheel", armSpyHash);
-            window.removeEventListener("touchstart", armSpyHash);
-            window.removeEventListener("keydown", armSpyHash);
-        };
-        window.addEventListener("wheel", armSpyHash, { passive: true });
-        window.addEventListener("touchstart", armSpyHash, { passive: true });
-        window.addEventListener("keydown", armSpyHash);
+        });
+        placeMarker(false);
     }
 
-    /* ---------- Mobile hamburger menu ---------- */
-    var navToggle = document.getElementById("nav-toggle");
-    var navMenu = document.getElementById("nav-links");
-    function closeMenu() {
-        if (!navToggle || !navMenu) return;
-        navMenu.classList.remove("is-open");
-        document.body.classList.remove("nav-open");
-        navToggle.setAttribute("aria-expanded", "false");
-        navToggle.setAttribute("aria-label", "Open menu");
+    /* ---------- 5. The travelling filled marker ----------
+       script.js owns `transform` and `width` on `.nav-marker` and nothing
+       else writes them — the one-owner-per-property rule this repo has been
+       bitten by three times. anime.js drives it when it is allowed to
+       animate (it loads before this file, unlike Motion); otherwise the CSS
+       transition in nav.css does, and under reduced motion neither does. */
+    var markerAnimated = animate && !!marker;
+    if (markerAnimated) root.classList.add("nav-marker-js");
+
+    var markerTween = null;
+    function placeMarker(instant) {
+        if (!marker || !navTrack) return;
+        // The track is display:none at mobile widths; nothing to point at.
+        if (!navTrack.offsetWidth) { marker.classList.remove("is-shown"); return; }
+        var active = navTrack.querySelector(".nav-link.is-active, .nav-cta.is-active");
+        if (!active) { marker.classList.remove("is-shown"); return; }
+
+        var host = navTrack.getBoundingClientRect();
+        var r = active.getBoundingClientRect();
+        /* An absolutely positioned child resolves `left: 0` against its
+           containing block's PADDING box, so the 1px track border has to come
+           out of the offset or the pill sits a pixel right of its link. */
+        var border = parseFloat(getComputedStyle(navTrack).borderLeftWidth) || 0;
+        var x = r.left - host.left - border;
+        var w = r.width;
+        var first = !marker.classList.contains("is-shown");
+        marker.classList.add("is-shown");
+
+        if (markerTween) { markerTween.pause(); markerTween = null; }
+        if (instant || first || !markerAnimated) {
+            // No slide in from a meaningless origin on first appearance.
+            marker.style.transform = "translateX(" + x + "px)";
+            marker.style.width = w + "px";
+            return;
+        }
+        markerTween = window.anime({
+            targets: marker,
+            translateX: x,
+            width: w,
+            duration: 620,
+            easing: "spring(1, 92, 13, 0)"
+        });
     }
-    function openMenu() {
-        if (!navToggle || !navMenu) return;
-        navMenu.classList.add("is-open");
-        document.body.classList.add("nav-open");
-        navToggle.setAttribute("aria-expanded", "true");
-        navToggle.setAttribute("aria-label", "Close menu");
+
+    /* ---------- 6. Scroll-spy ----------
+       By PROXIMITY, not intersection ratio: a tall section yields a smaller
+       self-relative ratio than a short one at the same scroll position, which
+       mislabeled adjacent sections. Pick the section whose top edge is
+       closest to a reading line just under the bar. */
+    function readingLine() {
+        return (parseFloat(getComputedStyle(root).getPropertyValue("--topbar-h")) || 68) + 24;
     }
-    if (navToggle && navMenu) {
+    function currentSectionId() {
+        if (!sections.length) return null;
+        var line = readingLine();
+        var best = sections[0].id, bestDist = Infinity;
+        sections.forEach(function (s) {
+            var top = s.el.getBoundingClientRect().top;
+            // prefer the last section whose top has passed the reading line
+            var dist = top <= line ? line - top : (top - line) * 4;
+            if (dist < bestDist) { bestDist = dist; best = s.id; }
+        });
+        // bottom-of-page guard: at the very bottom, force the last section
+        if (window.innerHeight + window.scrollY >= document.body.scrollHeight - 2) {
+            best = sections[sections.length - 1].id;
+        }
+        return best;
+    }
+
+    /* ---------- 7. Progress: bar fill + rail spine ----------
+       Deliberately NOT gated on reduced motion. This is a position readout,
+       not decoration; a reader who suppresses animation still wants to know
+       how far down the page they are. There is no transition on either, so
+       it simply tracks the scrollbar. */
+    function updateProgress() {
+        var max = root.scrollHeight - root.clientHeight;
+        var pct = max > 0 ? clamp01((root.scrollTop || window.pageYOffset) / max) : 0;
+        if (progressEl) progressEl.style.width = (pct * 100) + "%";
+        root.style.setProperty("--rail-progress", pct.toFixed(4));
+    }
+
+    /* Section-boundary ticks on the bar's progress edge — the narrow-viewport
+       stand-in for the rail. Positions are scroll fractions, so they have to
+       be recomputed whenever the document height changes. */
+    var barTicks = [];
+    function buildBarTicks() {
+        if (!barProgress) return;
+        barTicks.forEach(function (t) { t.remove(); });
+        barTicks = [];
+        var max = root.scrollHeight - root.clientHeight;
+        if (max <= 0 || sections.length < 2) return;
+        var line = readingLine();
+        var y = root.scrollTop || window.pageYOffset;
+        sections.forEach(function (s, i) {
+            if (!i) return;
+            var at = clamp01((s.el.getBoundingClientRect().top + y - line) / max);
+            if (at <= 0.005 || at >= 0.995) return;
+            var tick = document.createElement("span");
+            tick.className = "bar-tick";
+            tick.style.left = (at * 100) + "%";
+            barProgress.appendChild(tick);
+            barTicks.push(tick);
+        });
+    }
+
+    /* ---------- 8. Section rail (>=1024px) ----------
+       Built from the model, not hand-written, so it cannot drift out of sync
+       with the page. Labels are aria-hidden decoration; the tick's accessible
+       name is its aria-label, which is why parking an inactive label at
+       opacity 0 hides nothing. */
+    function buildRail() {
+        if (!railEl || sections.length < 2) return;
+        var spine = document.createElement("span");
+        spine.className = "rail-spine";
+        spine.setAttribute("aria-hidden", "true");
+        var fill = document.createElement("span");
+        fill.className = "rail-spine-fill";
+        spine.appendChild(fill);
+
+        var list = document.createElement("ol");
+        list.className = "rail-list";
+        sections.forEach(function (s, i) {
+            var li = document.createElement("li");
+            var a = document.createElement("a");
+            a.className = "rail-tick";
+            a.href = "#" + s.id;
+            a.setAttribute("data-sec", s.id);
+            a.setAttribute("aria-label", (i + 1) + " of " + sections.length + ": " + s.label);
+            var lab = document.createElement("span");
+            lab.className = "rail-label";
+            lab.setAttribute("aria-hidden", "true");
+            lab.textContent = s.short;
+            var dot = document.createElement("span");
+            dot.className = "rail-dot";
+            dot.setAttribute("aria-hidden", "true");
+            a.appendChild(lab);
+            a.appendChild(dot);
+            a.addEventListener("click", function (e) { e.preventDefault(); goToSection(s.id); });
+            li.appendChild(a);
+            list.appendChild(li);
+            railTicks.push(a);
+        });
+        railEl.appendChild(spine);
+        railEl.appendChild(list);
+    }
+
+    /* ---------- 9. Drawer section rows ---------- */
+    function buildDrawerSections() {
+        var host = document.getElementById("drawer-sections");
+        var group = document.getElementById("drawer-sections-group");
+        if (!host || !group || sections.length < 2) return;
+        sections.forEach(function (s, i) {
+            var a = document.createElement("a");
+            a.className = "drawer-link drawer-stagger";
+            a.href = "#" + s.id;
+            a.setAttribute("data-sec", s.id);
+            var num = document.createElement("span");
+            num.className = "drawer-num";
+            num.setAttribute("aria-hidden", "true");
+            num.textContent = (i < 9 ? "0" : "") + (i + 1);
+            a.appendChild(num);
+            a.appendChild(document.createTextNode(s.label));
+            host.appendChild(a);
+            drawerSecRows.push(a);
+        });
+        group.hidden = false;
+    }
+
+    /* ---------- 10. Scroll lock ----------
+       showModal() blocks interaction but not scrolling. Locking `html` is the
+       only reliable stop; the scrollbar it removes is paid back as padding so
+       nothing reflows, and the fixed bar is compensated separately because its
+       containing block is the viewport, not <html>. */
+    function anyOverlayOpen() {
+        return !!((drawer && drawer.open) || (palette && palette.open));
+    }
+    function lockScroll() {
+        var sb = window.innerWidth - root.clientWidth;
+        root.style.setProperty("--nav-sb", (sb > 0 ? sb : 0) + "px");
+        root.classList.add("nav-locked");
+    }
+    function unlockScroll() {
+        if (anyOverlayOpen()) return;
+        root.classList.remove("nav-locked");
+        root.style.setProperty("--nav-sb", "0px");
+    }
+
+    /* showModal() already prevents focus reaching the page behind a dialog,
+       but Chrome's own wrap point routes through <body> for one keypress —
+       measured on both dialogs — which reads as "the focus ring vanished".
+       Wrapping the ends ourselves keeps the ring inside the panel. */
+    var FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]),' +
+        'select, textarea, [tabindex]:not([tabindex="-1"])';
+    function trapTab(dialogEl) {
+        dialogEl.addEventListener("keydown", function (e) {
+            if (e.key !== "Tab") return;
+            var f = slice(dialogEl.querySelectorAll(FOCUSABLE)).filter(function (el) {
+                return el.offsetWidth || el.offsetHeight;
+            });
+            if (!f.length) return;
+            var here = document.activeElement;
+            if (e.shiftKey) {
+                if (here === f[0] || !dialogEl.contains(here)) {
+                    e.preventDefault();
+                    f[f.length - 1].focus();
+                }
+            } else if (here === f[f.length - 1]) {
+                e.preventDefault();
+                f[0].focus();
+            }
+        });
+    }
+
+    /* ---------- 11. Mobile drawer ---------- */
+    var drawerClosing = false;
+    function openDrawer() {
+        if (!canDialog || !drawer || drawer.open) return;
+        lockScroll();
+        drawer.classList.remove("is-closing");
+        drawerClosing = false;
+        drawer.showModal();
+        if (navToggle) {
+            navToggle.setAttribute("aria-expanded", "true");
+            navToggle.setAttribute("aria-label", "Close menu");
+        }
+    }
+    function finishDrawerClose() {
+        drawerClosing = false;
+        drawer.classList.remove("is-closing");
+        if (drawer.open) drawer.close();
+    }
+    function closeDrawer(immediate) {
+        if (!drawer || !drawer.open) return;
+        if (immediate || reduceMotion) { finishDrawerClose(); return; }
+        if (drawerClosing) return;
+        drawerClosing = true;
+        drawer.classList.add("is-closing");
+        // Timer, not animationend: under reduced motion there is no animation
+        // to end, and a drawer that cannot close is worse than one that
+        // closes without a flourish.
+        setTimeout(finishDrawerClose, 210);
+    }
+    if (canDialog && drawer && navToggle) {
+        trapTab(drawer);
         navToggle.addEventListener("click", function () {
-            if (navMenu.classList.contains("is-open")) closeMenu(); else openMenu();
+            if (drawer.open) closeDrawer(); else openDrawer();
         });
-        navMenu.addEventListener("click", function (e) {
-            if (e.target.closest("a")) closeMenu();
+        // Escape: intercept `cancel` so it exits with the same animation as
+        // every other close path, then let our own close run.
+        drawer.addEventListener("cancel", function (e) { e.preventDefault(); closeDrawer(); });
+        drawer.addEventListener("close", function () {
+            if (navToggle) {
+                navToggle.setAttribute("aria-expanded", "false");
+                navToggle.setAttribute("aria-label", "Open menu");
+            }
+            drawer.classList.remove("is-closing");
+            unlockScroll();
+            // The platform restores focus to the opener, but only if focus was
+            // still inside the dialog when it closed.
+            if (document.activeElement === document.body && navToggle) navToggle.focus();
         });
-        document.addEventListener("keydown", function (e) {
-            if (e.key === "Escape" && navMenu.classList.contains("is-open")) {
-                closeMenu();
-                navToggle.focus();
+        // Clicks that land on the backdrop are dispatched at the dialog itself.
+        drawer.addEventListener("click", function (e) {
+            if (e.target === drawer) closeDrawer();
+        });
+        var drawerClose = document.getElementById("drawer-close");
+        if (drawerClose) drawerClose.addEventListener("click", function () { closeDrawer(); });
+
+        /* In-drawer links: the page is scroll-locked while the drawer is open,
+           so a same-page jump has to close first or the scroll is swallowed. */
+        drawer.addEventListener("click", function (e) {
+            var a = e.target.closest && e.target.closest("a[href]");
+            if (!a || !drawer.contains(a)) return;
+            var href = a.getAttribute("href") || "";
+            if (href.charAt(0) !== "#" || href.length < 2) return;   // cross-page: just go
+            var id = href.slice(1);
+            if (!document.getElementById(id)) return;
+            e.preventDefault();
+            closeDrawer(true);
+            goToSection(id);
+        });
+        var drawerSearch = document.getElementById("drawer-search");
+        if (drawerSearch) {
+            drawerSearch.addEventListener("click", function () {
+                closeDrawer(true);
+                openPalette();
+            });
+        }
+        // Back at desktop width the drawer is redundant and its scroll lock
+        // would strand the reader.
+        window.matchMedia("(min-width: 761px)").addEventListener("change", function (ev) {
+            if (ev.matches) closeDrawer(true);
+        });
+    }
+
+    /* ---------- 12. Command palette ----------
+       Items are harvested from markup that already exists — the drawer's page
+       list, the bar's cross-page links, the drawer's contact chips — so there
+       is exactly one place to edit a destination.
+
+       The input is a combobox with aria-activedescendant, which is the
+       pattern that lets arrow keys move a highlight through the listbox while
+       DOM focus stays in the text field. */
+    var cmdkInput = document.getElementById("cmdk-input");
+    var cmdkList  = document.getElementById("cmdk-list");
+    var cmdkEmpty = document.getElementById("cmdk-empty");
+    var hasPalette = canDialog && palette && cmdkInput && cmdkList;
+
+    var paletteItems = [];
+    var shown = [];        // flat list of currently rendered items
+    var selected = 0;
+
+    function collectItems() {
+        var out = [];
+        sections.forEach(function (s, i) {
+            out.push({
+                group: "This page", label: s.label, meta: "Section",
+                glyph: (i < 9 ? "0" : "") + (i + 1), sec: s.id
+            });
+        });
+        var pageRows = slice(document.querySelectorAll(
+            '#nav-drawer nav[aria-labelledby="drawer-pages-label"] .drawer-link'));
+        pageRows.forEach(function (a) {
+            var here = a.hasAttribute("aria-current");
+            out.push({
+                group: "Site", label: textOf(a), meta: here ? "Current page" : "Page",
+                glyph: "→", href: a.getAttribute("href"), current: here
+            });
+        });
+        // Cross-page section links that live in the bar (sub-pages only).
+        navLinks.forEach(function (a) {
+            var href = a.getAttribute("href") || "";
+            if (href.indexOf("index.html#") !== 0) return;
+            out.push({ group: "Site", label: textOf(a), meta: "Home page", glyph: "→", href: href });
+        });
+        slice(document.querySelectorAll("#nav-drawer .drawer-foot a")).forEach(function (a) {
+            var href = a.getAttribute("href") || "";
+            var mail = href.indexOf("mailto:") === 0;
+            out.push({
+                group: "Reach out", label: textOf(a), meta: mail ? "Email" : "External",
+                glyph: mail ? "@" : "↗", href: href, external: !mail
+            });
+        });
+        return out;
+    }
+
+    var GROUP_ORDER = ["This page", "Site", "Reach out"];
+
+    function matchScore(q, text) {
+        if (!q) return { score: 0, ranges: [] };
+        var lt = text.toLowerCase();
+        var at = lt.indexOf(q);
+        if (at >= 0) return { score: 1000 - at * 4 - text.length, ranges: [[at, at + q.length]] };
+        // Fall back to a subsequence match, so "kach" finds "Ka-ching".
+        var ranges = [], qi = 0, ti = 0, first = -1, last = -1;
+        while (ti < lt.length && qi < q.length) {
+            if (lt.charAt(ti) === q.charAt(qi)) {
+                if (first < 0) first = ti;
+                last = ti;
+                var prev = ranges[ranges.length - 1];
+                if (prev && prev[1] === ti) prev[1] = ti + 1; else ranges.push([ti, ti + 1]);
+                qi++;
+            }
+            ti++;
+        }
+        if (qi < q.length) return null;
+        return { score: 400 - (last - first), ranges: ranges };
+    }
+
+    function paintLabel(node, text, ranges) {
+        var i = 0;
+        ranges.forEach(function (r) {
+            if (r[0] > i) node.appendChild(document.createTextNode(text.slice(i, r[0])));
+            var b = document.createElement("b");
+            b.textContent = text.slice(r[0], r[1]);
+            node.appendChild(b);
+            i = r[1];
+        });
+        if (i < text.length) node.appendChild(document.createTextNode(text.slice(i)));
+    }
+
+    function renderPalette(query) {
+        var q = String(query || "").trim().toLowerCase();
+        cmdkList.textContent = "";
+        shown = [];
+        var hits = [];
+        paletteItems.forEach(function (item, i) {
+            var m = matchScore(q, item.label);
+            if (!m) return;
+            hits.push({ item: item, ranges: m.ranges, score: m.score, order: i });
+        });
+        GROUP_ORDER.forEach(function (group) {
+            var inGroup = hits.filter(function (h) { return h.item.group === group; });
+            if (!inGroup.length) return;
+            inGroup.sort(function (a, b) { return (b.score - a.score) || (a.order - b.order); });
+            var head = document.createElement("li");
+            head.className = "cmdk-group";
+            head.setAttribute("role", "presentation");
+            head.textContent = group;
+            cmdkList.appendChild(head);
+            inGroup.forEach(function (h) {
+                var li = document.createElement("li");
+                li.className = "cmdk-item" + (h.item.current ? " is-current" : "");
+                li.id = "cmdk-opt-" + shown.length;
+                li.setAttribute("role", "option");
+                li.setAttribute("aria-selected", "false");
+                var g = document.createElement("span");
+                g.className = "cmdk-item-glyph";
+                g.setAttribute("aria-hidden", "true");
+                g.textContent = h.item.glyph;
+                var lab = document.createElement("span");
+                lab.className = "cmdk-item-label";
+                paintLabel(lab, h.item.label, h.ranges);
+                var meta = document.createElement("span");
+                meta.className = "cmdk-item-meta";
+                meta.textContent = h.item.meta;
+                li.appendChild(g);
+                li.appendChild(lab);
+                li.appendChild(meta);
+                cmdkList.appendChild(li);
+                shown.push({ el: li, item: h.item });
+            });
+        });
+        if (cmdkEmpty) cmdkEmpty.hidden = shown.length > 0;
+        select(0);
+    }
+
+    /* Wraps at both ends. The highlight is announced through
+       aria-activedescendant on the input rather than by moving DOM focus,
+       which is what keeps typing and arrowing in the same place. */
+    function select(i) {
+        if (!shown.length) {
+            selected = 0;
+            cmdkInput.removeAttribute("aria-activedescendant");
+            return;
+        }
+        selected = (i + shown.length) % shown.length;
+        shown.forEach(function (s, n) {
+            s.el.setAttribute("aria-selected", n === selected ? "true" : "false");
+        });
+        var el = shown[selected].el;
+        cmdkInput.setAttribute("aria-activedescendant", el.id);
+        // "nearest" so arrowing down a long list scrolls it by one row, and
+        // never with smooth behaviour — key repeat would fight the animation.
+        if (el.scrollIntoView) el.scrollIntoView({ block: "nearest" });
+    }
+
+    function activate(item) {
+        if (!item) return;
+        closePalette(true);              // unlock scroll BEFORE we try to scroll
+        if (item.sec) { goToSection(item.sec); return; }
+        if (!item.href) return;
+        if (item.external) {
+            var w = window.open(item.href, "_blank", "noopener");
+            if (!w) window.location.href = item.href;
+            return;
+        }
+        window.location.href = item.href;
+    }
+
+    var paletteClosing = false;
+    function openPalette() {
+        if (!hasPalette || palette.open) return;
+        if (drawer && drawer.open) closeDrawer(true);
+        paletteItems = collectItems();
+        cmdkInput.value = "";
+        renderPalette("");
+        lockScroll();
+        palette.classList.remove("is-closing");
+        paletteClosing = false;
+        palette.showModal();
+        cmdkInput.focus();
+        cmdkInput.select();
+    }
+    function finishPaletteClose() {
+        paletteClosing = false;
+        palette.classList.remove("is-closing");
+        if (palette.open) palette.close();
+    }
+    function closePalette(immediate) {
+        if (!palette || !palette.open) return;
+        if (immediate || reduceMotion) { finishPaletteClose(); return; }
+        if (paletteClosing) return;
+        paletteClosing = true;
+        palette.classList.add("is-closing");
+        setTimeout(finishPaletteClose, 170);
+    }
+    if (hasPalette) {
+        trapTab(palette);
+        palette.addEventListener("cancel", function (e) { e.preventDefault(); closePalette(); });
+        palette.addEventListener("close", function () {
+            palette.classList.remove("is-closing");
+            unlockScroll();
+        });
+        palette.addEventListener("click", function (e) {
+            if (e.target === palette) { closePalette(); return; }
+            var li = e.target.closest && e.target.closest(".cmdk-item");
+            if (!li) return;
+            for (var i = 0; i < shown.length; i++) {
+                if (shown[i].el === li) { activate(shown[i].item); return; }
             }
         });
-        // Reset menu state if resized back to desktop.
-        window.matchMedia("(min-width: 761px)").addEventListener("change", function (ev) {
-            if (ev.matches) closeMenu();
+        cmdkList.addEventListener("mousemove", function (e) {
+            var li = e.target.closest && e.target.closest(".cmdk-item");
+            if (!li) return;
+            for (var i = 0; i < shown.length; i++) {
+                if (shown[i].el === li && i !== selected) { select(i); return; }
+            }
+        });
+        cmdkInput.addEventListener("input", function () { renderPalette(cmdkInput.value); });
+        cmdkInput.addEventListener("keydown", function (e) {
+            if (e.key === "ArrowDown") { e.preventDefault(); select(selected + 1); }
+            else if (e.key === "ArrowUp") { e.preventDefault(); select(selected - 1); }
+            else if (e.key === "Enter") {
+                e.preventDefault();
+                if (shown.length) activate(shown[selected].item);
+            }
+        });
+        if (navCmd) navCmd.addEventListener("click", openPalette);
+        var cmdkClose = document.getElementById("cmdk-close");
+        if (cmdkClose) cmdkClose.addEventListener("click", function () { closePalette(); });
+        // Arrows keep working after Tab has moved focus to the close button.
+        palette.addEventListener("keydown", function (e) {
+            if (document.activeElement === cmdkInput) return;
+            if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+            e.preventDefault();
+            cmdkInput.focus();
+            select(selected + (e.key === "ArrowDown" ? 1 : -1));
+        });
+
+        /* ⌘K / Ctrl-K anywhere, plus `/` as the second-nature alternative —
+           suppressed while the reader is in a form field so the contact form
+           can still contain a slash. */
+        document.addEventListener("keydown", function (e) {
+            var k = e.key ? e.key.toLowerCase() : "";
+            if ((e.metaKey || e.ctrlKey) && k === "k") {
+                e.preventDefault();
+                if (palette.open) closePalette(); else openPalette();
+                return;
+            }
+            if (k !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
+            var t = e.target;
+            var tag = t && t.tagName ? t.tagName.toLowerCase() : "";
+            if (tag === "input" || tag === "textarea" || tag === "select" ||
+                (t && t.isContentEditable) || palette.open || (drawer && drawer.open)) return;
+            e.preventDefault();
+            openPalette();
+        });
+
+        // Windows/Linux readers do not have a ⌘ key to press.
+        var keyHint = document.getElementById("nav-cmd-key");
+        if (keyHint && !/Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent)) {
+            keyHint.textContent = "Ctrl K";
+        }
+    } else if (navCmd) {
+        // No <dialog> support: do not advertise a palette that cannot open.
+        navCmd.hidden = true;
+    }
+
+    /* ---------- 13. Scroll-direction-aware chrome ----------
+       Condenses on the way down, expands on the way up, and NEVER leaves the
+       viewport or drops opacity — a nav you have to go looking for was built
+       and rejected here once already. Skipped entirely under reduced motion,
+       where the height change has no transition and would read as a 14px jolt
+       on every scroll reversal. */
+    var lastY = window.scrollY || 0;
+    var condensed = false;
+    function updateChrome() {
+        if (reduceMotion) return;
+        var y = Math.max(0, window.scrollY || window.pageYOffset || 0);
+        var dy = y - lastY;
+        var next = condensed;
+        if (y <= 90) next = false;
+        else if (dy > 3) next = true;
+        else if (dy < -6) next = false;
+        lastY = y;
+        if (next === condensed) return;
+        condensed = next;
+        root.classList.toggle("nav-condensed", condensed);
+        // The bar's height changed, so the pill has to re-measure.
+        placeMarker(true);
+    }
+
+    /* ---------- 14. Wire it up ---------- */
+    buildRail();
+    buildDrawerSections();
+    // Stagger order follows DOM order across the static and generated rows.
+    slice(document.querySelectorAll("#nav-drawer .drawer-stagger")).forEach(function (el, i) {
+        el.style.setProperty("--i", String(i));
+    });
+
+    var navFrame = false;
+    function onNavScroll() {
+        if (navFrame) return;
+        navFrame = true;
+        requestAnimationFrame(function () {
+            navFrame = false;
+            updateProgress();
+            updateChrome();
+            var id = currentSectionId();
+            if (id && id !== lastSpyId) {
+                lastSpyId = id;
+                setActive(id);
+                /* Keep the URL honest while the reader scrolls by hand, so a
+                   refresh or a copied link reflects where they actually are
+                   instead of whatever hash they arrived with. */
+                if (spyMayWriteHash) syncHashToSection(id);
+            }
         });
     }
-
-    /* ---------- Scroll-progress line under the top bar ---------- */
-    var progressEl = document.getElementById("scroll-progress");
-    if (progressEl && !reduceMotion) {
-        var ticking = false;
-        var updateProgress = function () {
-            var h = document.documentElement;
-            var max = h.scrollHeight - h.clientHeight;
-            var pct = max > 0 ? (h.scrollTop || window.pageYOffset) / max : 0;
-            progressEl.style.width = Math.max(0, Math.min(1, pct)) * 100 + "%";
-            ticking = false;
-        };
-        window.addEventListener("scroll", function () {
-            if (!ticking) { window.requestAnimationFrame(updateProgress); ticking = true; }
-        }, { passive: true });
-        window.addEventListener("resize", updateProgress);
+    function onNavResize() {
         updateProgress();
+        buildBarTicks();
+        placeMarker(true);
+        lastSpyId = null;
+        onNavScroll();
     }
+    window.addEventListener("scroll", onNavScroll, { passive: true });
+    window.addEventListener("resize", onNavResize, { passive: true });
 
-    /* ---------- Smooth-scroll for nav + in-page links ----------
-       We preventDefault() to run our own smooth scroll, which also cancels the
-       browser's URL update — so the hash would go stale: sitting on
-       index.html#work and clicking Interests scrolled correctly but left #work
-       in the address bar, and a refresh then yanked you back to Work.
-       We therefore write the hash ourselves with replaceState, which updates
-       the URL (so reload/copy-paste are correct) without pushing a history
-       entry per click and without triggering another jump. */
-    document.querySelectorAll('a[href^="#"]').forEach(function (link) {
+    updateProgress();
+    if (sections.length) {
+        lastSpyId = currentSectionId();
+        setActive(lastSpyId);
+    }
+    placeMarker(true);
+    buildBarTicks();
+    /* Webfonts swap after first paint and change every link width, so the
+       pill has to be re-measured once the real metrics are in. */
+    if (document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(function () { placeMarker(true); buildBarTicks(); });
+    }
+    window.addEventListener("load", function () {
+        updateProgress(); buildBarTicks(); placeMarker(true);
+    });
+
+    /* Arm hash-writing only once the reader drives the page themselves. Real
+       user input (wheel / touch / keyboard) is the signal — a programmatic
+       scroll from the anchor-landing code must not count. */
+    var armSpyHash = function () {
+        spyMayWriteHash = true;
+        window.removeEventListener("wheel", armSpyHash);
+        window.removeEventListener("touchstart", armSpyHash);
+        window.removeEventListener("keydown", armSpyHash);
+    };
+    window.addEventListener("wheel", armSpyHash, { passive: true });
+    window.addEventListener("touchstart", armSpyHash, { passive: true });
+    window.addEventListener("keydown", armSpyHash);
+
+    /* ---------- 15. Smooth-scroll for the remaining in-page links ----------
+       Anchors inside the overlays and the rail are handled above (they have
+       to close their overlay first, or the scroll lock swallows the scroll),
+       so they are excluded here rather than double-bound. */
+    slice(document.querySelectorAll('a[href^="#"]')).forEach(function (link) {
+        if (link.closest("#nav-drawer, #cmdk, #section-rail")) return;
         link.addEventListener("click", function (e) {
-            var id = link.getAttribute("href");
-            if (id.length < 2) return;
-            var target = document.querySelector(id);
+            var href = link.getAttribute("href");
+            if (!href || href.length < 2) return;
+            var target = document.getElementById(href.slice(1));
             if (!target) return;
             e.preventDefault();
-            target.scrollIntoView({
-                behavior: reduceMotion ? "auto" : "smooth",
-                block: "start"
-            });
-            target.setAttribute("tabindex", "-1");
-            target.focus({ preventScroll: true });
-            setHash(id);
+            goToSection(href.slice(1));
         });
     });
 

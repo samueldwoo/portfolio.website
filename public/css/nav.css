@@ -17,4 +17,942 @@
      - Sage identity and type stack are FIXED. Small sage text uses --sage-deep.
      - Every control must be keyboard operable with a visible :focus-visible
        ring, and must not regress the existing skip-link.
+   ==========================================================================
+
+   WHAT THIS OVERHAUL SHIPS (four affordances, one system)
+
+   1. A SEGMENTED-CONTROL top bar. The links live inside a light track and a
+      single FILLED sage pill (`.nav-marker`) travels between them. That is the
+      active state: an opaque block of sage with white type on it, not a 2px
+      rule. The legacy `.nav-link::after` underline and motion.css's
+      `.nav-indicator` hairline are both explicitly neutralised at the bottom
+      of this file — two travelling indicators in one bar would fight, and the
+      hairline is exactly the "subtle underline" the brief rejects.
+
+   2. A SECTION RAIL (>=1024px), fixed to the right edge: one tick per band,
+      a spine that fills with page progress, the active tick a filled sage dot
+      that keeps its label visible. Every tick is a real link.
+
+   3. A COMMAND PALETTE on Cmd/Ctrl-K (and `/`), and a MOBILE DRAWER on the
+      hamburger. Both are native <dialog> elements opened with showModal(),
+      which is what buys us a real focus trap, Escape-to-close and top-layer
+      stacking from the platform instead of from hand-rolled JS.
+
+   4. SCROLL-DIRECTION-AWARE CHROME: the bar condenses (68px -> 54px, tighter
+      type, a shadow) on the way down and re-expands on the way up. It NEVER
+      translates off-screen and never drops below full opacity.
+
+   WHY THE BAR IS `position: fixed` AND NOT `sticky`
+   A sticky bar occupies flow space, so shrinking it while the reader is
+   scrolled down removes 14px from the document and yanks everything up by
+   14px — a visible jolt on every condense. Fixed + an explicit
+   `.topbar-spacer` of the ORIGINAL 68px keeps the reserved space constant, so
+   height changes cost nothing in layout. `--topbar-h` therefore stays the
+   LAYOUT reservation (it is what `.band { scroll-margin-top }` and
+   `.band-home { min-height }` in styles.css are calibrated against and must
+   not move); `--bar-h` is the live visual height.
+
+   NO RESTING STATE HERE IS INVISIBLE. Entrances are CSS @keyframes that
+   define only a `from`, so the base rule IS the finished state and
+   styles.css's `* { animation: none !important }` under reduced motion lands
+   every element fully visible. The only opacity-0 resting states in this file
+   are on `aria-hidden="true"` decoration (the travelling marker when no
+   section is claimed, and the rail's hover labels).
    ========================================================================== */
+
+/* ==========================================================================
+   0. Tokens
+   ========================================================================== */
+:root {
+    --bar-h: 68px;              /* live visual height of the bar            */
+    --bar-h-min: 54px;          /* condensed height                        */
+    --nav-ease: cubic-bezier(.2, .8, .2, 1);
+    --nav-sb: 0px;              /* scrollbar width, measured when we lock  */
+    --rail-progress: 0;         /* 0..1, written by script.js              */
+}
+
+/* ==========================================================================
+   1. The bar
+   ========================================================================== */
+.topbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 200;
+    /* Alpha inherited from styles.css, where it was measured against the
+       inverted #work plate scrolling underneath (composites to #e1e3de:
+       nav text 7.65:1, sage-deep 4.92:1). The link track below adds another
+       white layer on top of that, so contrast only improves. */
+    background: rgba(245, 246, 242, .91);
+    -webkit-backdrop-filter: saturate(140%) blur(14px);
+            backdrop-filter: saturate(140%) blur(14px);
+    border-bottom: 1px solid var(--line);
+    transition: background .3s ease, box-shadow .3s ease, border-color .3s ease;
+}
+
+/* Reserves the bar's ORIGINAL height in flow. Never bound to --bar-h — see
+   the header note; a shrinking spacer is a scroll jolt. */
+.topbar-spacer {
+    height: var(--topbar-h);
+    flex: none;
+    pointer-events: none;
+}
+
+.topbar-inner {
+    max-width: var(--content-max);
+    margin: 0 auto;
+    height: var(--bar-h);
+    padding: 0 clamp(20px, 4vw, 40px);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: clamp(10px, 2vw, 24px);
+    transition: height .3s var(--nav-ease);
+}
+
+/* ---- Condensed: shorter, denser, lifted. Still a full-width, fully
+   opaque-enough, fully interactive bar — nothing is hidden. ---- */
+html.nav-condensed .topbar {
+    background: rgba(245, 246, 242, .95);
+    box-shadow: 0 1px 0 rgba(31, 42, 24, .05), 0 12px 28px -22px rgba(31, 42, 24, .34);
+    border-bottom-color: var(--line2);
+}
+html.nav-condensed .topbar-inner { height: var(--bar-h-min); }
+html.nav-condensed .brand { font-size: 1.22rem; }
+html.nav-condensed .nav-link,
+html.nav-condensed .nav-cta { padding-top: 6px; padding-bottom: 6px; }
+
+.brand { transition: font-size .3s var(--nav-ease); }
+
+/* ==========================================================================
+   2. Link track + the travelling filled marker
+   --------------------------------------------------------------------------
+   The track is a segmented control: one bordered container, links flush
+   inside it, and `.nav-marker` sliding behind whichever link is active.
+   script.js positions the marker with translateX/width in inline styles and
+   owns those two properties exclusively.
+   ========================================================================== */
+.nav-links {
+    position: relative;         /* marker's containing block */
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 4px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-pill);
+    background: rgba(255, 255, 255, .58);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .7);
+}
+
+.nav-marker {
+    position: absolute;
+    top: 4px;
+    bottom: 4px;
+    left: 0;
+    width: 0;
+    border-radius: var(--r-pill);
+    /* --sage-deep, not --sage: white type on it measures 6.4:1 instead of
+       4.8:1, and these labels are 11.8px mono. */
+    background: var(--sage-deep);
+    box-shadow: 0 1px 2px rgba(31, 42, 24, .18), inset 0 1px 0 rgba(255, 255, 255, .18);
+    opacity: 0;                 /* aria-hidden decoration; no section claimed */
+    pointer-events: none;
+    z-index: 0;
+    transition: transform .42s var(--nav-ease), width .42s var(--nav-ease),
+                opacity .2s ease;
+}
+.nav-marker.is-shown { opacity: 1; }
+/* anime.js drives transform/width when it is available (see script.js). One
+   owner at a time: hand the CSS transition off so the two never fight. */
+html.nav-marker-js .nav-marker {
+    transition: opacity .2s ease;
+}
+
+.nav-link,
+.nav-cta {
+    position: relative;
+    z-index: 1;                 /* above the marker */
+    font-family: var(--mono);
+    font-size: .74rem;
+    letter-spacing: .11em;
+    text-transform: uppercase;
+    color: var(--ink2);
+    padding: 8px 13px;
+    border-radius: var(--r-pill);
+    white-space: nowrap;
+    transition: color .22s ease, padding .3s var(--nav-ease);
+}
+.nav-link:hover,
+.nav-cta:hover { color: var(--sage-deep); }
+
+/* THE active state: white type carried by the filled marker underneath. */
+.nav-link.is-active,
+.nav-cta.is-active {
+    color: #fff;
+}
+
+/* The CTA keeps a hairline so "Connect" still reads as the end of the row,
+   but its own fill is withdrawn when active — the travelling marker supplies
+   it, so there is exactly one filled thing in the bar at any moment. */
+.nav-cta {
+    margin-left: 4px;
+    border: 1px solid var(--sage);
+    color: var(--sage-deep);
+    background: transparent;
+}
+.nav-cta.is-active {
+    background: transparent;
+    border-color: transparent;
+}
+
+/* ==========================================================================
+   3. Tools cluster: palette trigger + hamburger
+   ========================================================================== */
+.topbar-tools {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: none;
+}
+
+.nav-cmd {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 38px;
+    padding: 0 10px 0 12px;
+    font-family: var(--mono);
+    font-size: .72rem;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--sage-deep);
+    background: var(--sage-soft);
+    border: 1px solid transparent;
+    border-radius: var(--r-pill);
+    cursor: pointer;
+    transition: background .2s ease, border-color .2s ease, color .2s ease;
+}
+.nav-cmd:hover {
+    background: #dde5cf;
+    border-color: var(--sage);
+}
+.nav-cmd-icon {
+    width: 14px;
+    height: 14px;
+    flex: none;
+    stroke: currentColor;
+    stroke-width: 1.9;
+    fill: none;
+}
+.nav-cmd kbd {
+    font-family: var(--mono);
+    font-size: .68rem;
+    letter-spacing: .04em;
+    color: var(--sage-deep);
+    background: rgba(255, 255, 255, .85);
+    border: 1px solid var(--line2);
+    border-radius: 6px;
+    padding: 2px 6px;
+    line-height: 1;
+}
+
+/* Hamburger — mobile only, revealed in the responsive block. */
+.nav-toggle {
+    display: none;
+    width: 44px;
+    height: 44px;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    background: rgba(255, 255, 255, .6);
+    border: 1px solid var(--line2);
+    border-radius: 13px;
+    cursor: pointer;
+}
+.nav-toggle-bar {
+    width: 19px;
+    height: 2px;
+    background: var(--ink);
+    border-radius: 2px;
+    transition: transform .28s var(--nav-ease), opacity .2s ease;
+}
+/* The drawer is a separate dialog now, so the toggle is open-only and the
+   old X-morph on aria-expanded no longer applies to it. */
+
+/* ==========================================================================
+   4. Segmented scroll progress
+   --------------------------------------------------------------------------
+   Sits on the bar's bottom edge. The fill is the page position; the ticks
+   mark where each section starts, so the bar answers "how far in am I" AND
+   "how many stops are left" at every viewport — including the ones too
+   narrow for the rail.
+   ========================================================================== */
+.bar-progress {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -1px;
+    height: 3px;
+    pointer-events: none;
+    z-index: 1;
+}
+.scroll-progress {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    height: 3px;
+    width: 0%;
+    background: linear-gradient(90deg, var(--sage-hi), var(--sage-deep));
+    border-radius: 0 2px 2px 0;
+}
+.bar-tick {
+    position: absolute;
+    bottom: 0;
+    width: 2px;
+    height: 3px;
+    background: var(--line2);
+    transform: translateX(-1px);
+}
+
+/* ==========================================================================
+   5. Section rail (>=1024px)
+   ========================================================================== */
+.section-rail {
+    position: fixed;
+    right: clamp(8px, 1.2vw, 20px);
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 190;
+    display: none;              /* enabled at >=1024px below */
+    align-items: center;
+}
+.section-rail:empty { display: none !important; }
+
+.rail-spine {
+    position: absolute;
+    right: 18px;
+    top: 15px;
+    bottom: 15px;
+    width: 2px;
+    border-radius: 2px;
+    background: var(--line2);
+    overflow: hidden;
+    pointer-events: none;
+}
+.rail-spine-fill {
+    display: block;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(180deg, var(--sage-hi), var(--sage-deep));
+    transform: scaleY(var(--rail-progress, 0));
+    transform-origin: 50% 0;
+}
+
+.rail-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    position: relative;
+}
+/* The tick's hit area is the DOT COLUMN only — 38px wide, sitting in the page
+   gutter. The label is absolutely positioned outside it (see below) because
+   an in-flow label would make every tick ~130px wide, and that box keeps its
+   hit area even at opacity 0: an invisible strip down the right edge of the
+   viewport, quietly swallowing clicks meant for the content underneath. */
+.rail-tick {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    min-height: 30px;
+}
+.rail-dot {
+    position: relative;
+    flex: none;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--bg);
+    border: 2px solid var(--line2);
+    transition: transform .3s var(--nav-ease), background .25s ease,
+                border-color .25s ease, box-shadow .25s ease;
+}
+.rail-tick:hover .rail-dot { border-color: var(--sage); }
+/* Filled marker, again — the same language as the bar. */
+.rail-tick.is-active .rail-dot {
+    background: var(--sage-deep);
+    border-color: var(--sage-deep);
+    transform: scale(1.4);
+    box-shadow: 0 0 0 4px rgba(95, 122, 79, .16);
+}
+
+/* Labels are aria-hidden decoration: each tick carries its real accessible
+   name on the anchor's aria-label, so parking an inactive label at opacity 0
+   hides nothing from a screen reader and strands no content. */
+.rail-label {
+    position: absolute;
+    right: 30px;
+    top: 50%;
+    font: 500 11px/1 var(--mono);
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    color: var(--sage-deep);
+    background: rgba(255, 255, 255, .94);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 5px 9px;
+    white-space: nowrap;
+    box-shadow: 0 6px 18px -14px rgba(31, 42, 24, .5);
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(-50%) translateX(6px);
+    transition: opacity .22s ease, transform .22s var(--nav-ease);
+}
+.rail-tick.is-active .rail-label,
+.section-rail:hover .rail-label,
+.section-rail:focus-within .rail-label {
+    opacity: 1;
+    transform: translateY(-50%);
+}
+.rail-tick.is-active .rail-label {
+    border-color: var(--sage);
+}
+
+/* ==========================================================================
+   6. Shared dialog reset
+   --------------------------------------------------------------------------
+   Native <dialog> + showModal() is deliberate: the focus trap, Escape and
+   the top layer come from the platform. A closed dialog is display:none by
+   UA default, which is a closed dialog and not stranded content.
+   ========================================================================== */
+.nav-dialog {
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: var(--ink2);
+    max-width: none;
+    max-height: none;
+    overflow: visible;
+}
+.nav-dialog::backdrop {
+    background: rgba(20, 23, 18, .46);
+    -webkit-backdrop-filter: blur(3px);
+            backdrop-filter: blur(3px);
+    animation: nav-fade-in .22s ease both;
+}
+@keyframes nav-fade-in { from { opacity: 0; } }
+
+/* ==========================================================================
+   7. Mobile drawer
+   ========================================================================== */
+.drawer {
+    /* Right sheet, full height. */
+    margin: 0 0 0 auto;
+    height: 100%;
+    max-height: 100%;
+    width: min(86vw, 350px);
+}
+.drawer-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    height: 100%;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    padding: 18px 18px calc(24px + env(safe-area-inset-bottom, 0px));
+    background: var(--bg2);
+    border-left: 1px solid var(--line2);
+    box-shadow: var(--shadow-lift);
+    animation: drawer-in .38s var(--nav-ease) both;
+}
+@keyframes drawer-in { from { transform: translateX(102%); } }
+
+.drawer.is-closing .drawer-panel { animation: drawer-out .2s ease both; }
+.drawer.is-closing::backdrop { animation: nav-fade-out .2s ease both; }
+@keyframes drawer-out { to { transform: translateX(102%); } }
+@keyframes nav-fade-out { to { opacity: 0; } }
+
+.drawer-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding-bottom: 6px;
+}
+.drawer-eyebrow {
+    font-family: var(--mono);
+    font-size: .68rem;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: var(--sage-deep);   /* --sage fails AA at this size */
+}
+.drawer-group {
+    margin-top: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+.drawer-group > .drawer-eyebrow { padding: 0 4px 6px; }
+
+.drawer-close {
+    width: 40px;
+    height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--panel);
+    border: 1px solid var(--line2);
+    border-radius: 12px;
+    cursor: pointer;
+    color: var(--ink);
+}
+.drawer-close svg {
+    width: 15px;
+    height: 15px;
+    stroke: currentColor;
+    stroke-width: 2;
+    fill: none;
+}
+
+.drawer-search {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 46px;
+    padding: 0 14px;
+    font-family: var(--mono);
+    font-size: .78rem;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--sage-deep);
+    background: var(--sage-soft);
+    border: 1px solid transparent;
+    border-radius: var(--r-sm);
+    cursor: pointer;
+    text-align: left;
+}
+.drawer-search svg {
+    width: 15px;
+    height: 15px;
+    flex: none;
+    stroke: currentColor;
+    stroke-width: 1.9;
+    fill: none;
+}
+
+/* Rows. Every row is 46px+ of touch target. */
+.drawer-link {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 46px;
+    padding: 10px 14px;
+    border-radius: var(--r-sm);
+    font-family: var(--mono);
+    font-size: .8rem;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--ink2);
+    background: transparent;
+    border: 1px solid transparent;
+    transition: background .18s ease, color .18s ease, border-color .18s ease;
+}
+.drawer-link:hover { background: rgba(255, 255, 255, .7); }
+.drawer-link .drawer-num {
+    font-size: .66rem;
+    letter-spacing: .04em;
+    color: var(--mut);
+    min-width: 1.4em;
+}
+/* ONE fill in the drawer, and it means "this is the part of the page you are
+   looking at" — the same thing the pill means in the bar and the dot means on
+   the rail. The page you are on is a weaker, secondary state (soft chip), or
+   the drawer would show two filled blocks at once and neither would read. */
+.drawer-link.is-active {
+    background: var(--sage-deep);
+    border-color: var(--sage-deep);
+    color: #fff;
+}
+.drawer-link.is-active .drawer-num { color: rgba(255, 255, 255, .78); }
+.drawer-link[aria-current="page"] {
+    background: var(--sage-soft);
+    color: var(--sage-deep);   /* 5.2:1 on the chip */
+    font-weight: 600;
+    box-shadow: inset 3px 0 0 var(--sage);
+}
+.drawer-link[aria-current="page"]:hover { background: #dde5cf; }
+
+/* Outlined, matching the bar's Connect CTA — a filled button here would be a
+   third sage block competing with the active marker. */
+.drawer-cta {
+    justify-content: center;
+    border-color: var(--sage);
+    color: var(--sage-deep);
+    margin-top: 10px;
+}
+.drawer-cta:hover { background: var(--sage-soft); }
+
+.drawer-foot {
+    margin-top: auto;
+    padding-top: 18px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.drawer-foot a {
+    font: 500 11px/1 var(--mono);
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--sage-deep);
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--r-pill);
+    padding: 9px 13px;
+}
+.drawer-foot a:hover { background: var(--sage-soft); }
+
+/* Staggered entrance. Keyframes define only `from`, so the base rule is the
+   finished state: reduced motion kills the animation and every row is
+   already visible and in place. */
+.drawer-stagger {
+    animation: drawer-row .42s var(--nav-ease) calc(60ms + var(--i, 0) * 42ms) both;
+}
+@keyframes drawer-row {
+    from { opacity: 0; transform: translateX(16px); }
+}
+
+/* ==========================================================================
+   8. Command palette
+   ========================================================================== */
+.cmdk {
+    margin: min(12vh, 96px) auto auto;
+    width: min(94vw, 560px);
+}
+.cmdk-panel {
+    display: flex;
+    flex-direction: column;
+    background: var(--panel);
+    border: 1px solid var(--line2);
+    border-radius: var(--r-lg);
+    box-shadow: 0 40px 90px -40px rgba(31, 42, 24, .55), 0 2px 6px rgba(31, 42, 24, .08);
+    overflow: hidden;
+    animation: cmdk-in .26s var(--nav-ease) both;
+}
+@keyframes cmdk-in { from { opacity: 0; transform: translateY(-10px) scale(.985); } }
+.cmdk.is-closing .cmdk-panel { animation: cmdk-out .16s ease both; }
+.cmdk.is-closing::backdrop { animation: nav-fade-out .16s ease both; }
+@keyframes cmdk-out { to { opacity: 0; transform: translateY(-6px); } }
+
+.cmdk-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--line);
+    background: linear-gradient(180deg, rgba(230, 235, 220, .55), rgba(230, 235, 220, 0));
+}
+.cmdk-head svg {
+    width: 17px;
+    height: 17px;
+    flex: none;
+    stroke: var(--sage-deep);
+    stroke-width: 1.9;
+    fill: none;
+}
+.cmdk-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-family: var(--sans);
+    font-size: 1.02rem;
+    color: var(--ink);
+    background: transparent;
+    border: 0;
+    outline: none;
+    padding: 2px 0;
+}
+.cmdk-input::placeholder { color: var(--mut); }
+/* A real button, not a decorative <kbd>. Two reasons: pointer users get a
+   close affordance, and a modal with only ONE focusable child sends Tab to
+   nowhere — Chrome drops focus to the document and the ring vanishes. Two
+   stops make the native cycle wrap properly. */
+.cmdk-esc {
+    display: inline-flex;
+    align-items: center;
+    min-height: 26px;
+    padding: 0 9px;
+    font: 500 11px/1 var(--mono);
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--mut);
+    background: transparent;
+    border: 1px solid var(--line2);
+    border-radius: 7px;
+    flex: none;
+    cursor: pointer;
+    transition: color .18s ease, border-color .18s ease, background .18s ease;
+}
+.cmdk-esc:hover {
+    color: var(--sage-deep);
+    border-color: var(--sage);
+    background: var(--sage-soft);
+}
+
+.cmdk-list {
+    list-style: none;
+    margin: 0;
+    padding: 8px;
+    max-height: min(46vh, 340px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+.cmdk-group {
+    font: 500 10px/1 var(--mono);
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--sage-deep);
+    padding: 12px 10px 7px;
+}
+.cmdk-list > .cmdk-group:first-child { padding-top: 4px; }
+
+.cmdk-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 12px;
+    border-radius: 12px;
+    cursor: pointer;
+    color: var(--ink2);
+    scroll-margin: 12px;
+}
+.cmdk-item-glyph {
+    flex: none;
+    width: 26px;
+    height: 26px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    background: var(--sage-soft);
+    color: var(--sage-deep);
+    font: 500 11px/1 var(--mono);
+}
+.cmdk-item-label {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: .96rem;
+    color: var(--ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.cmdk-item-label b {
+    color: var(--sage-deep);
+    font-weight: 600;
+}
+.cmdk-item-meta {
+    flex: none;
+    font: 400 10px/1 var(--mono);
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--mut);
+}
+/* Filled selection — the same marker language. */
+.cmdk-item[aria-selected="true"] {
+    background: var(--sage-deep);
+}
+.cmdk-item[aria-selected="true"] .cmdk-item-label,
+.cmdk-item[aria-selected="true"] .cmdk-item-label b { color: #fff; }
+.cmdk-item[aria-selected="true"] .cmdk-item-meta { color: rgba(255, 255, 255, .82); }
+.cmdk-item[aria-selected="true"] .cmdk-item-glyph {
+    background: rgba(255, 255, 255, .18);
+    color: #fff;
+}
+.cmdk-item.is-current .cmdk-item-glyph { box-shadow: inset 0 0 0 1px var(--sage); }
+
+.cmdk-empty {
+    padding: 26px 18px 30px;
+    text-align: center;
+    color: var(--mut);
+    font-size: .92rem;
+}
+
+.cmdk-foot {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    padding: 10px 16px;
+    border-top: 1px solid var(--line);
+    background: var(--panel2);
+    font: 400 10px/1.4 var(--mono);
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--mut);
+}
+.cmdk-foot kbd {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--sage-deep);
+    background: var(--panel);
+    border: 1px solid var(--line2);
+    border-radius: 5px;
+    padding: 2px 5px;
+    margin-right: 4px;
+}
+
+/* ==========================================================================
+   9. Scroll lock while an overlay is open
+   --------------------------------------------------------------------------
+   showModal() blocks interaction but does NOT stop the page scrolling behind
+   the dialog. Locking on `html` is the only reliable stop; the measured
+   scrollbar width is paid back as padding so nothing reflows on lock. The
+   bar is fixed, so it is compensated separately (its containing block is the
+   viewport, which html's padding does not touch).
+   ========================================================================== */
+html.nav-locked { overflow: hidden; }
+html.nav-locked body { padding-right: var(--nav-sb, 0px); }
+html.nav-locked .topbar { padding-right: var(--nav-sb, 0px); }
+
+/* ==========================================================================
+   10. Retiring the old indicators
+   --------------------------------------------------------------------------
+   Both of these are the "subtle underline" the brief rules out, and either
+   one would be a second thing animating alongside `.nav-marker`.
+   `content: none` means the pseudo-element is never generated, so the
+   `transform` rules styles.css and motion.css still aim at it (including an
+   !important one under reduced motion) have nothing to hit.
+   ========================================================================== */
+.nav-link::after { content: none; }
+/* motion-ux.js still creates and animates this node; hiding it is cheaper
+   and safer than reaching into another file's lane to stop it. */
+.nav-indicator { display: none !important; }
+
+/* ==========================================================================
+   11. No-JS fallback
+   --------------------------------------------------------------------------
+   An inline <script> in <head> sets `.nav-js` before first paint, so this
+   never flashes. Without JS the dialogs cannot open, so the hamburger is
+   pointless and the link track has to stay on screen at every width — it
+   wraps to two rows rather than overflowing.
+   ========================================================================== */
+html:not(.nav-js) .nav-toggle,
+html:not(.nav-js) .nav-cmd,
+html:not(.nav-js) .section-rail { display: none !important; }
+/* Back to sticky, and drop the spacer with it. Sticky is IN FLOW, so a bar
+   that has grown a second row cannot overlap the hero the way a fixed one
+   would — and with no JS the bar never condenses, so the height-change jolt
+   that pushed us to fixed in the first place cannot happen here either. */
+html:not(.nav-js) .topbar { position: sticky; }
+html:not(.nav-js) .topbar-spacer { display: none !important; }
+html:not(.nav-js) .topbar-inner {
+    height: auto;
+    min-height: var(--bar-h);
+    flex-wrap: wrap;
+    row-gap: 8px;
+}
+html:not(.nav-js) .nav-links {
+    display: flex !important;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+}
+
+/* ==========================================================================
+   12. Responsive
+   ========================================================================== */
+/* Rail needs the gutter to itself. Its hit area is 38px plus an 8-20px
+   offset, and at 1024px the band gutter is ~51px, so it sits in padding and
+   never over text. Below that the bar's segmented progress carries the job. */
+@media (min-width: 1024px) {
+    .section-rail { display: flex; }
+}
+
+/* Palette trigger loses its words before the link row loses its space. */
+@media (max-width: 1023px) {
+    .nav-cmd { padding: 0 11px; gap: 0; }
+    .nav-cmd-text, .nav-cmd kbd { display: none; }
+    .nav-cmd { width: 38px; justify-content: center; }
+}
+
+/* ---- Drawer takes over. The link track is removed from the bar, not
+   hidden-but-present: nothing to tab into, nothing to overflow. ---- */
+@media (max-width: 760px) {
+    .nav-links { display: none; }
+    .nav-toggle { display: flex; }
+    .topbar-inner { padding: 0 clamp(16px, 4vw, 24px); }
+    .brand { padding: 8px 0; }
+    :root { --bar-h: 62px; --bar-h-min: 54px; }
+    .topbar-spacer { height: 62px; }
+    /* No JS: the links get their own full-width row under the wordmark
+       instead of being squeezed into a column beside it. This has to unwind
+       styles.css's mobile dropdown panel explicitly — that rule set makes
+       `.nav-links` a fixed, hidden, column-stacked sheet that only a JS class
+       reveals, which is exactly the state a no-JS reader must never be left
+       in. Re-stated here rather than reached for in styles.css: nav chrome
+       is this file's lane. */
+    html:not(.nav-js) .topbar-inner { padding-bottom: 10px; }
+    html:not(.nav-js) .nav-links {
+        flex: 1 0 100%;
+        position: static;
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 3px;
+        padding: 4px;
+        opacity: 1;
+        visibility: visible;
+        pointer-events: auto;
+        transform: none;
+        background: rgba(255, 255, 255, .58);
+        border: 1px solid var(--line);
+        border-radius: var(--r-pill);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, .7);
+    }
+    html:not(.nav-js) .nav-link,
+    html:not(.nav-js) .nav-cta {
+        font-size: .7rem;
+        padding: 9px 10px;
+        border-radius: var(--r-pill);
+        text-align: center;
+        background: transparent;
+    }
+    html:not(.nav-js) .nav-cta { margin: 0 0 0 2px; }
+}
+
+@media (max-width: 420px) {
+    .topbar-inner { padding: 0 16px; }
+    .cmdk { margin-top: 6vh; }
+}
+
+/* ==========================================================================
+   13. prefers-contrast / reduced motion
+   ========================================================================== */
+@media (prefers-contrast: more) {
+    .nav-links { background: var(--panel); border-color: var(--ink2); }
+    .rail-dot { border-color: var(--ink2); }
+    .rail-label { border-color: var(--ink2); }
+    .nav-cmd { border-color: var(--ink2); }
+    .cmdk-panel, .drawer-panel { border-color: var(--ink2); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    /* styles.css already kills all animation; these kill the transitions and
+       pin the two decorative from-states to their finished values. Nothing
+       here may hide anything. */
+    .topbar, .topbar-inner, .brand, .nav-link, .nav-cta, .nav-cmd,
+    .nav-marker, .rail-dot, .rail-label, .drawer-link, .nav-toggle-bar {
+        transition: none !important;
+    }
+    /* The bar does not condense under reduced motion: without a transition
+       the height change is a 14px jump on every scroll reversal, which is
+       worse than not condensing. script.js also skips the class entirely. */
+    html.nav-condensed .topbar-inner { height: var(--bar-h); }
+    html.nav-condensed .brand { font-size: 1.45rem; }
+}
