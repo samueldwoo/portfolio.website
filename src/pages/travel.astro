@@ -161,7 +161,7 @@ const spanLabel = `${MONTH_ABBR[firstM - 1]} ${firstY} – ${MONTH_ABBR[lastM - 
                 <div class="pass-wall">
 
                     <!-- 01 Tokyo -->
-                    <article class="pass pass--zipair pass--wide reveal gsap-reveal">
+                    <article class="pass pass--zipair reveal gsap-reveal">
                         <div class="pass-main">
                             <div class="pass-head">
                                 <span class="pass-logoband"><img class="pass-logo pass-logo--white" src="assets/airlines/zipair-t-c.png" alt="Zip Air"></span>
@@ -185,7 +185,7 @@ const spanLabel = `${MONTH_ABBR[firstM - 1]} ${firstY} – ${MONTH_ABBR[lastM - 
                     </article>
 
                     <!-- 02 Seoul -->
-                    <article class="pass pass--korean pass--wide reveal gsap-reveal">
+                    <article class="pass pass--korean reveal gsap-reveal">
                         <div class="pass-main">
                             <div class="pass-head">
                                 <span class="pass-logoband"><img class="pass-logo pass-logo--white" src="assets/airlines/korean-c.png" alt="Korean Air"></span>
@@ -430,4 +430,23 @@ const spanLabel = `${MONTH_ABBR[firstM - 1]} ${firstY} – ${MONTH_ABBR[lastM - 
             </div>
         </section>
     </main>
+
+<!-- TEMPORARY demo toggle — remove once a wall treatment is chosen.
+     Lets both candidate layouts be compared live (including hover) without a
+     rebuild: /travel.html?wall=stubs  or  ?wall=gates  (no param = plain grid).
+     Inline and in-body on purpose: it must run before paint so there is no
+     visible reflow, and it is page-scoped so it cannot leak to index/projects. -->
+<script is:inline>
+  (function () {
+    var v = new URLSearchParams(location.search).get('wall');
+    if (v !== 'stubs' && v !== 'gates') return;
+    var apply = function () {
+      var w = document.querySelector('.pass-wall');
+      if (w) w.classList.add('pass-wall--' + v);
+    };
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', apply, { once: true });
+    } else { apply(); }
+  })();
+</script>
 </Base>

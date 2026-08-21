@@ -910,9 +910,11 @@
 /* ==========================================================================
    12. TRAVEL PAGE — the boarding-pass wall
 
-   12 columns. Two wide "featured" passes across the top, then three rows of
-   three. `grid: 'auto'` in gsap-motion.js measures real geometry, so the
-   diagonal entrance stagger adapts to this on its own.
+   12 columns, every pass the SAME SIZE (span 4 => three per row). The two
+   "featured" wide passes were removed for parity: eleven real trips are a set,
+   and promoting two of them implied a ranking that is not there.
+   `grid: 'auto'` in gsap-motion.js measures real geometry, so the diagonal
+   entrance stagger adapts on its own.
    ========================================================================== */
 /* The wall band is a dark plate now, not a flush continuation of the hero,
    so it gets plate breathing room instead of the old 20–36px seam. */
@@ -924,24 +926,14 @@
         gap: clamp(16px, 1.7vw, 26px);
     }
     .pass-wall > .pass { grid-column: span 4; }
-    .pass-wall > .pass--wide { grid-column: span 6; min-height: 250px; }
-    .pass--wide .pass-main { padding: 26px 30px; gap: 16px; }
-    .pass--wide .pass-code { font-size: clamp(2.4rem, 3.6vw, 3.4rem); }
-    .pass--wide .pass-logoband { height: 38px; }
-    .pass--wide .pass-logo { max-width: 168px; }
-    .pass--wide .pass-dest .pass-destv { font-size: 1.5rem; }
-    .pass--wide .pass-stub { flex-basis: 56px; }
-    .pass--wide .pass-plane { width: 42px; height: 42px; }
 }
 @media (min-width: 760px) and (max-width: 1079.98px) {
     .pass-wall { grid-template-columns: repeat(12, minmax(0, 1fr)); }
     .pass-wall > .pass { grid-column: span 6; }
-    .pass-wall > .pass--wide { grid-column: span 6; }
 }
 @media (max-width: 759.98px) {
     .pass-wall { grid-template-columns: minmax(0, 1fr); }
     .pass-wall > .pass,
-    .pass-wall > .pass--wide { grid-column: 1; }
 }
 
 /* On the dark plate the darkest passes (Zipair near-black, the navies) sit
@@ -1036,7 +1028,6 @@
     .bento-plate,
     .project-card--tall,
     .project-card--wide,
-    .pass--wide { opacity: 1 !important; transform: none !important; }
 }
 
 /* High-contrast preference: texture is the first thing to go — every layer
@@ -1048,4 +1039,73 @@
     .band--plate::after { display: none; }
     .band--plate { background: var(--panel); border-color: var(--line2); }
     .bento-plate { background: var(--panel); }
+}
+
+
+/* ==========================================================================
+   DEMO VARIANTS — boarding-pass wall treatments (temporary, for comparison)
+   --------------------------------------------------------------------------
+   Two candidate displays, both gated behind a class on `.pass-wall` so they can
+   be compared side by side. Whichever is chosen becomes the default and the
+   other is deleted — do not leave both in the shipped file.
+
+   Both keep every pass the SAME SIZE and all 11 on screen. Neither is
+   scroll-driven.
+
+   KEY TECHNIQUE: the tilt uses the INDEPENDENT `rotate` property, not
+   `transform`. motion-ux.js owns `transform` on `.pass` for the hover tilt and
+   GSAP writes `transform` for the entrance stagger, so a static `transform`
+   here would be clobbered by both. `rotate` is a separate property (CSS
+   Transforms Level 2) that composes with `transform` instead of replacing it —
+   so the stubs sit tilted at rest AND still get their hover spring, with no
+   wrapper element and no ownership conflict.
+   ========================================================================== */
+
+/* ---- A. PINNED STUB BOARD ------------------------------------------------
+   Deterministic per-position tilt and vertical jitter, so it reads as a
+   collection of real stubs rather than a table. Values are hand-picked per
+   nth-child rather than random: the layout must be identical on every load,
+   or a resize would visibly reshuffle the board. */
+.pass-wall--stubs > .pass { rotate: 0deg; transition: rotate .28s cubic-bezier(.2,.8,.2,1); }
+.pass-wall--stubs > .pass:nth-child(9n+1) { rotate:  1.4deg; margin-top:  0px; }
+.pass-wall--stubs > .pass:nth-child(9n+2) { rotate: -1.1deg; margin-top: 14px; }
+.pass-wall--stubs > .pass:nth-child(9n+3) { rotate:  0.8deg; margin-top:  5px; }
+.pass-wall--stubs > .pass:nth-child(9n+4) { rotate: -1.6deg; margin-top:  9px; }
+.pass-wall--stubs > .pass:nth-child(9n+5) { rotate:  1.1deg; margin-top:  0px; }
+.pass-wall--stubs > .pass:nth-child(9n+6) { rotate: -0.7deg; margin-top: 16px; }
+.pass-wall--stubs > .pass:nth-child(9n+7) { rotate:  1.6deg; margin-top:  6px; }
+.pass-wall--stubs > .pass:nth-child(9n+8) { rotate: -1.3deg; margin-top: 12px; }
+.pass-wall--stubs > .pass:nth-child(9n+9) { rotate:  0.6deg; margin-top:  2px; }
+/* Straighten on hover — the stub you are looking at is the one lying flat. */
+.pass-wall--stubs > .pass:hover { rotate: 0deg; }
+/* A touch more lift so tilted stubs read as physically stacked on the plate. */
+.pass-wall--stubs > .pass {
+    box-shadow: 0 2px 6px rgba(0, 0, 0, .18), 0 18px 40px -24px rgba(0, 0, 0, .5);
+}
+
+/* ---- B. BOARDING-GATE STAGGER -------------------------------------------
+   Columns offset vertically so the wall cascades instead of tabulating. Also
+   makes the uneven final row (11 does not divide by 3) read as part of the
+   rhythm rather than as an orphan. Pure margin — no transform, no rotate. */
+@media (min-width: 1080px) {
+    /* align-self:start is REQUIRED, not cosmetic. Grid items stretch by
+       default, and staggering the margins makes each row's content box taller —
+       so cards with a smaller margin stretched to match and grew a band of dead
+       air between the route and the destination. Measured visually: the ZIPAIR
+       and Hawaiian cards gained ~90px of empty middle. Pinning to start keeps
+       every card at its natural height. */
+    .pass-wall--gates > .pass { align-self: start; }
+    .pass-wall--gates > .pass:nth-child(3n+1) { margin-top: 0; }
+    .pass-wall--gates > .pass:nth-child(3n+2) { margin-top: 44px; }
+    .pass-wall--gates > .pass:nth-child(3n+3) { margin-top: 88px; }
+    /* Hairline gate rails behind the columns, on the two seams. */
+    .pass-wall--gates {
+        position: relative;
+        background-image:
+            linear-gradient(to bottom, transparent 0, var(--line) 6%, var(--line) 88%, transparent 100%),
+            linear-gradient(to bottom, transparent 0, var(--line) 6%, var(--line) 88%, transparent 100%);
+        background-size: 1px 100%, 1px 100%;
+        background-position: 33.33% 0, 66.66% 0;
+        background-repeat: no-repeat;
+    }
 }
