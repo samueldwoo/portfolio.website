@@ -1043,69 +1043,81 @@
 
 
 /* ==========================================================================
-   DEMO VARIANTS — boarding-pass wall treatments (temporary, for comparison)
+   BOARDING-PASS WALL — the pinned stub board
    --------------------------------------------------------------------------
-   Two candidate displays, both gated behind a class on `.pass-wall` so they can
-   be compared side by side. Whichever is chosen becomes the default and the
-   other is deleted — do not leave both in the shipped file.
+   Every pass is the SAME SIZE (span 4, three per row). What varies is only how
+   each one LIES on the plate: a small tilt, a small vertical drop and a hair of
+   horizontal drift, so eleven identical cards read as a collection of real
+   stubs pinned to a board rather than as a table of rows.
 
-   Both keep every pass the SAME SIZE and all 11 on screen. Neither is
-   scroll-driven.
+   >>> THE TECHNIQUE THAT MAKES THIS POSSIBLE <<<
+   The tilt and nudge use the INDEPENDENT `rotate` and `translate` properties,
+   NOT `transform`.
 
-   KEY TECHNIQUE: the tilt uses the INDEPENDENT `rotate` property, not
-   `transform`. motion-ux.js owns `transform` on `.pass` for the hover tilt and
-   GSAP writes `transform` for the entrance stagger, so a static `transform`
-   here would be clobbered by both. `rotate` is a separate property (CSS
-   Transforms Level 2) that composes with `transform` instead of replacing it —
-   so the stubs sit tilted at rest AND still get their hover spring, with no
-   wrapper element and no ownership conflict.
+   `transform` on `.pass` is already owned twice over: motion-ux.js writes it for
+   the hover tilt and press spring, and gsap-motion.js writes it for the entrance
+   stagger. A static `transform` here would be clobbered by both — this repo's
+   recurring "two systems, one property" failure. `rotate` and `translate` are
+   separate properties (CSS Transforms Level 2) that COMPOSE with `transform`
+   rather than replacing it, so a stub can sit tilted at rest and still get its
+   full hover spring, with no wrapper element and no ownership negotiation.
+
+   >>> WHY EVERY INDEX IS SPELLED OUT <<<
+   These are explicit `:nth-child(1..11)` rules, not a repeating cycle. The first
+   cut used a 9-step cycle, which meant passes 1 and 10 were tilted identically
+   and so were 2 and 11 — with three columns that put matching stubs directly
+   above one another and the "pile" read as a pattern. Eleven passes, eleven
+   distinct values.
+
+   They are also HAND-PICKED, not random: the board must be byte-identical on
+   every load and every resize. A random tilt would reshuffle the whole wall on
+   an orientation change, which reads as a glitch.
+
+   >>> THE VERTICAL DROP IS `translate`, NOT `margin-top` <<<
+   The first cut used margin-top for the drop. That silently broke SIZE PARITY,
+   which is the one thing this layout must hold: a margin grows the grid row, so
+   cards in the same row stretch by different amounts. Measured — heights spread
+   from a uniform 197px to 200-221px. `translate` is a paint-time offset that
+   does not participate in layout, so every row stays one height and every card
+   stays identical. Same reason it is not `transform`: see above.
+
+   Constraints held: |rotate| <= 1.8deg (past ~2.5deg it stops looking casual and
+   starts looking broken), signs alternate so no two neighbours lean the same
+   way, |translate| <= 4px, and SIZE IS NEVER TOUCHED — no scale, no width, so
+   parity is preserved exactly.
    ========================================================================== */
-
-/* ---- A. PINNED STUB BOARD ------------------------------------------------
-   Deterministic per-position tilt and vertical jitter, so it reads as a
-   collection of real stubs rather than a table. Values are hand-picked per
-   nth-child rather than random: the layout must be identical on every load,
-   or a resize would visibly reshuffle the board. */
-.pass-wall--stubs > .pass { rotate: 0deg; transition: rotate .28s cubic-bezier(.2,.8,.2,1); }
-.pass-wall--stubs > .pass:nth-child(9n+1) { rotate:  1.4deg; margin-top:  0px; }
-.pass-wall--stubs > .pass:nth-child(9n+2) { rotate: -1.1deg; margin-top: 14px; }
-.pass-wall--stubs > .pass:nth-child(9n+3) { rotate:  0.8deg; margin-top:  5px; }
-.pass-wall--stubs > .pass:nth-child(9n+4) { rotate: -1.6deg; margin-top:  9px; }
-.pass-wall--stubs > .pass:nth-child(9n+5) { rotate:  1.1deg; margin-top:  0px; }
-.pass-wall--stubs > .pass:nth-child(9n+6) { rotate: -0.7deg; margin-top: 16px; }
-.pass-wall--stubs > .pass:nth-child(9n+7) { rotate:  1.6deg; margin-top:  6px; }
-.pass-wall--stubs > .pass:nth-child(9n+8) { rotate: -1.3deg; margin-top: 12px; }
-.pass-wall--stubs > .pass:nth-child(9n+9) { rotate:  0.6deg; margin-top:  2px; }
-/* Straighten on hover — the stub you are looking at is the one lying flat. */
-.pass-wall--stubs > .pass:hover { rotate: 0deg; }
-/* A touch more lift so tilted stubs read as physically stacked on the plate. */
-.pass-wall--stubs > .pass {
+.pass-wall > .pass {
+    rotate: 0deg;
+    transition: rotate .28s cubic-bezier(.2, .8, .2, 1);
+    /* Deeper contact shadow than the flat grid had: a tilted stub needs to read
+       as lying ON the plate, not floating over it. */
     box-shadow: 0 2px 6px rgba(0, 0, 0, .18), 0 18px 40px -24px rgba(0, 0, 0, .5);
 }
 
-/* ---- B. BOARDING-GATE STAGGER -------------------------------------------
-   Columns offset vertically so the wall cascades instead of tabulating. Also
-   makes the uneven final row (11 does not divide by 3) read as part of the
-   rhythm rather than as an orphan. Pure margin — no transform, no rotate. */
-@media (min-width: 1080px) {
-    /* align-self:start is REQUIRED, not cosmetic. Grid items stretch by
-       default, and staggering the margins makes each row's content box taller —
-       so cards with a smaller margin stretched to match and grew a band of dead
-       air between the route and the destination. Measured visually: the ZIPAIR
-       and Hawaiian cards gained ~90px of empty middle. Pinning to start keeps
-       every card at its natural height. */
-    .pass-wall--gates > .pass { align-self: start; }
-    .pass-wall--gates > .pass:nth-child(3n+1) { margin-top: 0; }
-    .pass-wall--gates > .pass:nth-child(3n+2) { margin-top: 44px; }
-    .pass-wall--gates > .pass:nth-child(3n+3) { margin-top: 88px; }
-    /* Hairline gate rails behind the columns, on the two seams. */
-    .pass-wall--gates {
-        position: relative;
-        background-image:
-            linear-gradient(to bottom, transparent 0, var(--line) 6%, var(--line) 88%, transparent 100%),
-            linear-gradient(to bottom, transparent 0, var(--line) 6%, var(--line) 88%, transparent 100%);
-        background-size: 1px 100%, 1px 100%;
-        background-position: 33.33% 0, 66.66% 0;
-        background-repeat: no-repeat;
-    }
+.pass-wall > .pass:nth-child(1)  { rotate: -1.5deg; translate: -3px 0px; }
+.pass-wall > .pass:nth-child(2)  { rotate: 1.1deg; translate: 2px 13px; }
+.pass-wall > .pass:nth-child(3)  { rotate: -0.6deg; translate: 4px 4px; }
+.pass-wall > .pass:nth-child(4)  { rotate: 1.7deg; translate: -2px 10px; }
+.pass-wall > .pass:nth-child(5)  { rotate: -1.2deg; translate: 3px 0px; }
+.pass-wall > .pass:nth-child(6)  { rotate: 0.7deg; translate: -4px 16px; }
+.pass-wall > .pass:nth-child(7)  { rotate: -1.8deg; translate: 1px 6px; }
+.pass-wall > .pass:nth-child(8)  { rotate: 1.3deg; translate: 3px 12px; }
+.pass-wall > .pass:nth-child(9)  { rotate: -0.9deg; translate: -3px 2px; }
+.pass-wall > .pass:nth-child(10) { rotate: 1.5deg; translate: 2px 8px; }
+.pass-wall > .pass:nth-child(11) { rotate: -1.35deg; translate: -1px 15px; }
+
+/* A 12th trip and beyond: fall back to a 5-step cycle so a new pass is never
+   left flat while someone gets around to giving it its own line. */
+.pass-wall > .pass:nth-child(n+12)  { rotate:  1deg;   translate: 2px 7px; }
+.pass-wall > .pass:nth-child(5n+13) { rotate: -1.4deg; translate: -3px 2px; }
+.pass-wall > .pass:nth-child(5n+14) { rotate:  0.8deg; translate: 3px 14px; }
+
+/* The stub you are looking at is the one lying flat. */
+.pass-wall > .pass:hover { rotate: 0deg; }
+
+/* The tilt itself is a resting STATE, not motion, so it stays under
+   prefers-reduced-motion — flattening the board would just remove the design.
+   The straighten-on-hover transition is motion and does go. */
+@media (prefers-reduced-motion: reduce) {
+    .pass-wall > .pass { transition: none; }
 }

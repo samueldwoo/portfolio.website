@@ -431,22 +431,4 @@ const spanLabel = `${MONTH_ABBR[firstM - 1]} ${firstY} – ${MONTH_ABBR[lastM - 
         </section>
     </main>
 
-<!-- TEMPORARY demo toggle — remove once a wall treatment is chosen.
-     Lets both candidate layouts be compared live (including hover) without a
-     rebuild: /travel.html?wall=stubs  or  ?wall=gates  (no param = plain grid).
-     Inline and in-body on purpose: it must run before paint so there is no
-     visible reflow, and it is page-scoped so it cannot leak to index/projects. -->
-<script is:inline>
-  (function () {
-    var v = new URLSearchParams(location.search).get('wall');
-    if (v !== 'stubs' && v !== 'gates') return;
-    var apply = function () {
-      var w = document.querySelector('.pass-wall');
-      if (w) w.classList.add('pass-wall--' + v);
-    };
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', apply, { once: true });
-    } else { apply(); }
-  })();
-</script>
 </Base>
