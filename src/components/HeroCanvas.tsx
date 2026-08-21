@@ -459,6 +459,8 @@ export default function HeroCanvas() {
     let velY = 0;
     let cupX = 0;
     let cupY = 0;
+    /** host's inline touch-action, saved while a drag holds it at 'none'. */
+    let prevTouchAction = '';
     let pullX = 0; // current drag vector (from ball toward the pointer)
     let pullY = 0;
     let putts = 0;
@@ -504,7 +506,13 @@ export default function HeroCanvas() {
         const pad = Math.max(18, cssH * 0.022);
         const top = copyBottom * cssH + pad;
         const h = Math.max(130, cssH - top - pad);
-        return { x: cssW * 0.08, y: top, w: cssW * 0.84, h };
+        /* 0.16/0.68 rather than 0.08/0.84. You aim by dragging BACK from the
+           ball, so the margin outside the box is the drag runway. At 0.08 the
+           ball could rest 31px from the screen edge at 390px wide, which capped
+           power at ~20% and made putting away from that wall impossible. 0.16
+           leaves ~62px of runway against a 90px narrow maxPull() — ~69% power
+           available even in the worst lie, and more from anywhere else. */
+        return { x: cssW * 0.16, y: top, w: cssW * 0.68, h };
       }
       return { x: cssW * 0.48, y: cssH * 0.16, w: cssW * 0.46, h: cssH * 0.68 };
     };
@@ -572,11 +580,34 @@ export default function HeroCanvas() {
     /** Boxed so resetBall can read the animation clock without forward refs. */
     const clockRef = { v: 0 };
 
+    /** Coarse pointer = finger. Checked once; a mouse and a touch screen want
+     *  very different grab radii and pull lengths. */
+    const coarse =
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(pointer: coarse)').matches;
+
     const inBall = (x: number, y: number) => {
       const dx = x - ballX;
       const dy = y - ballY;
-      return dx * dx + dy * dy <= 26 * 26; // generous grab radius
+      // 26px is fine for a cursor and far too small for a fingertip — the
+      // recommended minimum touch target is 44px across, i.e. a 22px radius
+      // just to cover the contact patch, before any aiming precision.
+      const r = coarse ? 42 : 26;
+      return dx * dx + dy * dy <= r * r;
     };
+
+    /**
+     * How far you must drag for full power.
+     *
+     * On a phone this CANNOT be the desktop 150px. You aim by dragging back
+     * AWAY from your target, so the usable drag length is however much screen
+     * lies behind the ball — and at 390px wide with the ball near the edge of
+     * the play box that was as little as 31px, capping power at ~20% and making
+     * a putt off the side wall impossible. Shorter pull + a play box inset
+     * further from the screen edge (see playBox) is what makes every lie
+     * playable.
+     */
+    const maxPull = () => (narrow ? 90 : MAX_PULL);
 
     /** Advance the ball one step. Returns true while it is still moving. */
     const stepBall = (dt: number) => {
@@ -717,7 +748,7 @@ export default function HeroCanvas() {
         const dx = ballX - ptrX;
         const dy = ballY - ptrY;
         const len = Math.sqrt(dx * dx + dy * dy);
-        const clamped = Math.min(len, MAX_PULL);
+        const clamped = Math.min(len, maxPull());
         pullX = len ? (dx / len) * clamped : 0;
         pullY = len ? (dy / len) * clamped : 0;
       }
@@ -727,6 +758,45 @@ export default function HeroCanvas() {
        Listeners live on the WRAPPER, not the window, and the wrapper is
        pointer-events:none except for the ball hit area, so the hero copy stays
        selectable and the nav/explore-cue stay clickable. */
+
+    /* Game input listens on the hero SECTION, not the canvas wrapper: the wrapper
+       is pointer-events:none (so it cannot swallow clicks on the copy or the
+       explore cue), which also means it never receives events itself.
+       Declared here rather than beside the listener registrations because
+       onDown/onUp reach for it to lock touch-action for the gesture. */
+    const host: HTMLElement = wrap.closest('.band-home') ?? wrap.parentElement ?? wrap;
+
+    /* THE BALL HANDLE — why this element exists.
+       `touch-action` is resolved by the browser at TOUCHSTART, from the hit-test
+       element and its ancestors. Setting it from a pointerdown handler is already
+       too late: the compositor has committed to a pan and the page scrolls out
+       from under the drag. Measured before this: 5 of 7 lies scrolled mid-putt.
+
+       It cannot go on the hero section either -- `touch-action: none` there would
+       mean a swipe anywhere over the hero (or, on mobile, over the whole green
+       band) no longer scrolls the page, which is far worse than a fiddly putt.
+
+       So the only element that declines the pan is a small circle that tracks the
+       ball. Touches ON THE BALL are ours; every other touch on the green still
+       scrolls normally. `pointer-events: auto` is explicit because the wrapper
+       above it is `pointer-events: none`. */
+    const handle = document.createElement('div');
+    handle.setAttribute('aria-hidden', 'true');
+    const HANDLE_R = coarse ? 44 : 30;
+    handle.style.cssText =
+      'position:absolute;width:' + HANDLE_R * 2 + 'px;height:' + HANDLE_R * 2 + 'px;' +
+      'margin:' + -HANDLE_R + 'px 0 0 ' + -HANDLE_R + 'px;' +
+      'border-radius:50%;background:transparent;pointer-events:auto;' +
+      'touch-action:none;-ms-touch-action:none;cursor:grab;z-index:1;';
+    wrap.appendChild(handle);
+
+    /** Park the handle on the ball. Only has to be right when the ball is at
+     *  rest, since you cannot aim a moving ball. */
+    const syncHandle = () => {
+      handle.style.left = ballX + 'px';
+      handle.style.top = ballY + 'px';
+      handle.style.display = phase === 'rolling' ? 'none' : 'block';
+    };
 
     const localPt = (e: PointerEvent) => {
       const rect = canvas.getBoundingClientRect();
@@ -744,12 +814,21 @@ export default function HeroCanvas() {
       try {
         (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
       } catch { /* older Safari — the move/up listeners still fire */ }
-      e.preventDefault();
+      /* Hand the whole gesture to us for its duration. On iOS the compositor can
+         claim a pan BEFORE the first pointermove arrives, and by then
+         preventDefault is too late — so the scroll has to be disabled up front
+         and restored on release. Only set while actually aiming, so normal
+         scrolling over the hero is unaffected. */
+      prevTouchAction = host.style.touchAction;
+      host.style.touchAction = 'none';
+      if (e.cancelable) e.preventDefault();
     };
 
     const onUp = (e: PointerEvent) => {
       if (phase !== 'aiming') return;
-      const power = Math.sqrt(pullX * pullX + pullY * pullY) / MAX_PULL;
+      // Restore scrolling first, before any early return below.
+      host.style.touchAction = prevTouchAction;
+      const power = Math.sqrt(pullX * pullX + pullY * pullY) / maxPull();
       try {
         (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
       } catch { /* ignore */ }
@@ -1158,6 +1237,10 @@ export default function HeroCanvas() {
       }
 
       ctx.globalAlpha = 1;
+
+      // Keep the touch handle parked on the ball. Two style writes per frame;
+      // cheaper than tracking every place the ball can move.
+      syncHandle();
     };
 
     /* ---------------- reduced motion: one frame, no loop, ever ---------------- */
@@ -1326,16 +1409,36 @@ export default function HeroCanvas() {
     window.addEventListener('pointerdown', onPointer, { passive: true });
     window.addEventListener('mousemove', onPointer as EventListener, { passive: true });
 
-    /* Game input listens on the hero SECTION, not the canvas wrapper: the
-       wrapper is pointer-events:none (so it cannot swallow clicks on the copy or
-       the explore cue), which also means it never receives events itself.
-       onDown claims the gesture only when the press lands on the ball, so
+    /* onDown claims the gesture only when the press lands on the ball, so
        ordinary clicks, links and text selection are untouched. */
-    const host: HTMLElement = wrap.closest('.band-home') ?? wrap.parentElement ?? wrap;
-    host.addEventListener('pointerdown', onDown);
+    /* Aiming binds to the handle (it owns touch-action); the tap-to-re-tee
+       accelerator stays on the section so it works anywhere on the green. */
+    handle.addEventListener('pointerdown', onDown);
+    handle.addEventListener('pointerup', onUp);
+    handle.addEventListener('pointercancel', onUp);
     host.addEventListener('pointerdown', onTapReset);
     host.addEventListener('pointerup', onUp);
-    host.addEventListener('pointercancel', onUp);
+
+    /* THE DRAG MUST BEAT THE PAGE SCROLL.
+       The window `pointermove` above is `passive: true`, which by definition
+       cannot call preventDefault() — so on a touch screen the browser treated an
+       aiming drag as a page pan and scrolled the hero away mid-putt. That is the
+       whole of "the touch and pull mechanism is iffy on mobile".
+
+       This second listener is deliberately NON-passive and only cancels the
+       default while `phase === 'aiming'`, i.e. only after onDown decided the
+       press landed on the ball. Every other touch on the hero still scrolls
+       normally. `touch-action: none` is also set on the host for the duration of
+       the gesture (see onDown/onUp) because on iOS the browser can claim a pan
+       before the first move event arrives, and preventDefault alone is too late
+       in that case. */
+    const onDragMove = (e: PointerEvent) => {
+      if (phase !== 'aiming') return;
+      onPointer(e);
+      if (e.cancelable) e.preventDefault();
+    };
+    handle.addEventListener('pointermove', onDragMove, { passive: false });
+    host.addEventListener('pointermove', onDragMove, { passive: false });
 
     sync();
 
@@ -1347,10 +1450,16 @@ export default function HeroCanvas() {
       window.removeEventListener('pointermove', onPointer);
       window.removeEventListener('pointerdown', onPointer);
       window.removeEventListener('mousemove', onPointer as EventListener);
-      host.removeEventListener('pointerdown', onDown);
       host.removeEventListener('pointerdown', onTapReset);
       host.removeEventListener('pointerup', onUp);
-      host.removeEventListener('pointercancel', onUp);
+      host.removeEventListener('pointerup', onUp);
+      host.removeEventListener('pointermove', onDragMove);
+      host.style.touchAction = prevTouchAction;
+      handle.removeEventListener('pointerdown', onDown);
+      handle.removeEventListener('pointerup', onUp);
+      handle.removeEventListener('pointercancel', onUp);
+      handle.removeEventListener('pointermove', onDragMove);
+      handle.remove();
       delete w.__puttTest;
     };
   }, []);
