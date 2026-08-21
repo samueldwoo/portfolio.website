@@ -386,16 +386,48 @@
    the display type this pass inflated, so turning it down walks back THIS
    change and nothing else.
 
-     1.00  as the layout pass shipped it   hero 176px / title 134px  (8:1)
-     0.78  current                         hero 137px / title 105px  (6:1)
+   Measured at a 1440 viewport:
+     1.00  as the layout pass shipped it   hero 176px / title 134px  (7.7:1)
+     0.78                                  hero 137px / title 105px  (6.0:1)
      0.73  ~ the pre-overhaul scale        hero 128px / title  98px  (5.6:1)
+     0.70                                  hero 123px / title  94px  (5.4:1)
+     0.50  current                         hero  88px / title  67px  (3.9:1)
 
    Lower = calmer. Only edit this number; the rules below follow it.
    NOTE: `.hero-name` feeds the HeroCanvas ink fade, which re-measures the copy
    edge at runtime — so changing this cannot re-break the hero fade. Verified.
+
+   >>> CAVEAT AT LOW VALUES. The dial multiplies the whole clamp(), INCLUDING its
+   minimum — and those minimums are the mobile sizes. So a low value also shrinks
+   the phone floor, which was never inflated. Measured at 0.50 / 390px wide:
+   title 24.0px over 16.0px body = a 1.50:1 ratio, and a 28.8px "hero" name.
+   Desktop reads fine at 0.50; mobile hierarchy nearly collapses.
+   If that becomes a problem, give narrow its own value rather than compromising
+   desktop -- one extra rule, no other changes:
+       @media (max-width: 899px) { :root { --display-scale: .78; } }
    -------------------------------------------------------------------------- */
 :root {
-    --display-scale: .70;
+    --display-scale: .50;
+
+    /* ---- PAGE WIDTH ----
+       styles.css sets --content-max: 1200px, which at a 1440 viewport leaves
+       120px of margin per side and reads wide/edge-to-edge. Narrowing it pulls
+       every band, and the nav bar with it, into a more centred column.
+
+       Measured side margin at a 1440 viewport (the band's own
+       clamp(24px, 5vw, 64px) padding is the floor below that):
+         1200px  120px per side   as styles.css ships it
+         1120px  160px per side
+         1080px  180px per side   current
+         1040px  200px per side
+          960px  240px per side   quite narrow; the 12-col bento starts to crowd
+
+       Safe to lower: `--ed-hang` is gated to >=1400px against the band's content
+       box, so a NARROWER content column only increases its slack (at 1080 the
+       hang has 116px per side to play with instead of 36px). The hero's 58ch
+       measure is pinned in px and does not move, and the canvas ink fade
+       re-measures the copy edge at runtime. */
+    --content-max: 1080px;
 }
 
 .section-title {
