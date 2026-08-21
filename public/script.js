@@ -157,13 +157,38 @@
         setHash("#" + id);
     }
 
-    /* ---------- 3. One scroll to a section, used by every affordance ---------- */
+    /* ---------- 3. One scroll to a section, used by every affordance ----------
+
+       WHY NOT scrollIntoView: a ScrollTrigger-PINNED section is `position:
+       fixed` for as long as its pin holds, so the browser resolves it against
+       where it is right now rather than where it sits in the document. Clicking
+       "sam." on the home page landed at scrollY 765 -- exactly the hero's pin
+       span (900 x 0.85) -- which pushed `.hero-meta` to y=36 underneath a 69px
+       bar and cut the summary line off. Measured; and it only reproduced at
+       >=900px, because the hero pin does not run on narrow.
+
+       ScrollTrigger keeps a `.pin-spacer` in the flow at the section's real
+       position, so that is the element to measure. This also covers travel's
+       pinned boarding-pass track, which had the same latent bug.
+
+       `scroll-margin-top` lives on `.band` (calibrated against --topbar-h), and
+       a manual scrollTo does not honour it, so read it off the target and
+       subtract it by hand. */
+    function sectionScrollTop(target) {
+        var flow = (target.closest && target.closest(".pin-spacer")) || target;
+        var margin = parseFloat(getComputedStyle(target).scrollMarginTop) || 0;
+        var y = flow.getBoundingClientRect().top +
+                (window.pageYOffset || document.documentElement.scrollTop || 0) -
+                margin;
+        return Math.max(0, Math.round(y));
+    }
+
     function goToSection(id) {
         var target = document.getElementById(id);
         if (!target) return;
-        target.scrollIntoView({
-            behavior: reduceMotion ? "auto" : "smooth",
-            block: "start"
+        window.scrollTo({
+            top: sectionScrollTop(target),
+            behavior: reduceMotion ? "auto" : "smooth"
         });
         /* Move focus with the viewport or a keyboard reader is left behind at
            the top of the document. -1 keeps the band out of the tab order. */
@@ -902,9 +927,11 @@
         if (!target) return;
 
         var settle = function () {
-            // scroll-margin-top on .band already accounts for the sticky bar,
-            // so scrollIntoView lands the heading in the right place.
-            target.scrollIntoView({ behavior: "auto", block: "start" });
+            /* Same pin-aware resolution as goToSection: scrollIntoView on a
+               pinned section resolves against its fixed position and lands at
+               the pin end. sectionScrollTop() measures the in-flow .pin-spacer
+               and applies .band's scroll-margin-top by hand. */
+            window.scrollTo({ top: sectionScrollTop(target), behavior: "auto" });
         };
 
         var lastHeight = -1;
