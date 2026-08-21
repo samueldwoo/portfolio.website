@@ -127,6 +127,11 @@ const FRICTION = 0.12;
  * readable break without the ball behaving like it is on ice.
  */
 const SLOPE_ACCEL = 2400;
+/** Hard ceiling on how long one putt may roll (seconds). See the roll-time
+ *  cap in step(): a ball on a constant fall line never drops below
+ *  STOP_SPEED, so without this a putt can trickle for 11s+ and the player
+ *  simply waits, unable to aim. */
+const MAX_ROLL = 7;
 /** Max drag length in px that maps to full power. */
 const MAX_PULL = 150;
 const MAX_SPEED = 900;
@@ -459,6 +464,15 @@ export default function HeroCanvas() {
     let putts = 0;
     let sunkAt = 0; // clock time the ball dropped, for the flourish
     let flagSway = 0;
+    /** True while the ball was already touching a wall last frame. Tangential
+     *  damping is applied only on the frame contact BEGINS — see the wall block
+     *  in step() for why re-damping every frame kills a slide along a wall. */
+    let onWall = false;
+    /** Seconds the ball has been below STOP_SPEED without qualifying to stop.
+     *  Backstop against a soft-lock; see the stall guard in step(). */
+    let stalled = 0;
+    /** Seconds the current putt has been rolling; capped by MAX_ROLL. */
+    let rollTime = 0;
     /** Ball start, expressed as a fraction of the play box so it survives resize. */
     let startFx = 0.28;
     let startFy = 0.72;
@@ -550,6 +564,9 @@ export default function HeroCanvas() {
       phase = 'idle';
       pullX = 0;
       pullY = 0;
+      onWall = false;
+      stalled = 0;
+      rollTime = 0;
     };
 
     /** Boxed so resetBall can read the animation clock without forward refs. */
@@ -582,10 +599,25 @@ export default function HeroCanvas() {
          which let a strong putt ricochet around the box for seconds and ended
          every attempt in the same corner — that masked the slope entirely and
          made two putts from opposite sides look identical. */
-      if (ballX < b.x) { ballX = b.x; velX = 0; velY *= 0.5; }
-      if (ballX > b.x + b.w) { ballX = b.x + b.w; velX = 0; velY *= 0.5; }
-      if (ballY < b.y) { ballY = b.y; velY = 0; velX *= 0.5; }
-      if (ballY > b.y + b.h) { ballY = b.y + b.h; velY = 0; velX *= 0.5; }
+      let atL = false;
+      let atR = false;
+      let atT = false;
+      let atB = false;
+      if (ballX < b.x) { ballX = b.x; velX = 0; atL = true; }
+      if (ballX > b.x + b.w) { ballX = b.x + b.w; velX = 0; atR = true; }
+      if (ballY < b.y) { ballY = b.y; velY = 0; atT = true; }
+      if (ballY > b.y + b.h) { ballY = b.y + b.h; velY = 0; atB = true; }
+      const touching = atL || atR || atT || atB;
+      /* Damp the TANGENTIAL component only on the frame contact begins.
+         Applying it every frame (as this used to) meant a ball held against a
+         wall by the slope had its along-the-wall speed halved on every single
+         frame, so it could never slide to a corner and never build enough speed
+         to leave — it just died in place against the wall. */
+      if (touching && !onWall) {
+        if (atL || atR) velY *= 0.5;
+        if (atT || atB) velX *= 0.5;
+      }
+      onWall = touching;
 
       // Cup capture: close enough AND slow enough. Too hot and it rims out,
       // which is both realistic and stops the game being trivial.
@@ -616,11 +648,52 @@ export default function HeroCanvas() {
          from a standstill on every green, which made the slope feel absent no
          matter how steep it was. Now the stop test also requires the local
          gradient to be gentle; on a real incline the ball keeps trickling. */
-      const slopeMag = Math.hypot(s.gx, s.gy);
+      /* A WALL CAN HOLD THE BALL. The green is built on a dominant constant
+         fall-line plane (deliberately — a plane has no local minima, so nothing
+         acts as an attractor), which means `slopeMag` is roughly 70 almost
+         everywhere against a 33.6 threshold. So `holds` was essentially never
+         true on open ground: every putt trickled downhill until it reached the
+         edge of the play box, and there the clamp above zeroed its normal
+         velocity while `holds` stayed false — so `phase` never returned to
+         'idle', and since aiming requires 'idle' the ball became permanently
+         unplayable. That is the "ball sticks at the bottom and dies" bug.
+
+         The fix is physical rather than a fudge: a wall the slope is pressing
+         the ball INTO supplies a reaction force, so that component of the
+         gradient is supported and must not count toward "is this ground too
+         steep to rest on". Zero the supported components and test the
+         remainder. A ball pressed straight into a wall now rests; a ball whose
+         slope runs ALONG the wall still slides, down to the corner. */
+      let rgx = s.gx;
+      let rgy = s.gy;
+      if (atL && rgx < 0) rgx = 0;
+      if (atR && rgx > 0) rgx = 0;
+      if (atT && rgy < 0) rgy = 0;
+      if (atB && rgy > 0) rgy = 0;
+      const slopeMag = Math.hypot(rgx, rgy);
       const holds = slopeMag < SLOPE_ACCEL * 0.014;
-      if (speed < STOP_SPEED && holds) {
+
+      /* Stall backstop. The wall-support rule above is the real fix, but the
+         game must not be able to soft-lock for ANY geometry we did not think
+         of — an unplayable hero is far worse than a ball that parks slightly
+         early. If the ball has crawled below the stop speed for a sustained
+         moment without qualifying, let it rest anyway. */
+      if (speed < STOP_SPEED) stalled += dt;
+      else stalled = 0;
+
+      /* Roll-time cap. Distinct from the stall guard: a ball trickling down a
+         constant fall line stays ABOVE the stop speed indefinitely, so `stalled`
+         never accumulates and the putt just keeps going. Measured one putt still
+         rolling at 11.2s — not soft-locked, but you cannot putt again until it
+         rests, and eleven seconds of waiting reads as broken. Cap the roll and
+         let it settle where it lies. */
+      rollTime += dt;
+
+      if (rollTime > MAX_ROLL || (speed < STOP_SPEED && (holds || stalled > 0.9))) {
         velX = 0;
         velY = 0;
+        stalled = 0;
+        rollTime = 0;
         phase = 'idle';
         return false;
       }
@@ -693,6 +766,9 @@ export default function HeroCanvas() {
       pullX = 0;
       pullY = 0;
       phase = 'rolling';
+      onWall = false;
+      stalled = 0;
+      rollTime = 0;
       putts += 1;
       start(); // make sure the loop is running to animate the roll
     };
@@ -1173,6 +1249,9 @@ export default function HeroCanvas() {
         velX = (dx / len) * power * MAX_SPEED;
         velY = (dy / len) * power * MAX_SPEED;
         phase = 'rolling';
+      onWall = false;
+      stalled = 0;
+      rollTime = 0;
         putts += 1;
         start();
       },
