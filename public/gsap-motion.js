@@ -11,13 +11,12 @@
      Motion    owns : `transform` on hover/press for .pass, .project-card,
                       .favorite-item, .bubble, .skills-list li (motion-ux.js).
                       NOTHING here may write transform on those nodes — see
-                      the .pass-depth wrapper in section 6b for how the
-                      scrubbed 3D depth and the hover lift are kept apart.
+                      NOTHING here writes transform on those nodes.
      GSAP (here) owns: the brand springy wordmark, the decorative
                       .shape-field line-art layer (its scroll-linked
                       self-draw AND its parallax plane), the pinned hero
                       depth stack, the pinned horizontal boarding-pass
-                      track, hero/glow parallax, contour density from
+                      hero/glow parallax, contour density from
                       scroll velocity, the timeline progress rail, chip
                       staggers, every element tagged .gsap-reveal, and —
                       via SplitText (section 8) — the masked line-rise on
@@ -34,11 +33,11 @@
         elimination: they are the only hero nodes that neither `.reveal`
         (which owns transform + a .6s CSS transition on it) nor Motion
         writes to.
-     2. A PINNED HORIZONTAL TRACK (§6b). The 11-card boarding-pass wall
-        becomes a filmstrip scrubbed sideways by vertical scroll, with a
-        per-card 3D tilt away from the reading centre. >=1024px only, and
-        the only over-wide box on the site — clipped by its own container,
-        never by the document.
+     2. (REMOVED — §6b). This was a pinned horizontal boarding-pass
+        filmstrip scrubbed sideways by vertical scroll. Cut on review: it
+        welded sideways motion to the page scroll, and a filmstrip showed
+        one or two of eleven trips at a time. The bento grid underneath
+        shows them all. See §6b for the full note.
      3. SCROLL-LINKED LINE-ART (§2). `.shape-field` strokes draw themselves
         against scroll progress instead of playing a fixed tween on enter,
         parallax on an injected plane, and thicken with scroll VELOCITY via
@@ -84,12 +83,6 @@
            measurements actually depend on. */
         ScrollTrigger.config({ ignoreMobileResize: true });
     }
-
-    /* The horizontal track's breakpoint. Spelled ONCE here and mirrored
-       verbatim in scroll.css §3 — if the two diverge, CSS collapses the
-       strip back to a grid while JS keeps translating it, and the `x` lands
-       on an unclipped element: document-level horizontal overflow. */
-    var TRACK_MQ = "(min-width: 1024px)";
 
     // Tell script.js it is safe to hand .gsap-reveal elements over to us.
     document.documentElement.classList.add("gsap-on");
@@ -830,239 +823,31 @@
     }
 
     /* ============================================================
-       6b. PINNED HORIZONTAL TRACK — the boarding-pass filmstrip
-       The 11-card wall stops being a wall. `.pass-wall` is re-laid-out as
-       a single row wider than the viewport, its section pins, and vertical
-       scroll is remapped to horizontal travel along the strip — with each
-       card tilting away from the reading centre in 3D as it passes.
+       6b. REMOVED — the pinned horizontal boarding-pass filmstrip
+       The 11 passes used to be re-laid-out as a single row wider than the
+       viewport, with the section pinned and vertical scroll remapped to
+       horizontal travel along the strip.
 
-       ---- Why it cannot overflow the document ----
-       `.pass-wall` becomes the only box on the site wider than the
-       viewport, and it lives inside `.hviewport`, which uses
-       `overflow: clip`. `clip` rather than `hidden` on purpose: `hidden`
-       makes the element a scroll container, so a fragment jump or a focus
-       inside it could scroll it and desync it from the ScrollTrigger that
-       owns its `x`. `clip` cannot be scrolled by anything. (Nothing inside
-       a pass is focusable — they are <article>s of text and one <img> —
-       so no focus can be trapped off-screen.)
+       Removed on review, for two reasons given together:
+         - tying the sideways motion to the page scroll meant you could not
+           look through the trips without also moving the page, and the two
+           gestures fought each other;
+         - a filmstrip shows one or two passes at a time. The point of this
+           section is the SET -- eleven real trips -- and a carousel hides
+           most of it behind a gesture.
 
-       ---- Why the DOM is built unconditionally ----
-       The three wrappers are created once, for every viewport, and default
-       to `display: contents` in scroll.css — layout-transparent, so `.pass`
-       stays a direct grid item and the original 3/2/1-column wall renders
-       exactly as before. Only `TRACK_MQ` promotes them to real boxes. A
-       resize across the breakpoint is therefore a pure CSS switch: no
-       re-parenting, no re-measure, and nothing to unwind if the resize
-       lands mid-tween. Building the DOM in a matchMedia callback instead
-       would mean re-parenting eleven cards during a drag-resize.
+       What replaces it is what was already underneath: layout.css's 12-column
+       bento (two wide featured passes, then three rows of three), which was
+       only ever overridden above 1024px by the track. Every pass is on screen
+       at once and nothing is scroll-driven.
 
-       ---- Why each card gets a wrapper ----
-       motion-ux.js claims `.pass` for its hover lift, i.e. Motion owns
-       `transform` on that node. The scrubbed 3D depth is therefore written
-       to an injected `.pass-depth` parent instead. Two systems, two nodes,
-       one property each — the hover spring and the depth tilt compose
-       instead of fighting. This is the single most repeated bug in this
-       repo and the wrapper is the whole fix.
+       The entrance stagger in section 7 stays -- it is triggered on enter, not
+       scrubbed, so it plays once and does not follow the scrollbar.
+
+       scroll.css section 3 held the matching CSS and is gone too. Nothing
+       injects `.hstage` / `.hviewport` / `.pass-depth` any more.
        ============================================================ */
-    var track = null;
-    if (hasST) {
-        (function buildTrack() {
-            var wall = document.querySelector(".pass-wall");
-            if (!wall || !wall.parentNode) return;
-            var cards = toArray(wall.children).filter(function (el) {
-                return el.classList && el.classList.contains("pass");
-            });
-            // Under four cards there is no strip worth scrubbing.
-            if (cards.length < 4) return;
 
-            var stage = document.createElement("div");
-            stage.className = "hstage";
-            var view = document.createElement("div");
-            view.className = "hviewport";
-            wall.parentNode.insertBefore(stage, wall);
-            stage.appendChild(view);
-            view.appendChild(wall);
-
-            var depths = cards.map(function (card) {
-                var d = document.createElement("div");
-                d.className = "pass-depth";
-                wall.insertBefore(d, card);
-                d.appendChild(card);
-                return d;
-            });
-
-            /* Read-position affordance. A scrubbed track has no scrollbar of
-               its own, so without a rail there is no way to tell how much
-               strip is left — the pin would just feel like the page had
-               stopped. Purely decorative, hence aria-hidden: the passes
-               themselves are unchanged in the accessibility tree, still in
-               DOM order, still fully readable. */
-            var pad = function (n) { return (n < 10 ? "0" : "") + n; };
-            var foot = document.createElement("div");
-            foot.className = "hstage-foot";
-            foot.setAttribute("aria-hidden", "true");
-            foot.innerHTML =
-                '<span class="hstage-rail"><span class="hstage-fill"></span></span>' +
-                '<span class="hstage-count">' +
-                '<span class="hstage-now">01</span>' +
-                '<span class="hstage-sep">/</span>' +
-                '<span class="hstage-tot">' + pad(cards.length) + '</span>' +
-                '</span>';
-            stage.appendChild(foot);
-
-            track = {
-                stage: stage,
-                view: view,
-                wall: wall,
-                cards: cards,
-                depths: depths,
-                fill: foot.querySelector(".hstage-fill"),
-                now: foot.querySelector(".hstage-now")
-            };
-        })();
-    }
-
-    if (hasST && track) {
-        (function trackMotion() {
-            var T = track;
-            var topbar = document.querySelector(".topbar");
-            var mmTrack = gsap.matchMedia();
-
-            mmTrack.add(TRACK_MQ, function () {
-                /* Geometry is MEASURED, never assumed. Card width is a
-                   clamp() on vw and the gap is a clamp() too, so the travel
-                   distance differs at every window size — and the airline
-                   logos are images, so the strip's real width only exists
-                   after they decode. `invalidateOnRefresh` + re-measuring in
-                   onRefresh is what makes the pin length deterministic
-                   (see §9). */
-                var geo = { dist: 0, mid: 0, vw: 1, centres: [] };
-                var measure = function () {
-                    geo.vw = T.view.clientWidth || 1;
-                    // offsetWidth is layout width — unaffected by the `x` we
-                    // are writing, so this is safe to re-read mid-tween.
-                    geo.dist = Math.max(0, T.wall.offsetWidth - geo.vw);
-                    geo.mid = T.view.offsetLeft + geo.vw / 2;
-                    geo.centres = T.depths.map(function (d) {
-                        return d.offsetLeft + d.offsetWidth / 2;
-                    });
-                };
-
-                var clamp = gsap.utils.clamp;
-                var lastLabel = "";
-
-                /* Per-frame depth. Driven off the tween's OWN x rather than
-                   the trigger's raw progress, so it inherits `scrub: 1`'s
-                   smoothing instead of snapping a frame ahead of the strip.
-                   No getBoundingClientRect in here: every card centre is a
-                   static layout number measured once per refresh, so the
-                   loop is pure arithmetic and cannot thrash layout. */
-                var paint = function () {
-                    var x = parseFloat(gsap.getProperty(T.wall, "x")) || 0;
-                    var best = 0, bestD = Infinity;
-                    for (var i = 0; i < T.depths.length; i++) {
-                        // -1 .. +1 across the visible frame, 0 at the centre.
-                        var d = (geo.centres[i] + x - geo.mid) / geo.vw;
-                        var ad = Math.abs(d);
-                        if (ad < bestD) { bestD = ad; best = i; }
-                        gsap.set(T.depths[i], {
-                            rotationY: clamp(-17, 17, -d * 27),
-                            scale: 1 - Math.min(0.13, ad * 0.17),
-                            y: Math.min(24, ad * 32)
-                            // No opacity: a `.pass` must read >= 0.99 at rest
-                            // no matter where the strip stopped.
-                        });
-                    }
-                    var frac = geo.dist ? clamp(0, 1, -x / geo.dist) : 1;
-                    if (T.fill) gsap.set(T.fill, { scaleX: frac });
-
-                    /* Nearest-to-centre is the honest answer in the middle of
-                       the strip, but not at its ends: at rest the leftmost
-                       card sits AT the left edge, so card 2 is the one
-                       centred and the counter would open on "02" and close
-                       on "10 / 11". Pinning the two extremes to the first
-                       and last card makes the readout agree with the rail. */
-                    var idx = best;
-                    if (frac <= 0.002) idx = 0;
-                    else if (frac >= 0.998) idx = T.depths.length - 1;
-                    var label = (idx + 1 < 10 ? "0" : "") + (idx + 1);
-                    if (T.now && label !== lastLabel) {
-                        T.now.textContent = label;
-                        lastLabel = label;
-                    }
-                };
-
-                gsap.set(T.depths, { transformPerspective: 1100, transformOrigin: "50% 50%" });
-                measure();
-
-                var tl = gsap.timeline({
-                    defaults: { ease: "none" },
-                    onUpdate: paint,
-                    scrollTrigger: {
-                        trigger: T.stage,
-                        /* Park the strip just clear of the sticky topbar
-                           rather than flush at `top top`, or the cards spend
-                           the whole pin sliding under a translucent bar. */
-                        start: function () {
-                            return "top " + ((topbar ? topbar.offsetHeight : 68) + 12) + "px";
-                        },
-                        /* Pin exactly as long as the strip needs, plus a
-                           beat at the end so the last card is readable
-                           before the page moves on. Hard-coding `+=150%`
-                           here would either cut the strip short or stall. */
-                        end: function () {
-                            return "+=" + Math.round(geo.dist + window.innerHeight * 0.45);
-                        },
-                        pin: true,
-                        pinSpacing: true,
-                        anticipatePin: 1,
-                        scrub: 1,
-                        invalidateOnRefresh: true,
-                        // Same reason as the hero pin: this pin adds ~3000px
-                        // of spacing, and anything measured before it is
-                        // re-applied measures a document that short. The
-                        // `.pass` reveal (§7) triggers on this very stage.
-                        refreshPriority: 1,
-                        onRefresh: function () { measure(); paint(); }
-                    }
-                });
-                tl.fromTo(T.wall, { x: 0 }, { x: function () { return -geo.dist; } }, 0);
-
-                /* Velocity skew on the STRIP, not on the cards. The strip is
-                   our own injected node and GSAP is the only thing that ever
-                   writes its matrix, so `x` (from the scrub) and `skewY`
-                   (from velocity) are two components of one cached transform
-                   — they compose. The same skew written on `.pass` would
-                   collide with Motion's hover lift.
-
-                   The settle is a timer, not a velocity threshold:
-                   getVelocity() is only sampled while scroll events arrive,
-                   so the last sample after a flick is large, never zero.
-                   Without the timer the strip would stay sheared. */
-                var skew = gsap.quickTo(T.wall, "skewY", { duration: 0.45, ease: "power3.out" });
-                var settle = null;
-                var vST = ScrollTrigger.create({
-                    trigger: T.stage,
-                    start: "top bottom",
-                    end: "bottom top",
-                    onUpdate: function (self) {
-                        skew(clamp(-2.4, 2.4, self.getVelocity() / -900));
-                        if (settle) clearTimeout(settle);
-                        settle = setTimeout(function () { skew(0); }, 130);
-                    }
-                });
-
-                return function () {
-                    if (settle) clearTimeout(settle);
-                    vST.kill();
-                    // Provably no inline transform left on any of it.
-                    gsap.set(T.depths, { clearProps: "all" });
-                    gsap.set(T.wall, { clearProps: "all" });
-                    if (T.fill) gsap.set(T.fill, { clearProps: "all" });
-                };
-            });
-        })();
-    }
 
     /* ============================================================
        6c. Trip cadence — bars that grow under the gesture
@@ -1152,14 +937,10 @@
        the real one and the diagonal would break at every batch boundary.
        start:"top 78%" keeps the first row from firing before it's in view. */
     if (hasST && passes.length) {
-        /* In track mode the wall is a strip wider than the viewport and most
-           of it is off to the right, so `.pass-wall` is the wrong thing to
-           measure a start line against — the pinned STAGE is the box that
-           actually enters the viewport. `grid: 'auto'` still does the right
-           thing on a single row: it measures one row and the wave runs
-           left-to-right along the strip. */
-        var wall = (track && track.stage) ||
-            passes[0].closest(".pass-wall") || passes[0].parentElement;
+        /* The wall is a real grid again (the filmstrip is gone, see 6b), so it
+           is the right box to measure the start line against and `grid:'auto'`
+           reads its actual rows — the wave runs diagonally across the bento. */
+        var wall = passes[0].closest(".pass-wall") || passes[0].parentElement;
         gsap.set(passes, { opacity: 0, y: 34, scale: 0.97, rotateX: -6, transformPerspective: 800 });
         gsap.to(passes, {
             opacity: 1, y: 0, scale: 1, rotateX: 0,

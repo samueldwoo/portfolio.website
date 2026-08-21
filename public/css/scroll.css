@@ -5,8 +5,8 @@
    CSS is split by domain rather than kept in styles.css.
 
    OWNS: resting + finished states for scroll-triggered content, pinned
-         section scaffolding, sticky rails, horizontal-scroll tracks, parallax
-         containers, scroll-linked SVG/line-art.
+         section scaffolding, sticky rails, parallax containers,
+         scroll-linked SVG/line-art.
    DOES NOT OWN: the GSAP timelines themselves (gsap-motion.js), nav chrome
          (nav.css), hover/press springs (motion.css).
 
@@ -39,9 +39,11 @@
        gsap.set() calls at runtime, and every one of them is either scrubbed
        (so its resting value IS the finished value) or covered by the
        anti-stranding watchdog in gsap-motion.js.
-     * The horizontal track is an OPT-IN container: `.hviewport` clips, and
-       the only element wider than the viewport (`.pass-wall`) lives inside
-       it. The document itself is never made wider than its own scrollport.
+     * NOTHING here is wider than its scrollport. There used to be one
+       exception -- the pinned boarding-pass filmstrip, whose `.pass-wall`
+       exceeded the viewport inside a clipping `.hviewport`. That treatment was
+       removed (see section 3), so the exception is gone and the rule is now
+       absolute.
    ========================================================================== */
 
 
@@ -176,158 +178,29 @@ html.gsap-on .hero-fg .hero-fg-line { stroke-width: calc(1.1px * var(--contour))
 
 
 /* ==========================================================================
-   3. Horizontal boarding-pass track  (travel.html)
+   3. REMOVED — horizontal boarding-pass track  (travel.html)
    --------------------------------------------------------------------------
-   The 11-card wall becomes a pinned filmstrip you scrub sideways: the
-   section holds still, the strip travels, and each pass tilts away from the
-   reading centre in 3D. This is the one place on the site where vertical
-   scrolling is remapped to horizontal travel.
+   This section held the CSS for a pinned filmstrip: `.pass-wall` re-laid-out
+   as a single row wider than the viewport inside a clipping `.hviewport`, with
+   vertical scroll remapped to horizontal travel.
 
-   THE OVERFLOW CONTRACT. `.pass-wall` is the only box on the site allowed to
-   be wider than the viewport, and it is wrapped in `.hviewport`, which
-   clips. `overflow: clip` rather than `hidden` on purpose:
-     - `hidden` makes the element a scroll container, so a focus or a
-       fragment jump inside it would scroll it programmatically and desync it
-       from the ScrollTrigger that owns its x.
-     - `clip` cannot be scrolled by anything, so the pinned tween is the only
-       thing that can ever move the strip.
-   The passes contain no focusable descendants (they are <article>s with an
-   <img> and text), so nothing needs to be scrolled into view.
+   Removed with gsap-motion.js §6b on review — the sideways motion was welded to
+   the page scroll, and a filmstrip only ever showed one or two of eleven trips.
+   layout.css's 12-column bento (which the track used to override above 1024px)
+   now shows every pass at once, and nothing here is scroll-driven.
 
-   PROGRESSIVE ENHANCEMENT WITHOUT DOM CHURN. The wrappers are built once,
-   unconditionally, and default to `display: contents` — which makes them
-   layout-transparent, so `.pass` stays a direct grid item of `.pass-wall`
-   and the original 3/2/1-column wall renders byte-identically. Only the
-   >=1024px query turns them into real boxes. That means a resize across the
-   breakpoint is a pure CSS switch: no re-parenting, no re-measure, and
-   nothing to unwind if a resize lands mid-tween.
+   Nothing injects `.hstage` / `.hviewport` / `.pass-depth` any more, so these
+   rules matched nothing and are deleted rather than left as dead weight. The
+   reduced-motion collapse in section 4 is kept: it is inert now, but it is
+   cheap insurance if a horizontal treatment is ever reintroduced.
+
+   NOTE the overflow contract this section used to carry: `.pass-wall` was the
+   only box on the site permitted to exceed the viewport width. That permission
+   is withdrawn — nothing should be wider than its scrollport now, and
+   /tmp/gate.py asserts exactly that at 1440/820/390.
    ========================================================================== */
-.hstage, .hviewport, .pass-depth { display: contents; }
-.hstage-foot { display: none; }
-
-@media (min-width: 1024px) {
-    html.gsap-on .hstage {
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        gap: clamp(18px, 2.4vw, 30px);
-        position: relative;
-        /* Tall enough that the pinned strip reads as a framed gallery band
-           rather than a floating row, capped so that once the pin releases
-           the stage does not leave a viewport-sized void above the footer.
-           Without any min-height the stage is ~430px and the strip clings to
-           the topbar with the rest of the viewport empty below it. */
-        min-height: min(calc(100vh - var(--topbar-h) - 34px), 620px);
-        margin-block: clamp(16px, 2vw, 28px) clamp(20px, 3vw, 40px);
-    }
-
-    html.gsap-on .hviewport {
-        display: block;
-        width: 100%;
-        min-width: 0;
-        /* See "THE OVERFLOW CONTRACT" above. */
-        overflow: clip;
-        /* Breathing room for the 3D tilt + the lift on hover, which would
-           otherwise be shaved off by the clip. */
-        padding: 26px 0 30px;
-        margin-block: -26px -30px;
-        /* The strip dissolves at the edges instead of being guillotined, so
-           the clip reads as a frame rather than a bug. The two stops are
-           paired with `.pass-wall`'s padding below: the feather must land on
-           empty track, never on the first or last card, or those two cards
-           are permanently half-transparent at the strip's resting positions.
-           Left feather ends at 2.4% (~29px at 1200); right feather starts at
-           94.5% (~66px in). */
-        -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 2.4%, #000 94.5%, transparent 100%);
-                mask-image: linear-gradient(90deg, transparent 0, #000 2.4%, #000 94.5%, transparent 100%);
-    }
-
-    html.gsap-on .hviewport .pass-wall {
-        display: flex;
-        grid-template-columns: none;
-        align-items: stretch;
-        gap: clamp(20px, 2vw, 30px);
-        /* Lead-in and run-out. These are what keep the first and last card
-           clear of the edge feather at x = 0 and x = -dist respectively —
-           without them card 01 opens half-faded and card 11 closes that way,
-           which looks exactly like a clipping bug. They are inside
-           `width: max-content`, so the measured travel distance accounts for
-           them automatically. */
-        padding-inline: 40px 76px;
-        /* The one intentionally-too-wide box on the site. Clipped by
-           `.hviewport`; never reachable by the document scrollport. */
-        width: max-content;
-        will-change: transform;
-    }
-
-    html.gsap-on .hviewport .pass-depth {
-        display: block;
-        flex: 0 0 auto;
-        width: clamp(316px, 26vw, 392px);
-        /* The per-card tilt is written HERE, not on `.pass` — Motion owns
-           `transform` on `.pass` for its hover lift (motion-ux.js claims
-           `.pass` with a -5px translate). One wrapper per card is what lets
-           a scrubbed 3D depth and a hover spring coexist without either
-           library ever reading the other's matrix. */
-        transform-style: preserve-3d;
-        will-change: transform;
-    }
-    html.gsap-on .hviewport .pass-depth > .pass {
-        height: 100%;
-        /* Bigger than the wall's 190px: a pinned frame shows three cards
-           instead of nine, so each one is the subject rather than a tile. */
-        min-height: clamp(250px, 38vh, 356px);
-    }
-
-    /* Read-position affordance. A scrubbed horizontal track has no
-       scrollbar, so without this there is no way to tell how much strip is
-       left. Both halves rest in a legible state (empty rail + "01") because
-       they are only ever built when motion is on. */
-    html.gsap-on .hstage-foot {
-        display: flex;
-        align-items: center;
-        gap: 18px;
-        width: 100%;
-    }
-    html.gsap-on .hstage-rail {
-        position: relative;
-        flex: 1 1 auto;
-        height: 2px;
-        border-radius: 2px;
-        background: var(--line);
-        overflow: hidden;
-    }
-    html.gsap-on .hstage-fill {
-        position: absolute;
-        inset: 0;
-        background: var(--sage);
-        transform: scaleX(0);
-        transform-origin: 0 50%;
-    }
-    html.gsap-on .hstage-count {
-        flex: 0 0 auto;
-        display: flex;
-        align-items: baseline;
-        gap: 6px;
-        font-family: var(--mono);
-        font-size: .68rem;
-        letter-spacing: .14em;
-        color: var(--sage-deep);
-        font-variant-numeric: tabular-nums;
-    }
-    html.gsap-on .hstage-sep { opacity: .45; }
-    html.gsap-on .hstage-tot { opacity: .7; }
-}
-
-/* NOTE ON THE BREAKPOINT. `min-width: 1024px` is the ONLY condition, and
-   gsap-motion.js gates its pinned tween on the identical string. If the two
-   ever diverge — a CSS-only pointer/hover clause, say — the JS would
-   translate a strip that CSS had already collapsed back into a grid, and the
-   `x` would land on an unclipped element: instant document-level horizontal
-   overflow. One condition, spelled the same in both files. */
 
 
-/* ==========================================================================
    4. Reduced motion — the safety net
    --------------------------------------------------------------------------
    Belt-and-braces only: gsap-motion.js returns before it adds `html.gsap-on`
