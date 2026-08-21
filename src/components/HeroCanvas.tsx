@@ -1124,8 +1124,34 @@ export default function HeroCanvas() {
         }
 
         /* Fall-line arrows on a sparse grid. Contours tell you WHERE it is
-           steep; these tell you WHICH WAY without having to infer it. Sparse
-           enough (every 4th cell) to stay editorial rather than busy. */
+           steep; these tell you WHICH WAY, and how hard.
+
+           THE ARROWS AND THE CONTOURS MUST AGREE, and they did not.
+
+           Direction was never wrong — arrows, contours and the ball all read the
+           same field through the same home()/span, so an arrow is always
+           perpendicular to its contour by construction. What was broken was
+           MAGNITUDE.
+
+           The old length was `7 + min(7, m / 260)`. Measured over a real play
+           box, |gradient| ranges about 5 -> 224 (a 28-58x spread depending on the
+           round's tilt), so m/260 only ever reached 0.86 and arrow length varied
+           from 7.02px to 7.86px — a 1.09x spread. Reaching the intended +7 would
+           have needed m = 1820, eight times anything the field produces. So every
+           arrow drew the same length while the contour bands visibly tightened
+           and loosened around them. That is the disconnect: not direction, but an
+           arrow that claimed to encode steepness and did not.
+
+           The contour bands are normalised to THIS FRAME's hMin..hMax (9 equal
+           levels), so they express steepness relative to the green in front of
+           you, not on an absolute scale. The arrows now do the same: length,
+           weight and alpha all key off m / mMax over the same sampled grid. Both
+           encodings are frame-relative, so "tight bands" and "long dark arrow"
+           now mean the same thing. Matching the arrows to an absolute constant
+           instead would have re-broken them on the next re-tee, because tiltMag
+           is re-rolled per round and moves the whole range. */
+        const arrows: Array<{ px: number; py: number; ux: number; uy: number; m: number }> = [];
+        let mMax = 0;
         for (let r = 1; r < rowsN; r += 4) {
           for (let c = 1; c < cols; c += 4) {
             const px = b.x + c * gw;
@@ -1133,18 +1159,33 @@ export default function HeroCanvas() {
             const sg = slopeAt(px, py, hm2.x, hm2.y, span2, tiltAng, tiltMag, gSeed);
             const m = Math.hypot(sg.gx, sg.gy);
             if (m < 1) continue;
-            const ux = sg.gx / m;
-            const uy = sg.gy / m;
-            const len = 7 + Math.min(7, m / 260);   // longer arrow = steeper
-            ctx.beginPath();
-            ctx.moveTo(px - ux * len * 0.5, py - uy * len * 0.5);
-            ctx.lineTo(px + ux * len * 0.5, py + uy * len * 0.5);
-            // small chevron head
-            ctx.lineTo(px + ux * len * 0.5 - ux * 3 - uy * 2.2, py + uy * len * 0.5 - uy * 3 + ux * 2.2);
-            ctx.strokeStyle = `rgba(${OLIVE},${(0.4 * globalAlpha).toFixed(3)})`;
-            ctx.lineWidth = 1;
-            ctx.stroke();
+            arrows.push({ px, py, ux: sg.gx / m, uy: sg.gy / m, m });
+            if (m > mMax) mMax = m;
           }
+        }
+        for (let i = 0; i < arrows.length; i++) {
+          const a = arrows[i];
+          /* Normalised steepness, gamma-corrected. sqrt() because the raw ratio
+             spends most of its range near the low end (the plane dominates, so
+             most cells sit well under the peak) and a linear map left almost
+             every arrow stubby — the same "no visible variation" failure in a
+             new disguise. */
+          const t = mMax > 0 ? Math.sqrt(Math.min(1, a.m / mMax)) : 0;
+          const len = 6 + 12 * t;                        // 6 -> 18px
+          const head = 3 + 1.6 * t;
+          ctx.beginPath();
+          ctx.moveTo(a.px - a.ux * len * 0.5, a.py - a.uy * len * 0.5);
+          ctx.lineTo(a.px + a.ux * len * 0.5, a.py + a.uy * len * 0.5);
+          // chevron head, scaled with the shaft so steep arrows read as heavier
+          ctx.lineTo(
+            a.px + a.ux * len * 0.5 - a.ux * head - a.uy * head * 0.73,
+            a.py + a.uy * len * 0.5 - a.uy * head + a.ux * head * 0.73,
+          );
+          // Weight and alpha carry steepness too — this is the "boldness" the
+          // contours' index lines already use, applied to the same signal.
+          ctx.strokeStyle = `rgba(${OLIVE},${((0.22 + 0.32 * t) * globalAlpha).toFixed(3)})`;
+          ctx.lineWidth = 0.8 + 0.9 * t;
+          ctx.stroke();
         }
 
         /* Soft-edge the green so it has no visible boundary. destination-out
