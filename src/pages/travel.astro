@@ -1,6 +1,51 @@
 ---
 import Base from '../layouts/Base.astro';
 import SiteFoot from '../components/SiteFoot.astro';
+
+/**
+ * Trip index — the same 11 trips as the boarding passes below, in the same
+ * order, kept here only so the summary strip can be DERIVED rather than
+ * hand-tallied. If you add or remove a pass, add or remove its row here too.
+ *
+ * Deliberately NOT a chart library and NOT a React island: this is eleven
+ * integers. Plain CSS columns render at build time, cost zero JS, survive
+ * JS being off, and inherit the site's existing `.reveal` motion (which
+ * already has a prefers-reduced-motion override), so there is no second
+ * motion system to keep honest.
+ */
+const trips = [
+    { month: '2025-09', dest: 'Japan' },
+    { month: '2025-09', dest: 'Korea' },
+    { month: '2026-04', dest: 'Mexico' },
+    { month: '2026-05', dest: 'Hawaii' },
+    { month: '2025-10', dest: 'New York' },
+    { month: '2026-07', dest: 'Canada' },
+    { month: '2026-06', dest: 'Seattle' },
+    { month: '2026-07', dest: 'Detroit' },
+    { month: '2026-05', dest: 'San Diego' },
+    { month: '2025-12', dest: 'San Diego' },
+    { month: '2026-07', dest: 'Lake Tahoe' },
+];
+
+// Continuous month axis from first trip to last, so empty months stay visible
+// as gaps — the whole point is the RHYTHM, and skipping quiet months would
+// flatter the record by hiding them.
+const MONTH_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const keys = trips.map((t) => t.month).sort();
+const [firstY, firstM] = keys[0].split('-').map(Number);
+const [lastY, lastM] = keys[keys.length - 1].split('-').map(Number);
+
+const months: { key: string; year: number; m: number; count: number }[] = [];
+for (let y = firstY, m = firstM; y < lastY || (y === lastY && m <= lastM); ) {
+    const key = `${y}-${String(m).padStart(2, '0')}`;
+    months.push({ key, year: y, m, count: trips.filter((t) => t.month === key).length });
+    m += 1;
+    if (m > 12) { m = 1; y += 1; }
+}
+
+const peak = Math.max(...months.map((mo) => mo.count));
+const destinations = new Set(trips.map((t) => t.dest)).size;
+const spanLabel = `${MONTH_ABBR[firstM - 1]} ${firstY} – ${MONTH_ABBR[lastM - 1]} ${lastY}`;
 ---
 
 <Base
@@ -43,6 +88,63 @@ import SiteFoot from '../components/SiteFoot.astro';
         <!-- BOARDING PASS WALL -->
         <section class="band band-flush-top" aria-label="Boarding passes">
             <div class="band-inner">
+
+                <!-- Trip cadence. The wall below is ordered by feel, not by
+                     date, so the one fact it genuinely hides is WHEN the trips
+                     clustered. Count is encoded by the NUMBER of stacked marks
+                     (and mirrored in each column's aria-label), never by hue —
+                     the sage fill is decorative reinforcement only. Quiet
+                     months are kept on the axis as bare baseline ticks rather
+                     than dropped, so the gaps read as gaps. -->
+                <figure class="trip-summary reveal">
+                    <figcaption class="trip-summary-head">
+                        <span class="trip-summary-title">Trip cadence</span>
+                        <span class="trip-summary-span">{spanLabel}</span>
+                    </figcaption>
+
+                    <dl class="trip-stats">
+                        <div class="trip-stat">
+                            <dt>Trips</dt>
+                            <dd>{trips.length}</dd>
+                        </div>
+                        <div class="trip-stat">
+                            <dt>Destinations</dt>
+                            <dd>{destinations}</dd>
+                        </div>
+                        <div class="trip-stat">
+                            <dt>Busiest month</dt>
+                            <dd>{peak} trips</dd>
+                        </div>
+                    </dl>
+
+                    <ul class="trip-plot" style={`--trip-peak:${peak}`}>
+                        {months.map((mo) => (
+                            <li
+                                class:list={['trip-col', { 'is-empty': mo.count === 0 }]}
+                                aria-label={`${MONTH_ABBR[mo.m - 1]} ${mo.year}: ${mo.count} ${mo.count === 1 ? 'trip' : 'trips'}`}
+                            >
+                                <span class="trip-marks" aria-hidden="true">
+                                    {Array.from({ length: mo.count }).map(() => (
+                                        <span class="trip-mark"></span>
+                                    ))}
+                                </span>
+                                <span class="trip-col-tick" aria-hidden="true"></span>
+                                <!-- Full 3-letter month. A single initial would
+                                     render three indistinguishable "J"s
+                                     (Jan/Jun/Jul) and two "M"s (Mar/May) on
+                                     this exact span; the year is appended only
+                                     where it turns over, to mark the boundary
+                                     without repeating itself 11 times. -->
+                                <span class="trip-col-label" aria-hidden="true">
+                                    {mo.m === 1 || mo.key === months[0].key
+                                        ? `${MONTH_ABBR[mo.m - 1]} ’${String(mo.year).slice(2)}`
+                                        : MONTH_ABBR[mo.m - 1]}
+                                </span>
+                            </li>
+                        ))}
+                    </ul>
+                </figure>
+
                 <div class="pass-wall">
 
                     <!-- 01 Tokyo -->
