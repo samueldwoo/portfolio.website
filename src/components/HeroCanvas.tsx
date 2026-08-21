@@ -736,10 +736,35 @@ export default function HeroCanvas() {
       return true;
     };
 
-    const onPointer = (e: PointerEvent | MouseEvent) => {
+    /**
+     * Client coords -> UNTRANSFORMED canvas coords.
+     *
+     * The divide is not cosmetic. gsap-motion.js's pinned hero scrubs a scale on
+     * `.hero-canvas-wrap` (1 -> ~1.12), so getBoundingClientRect() returns the
+     * TRANSFORMED box while ballX/ballY live in untransformed canvas pixels. Using
+     * the raw rect offset therefore put the hit test up to ~69px away from where
+     * the ball is actually painted (measured at scale 1.0991 with ballX ~700),
+     * far outside the 26-42px grab radius: on desktop, once you had scrolled at
+     * all, clicking the visible ball did nothing.
+     *
+     * rect.width / cssW recovers the live scale, since cssW is the canvas's own
+     * untransformed CSS width.
+     */
+    const toCanvas = (clientX: number, clientY: number) => {
       const rect = canvas.getBoundingClientRect();
-      ptrX = e.clientX - rect.left;
-      ptrY = e.clientY - rect.top;
+      const sx = cssW > 0 && rect.width > 0 ? rect.width / cssW : 1;
+      const sy = cssH > 0 && rect.height > 0 ? rect.height / cssH : 1;
+      return { x: (clientX - rect.left) / sx, y: (clientY - rect.top) / sy };
+    };
+
+    const localPt = (e: PointerEvent) => toCanvas(e.clientX, e.clientY);
+
+    const onPointer = (e: PointerEvent | MouseEvent) => {
+      // Same scale correction as localPt — the pull vector is measured against
+      // ball coords, so it has to be in the same space.
+      const p = toCanvas(e.clientX, e.clientY);
+      ptrX = p.x;
+      ptrY = p.y;
       lastPtr = performance.now();
 
       // Aiming: the pull vector runs from the pointer BACK to the ball, like
@@ -798,10 +823,6 @@ export default function HeroCanvas() {
       handle.style.display = phase === 'rolling' ? 'none' : 'block';
     };
 
-    const localPt = (e: PointerEvent) => {
-      const rect = canvas.getBoundingClientRect();
-      return { x: e.clientX - rect.left, y: e.clientY - rect.top };
-    };
 
     const onDown = (e: PointerEvent) => {
       // 'aiming' too: the press can reach us twice (handle target, then bubbling
