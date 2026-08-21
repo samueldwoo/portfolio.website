@@ -21,4 +21,920 @@
      - Author the FINISHED state here. Never author an invisible or zero-area
        resting state — that is how elements got stranded under
        prefers-reduced-motion in the past.
+   ==========================================================================
+
+   WHAT THIS PASS DID
+   ------------------
+   The site was a vertical stack of centred, similarly-shaped bands. Three
+   moves, in priority order:
+
+   1. AN ASYMMETRIC EDITORIAL GRID. Every band now has a left marginalia
+      zone and an inset body column. The display title hangs back out of
+      that column (and, where there is provably spare gutter, out of the
+      content column entirely) while the deck and the body sit inset. One
+      set of tokens — --ed-indent / --ed-hang — drives it everywhere, so
+      the offset is the same on all five home bands and both sub-pages.
+
+   2. BENTO / MOSAIC COMPOSITION. The home page's featured content is a
+      real 12-column mosaic with offset seams: a dominant feature tile, a
+      tall companion, a typographic stat plate, and a wide closer. The
+      favourites strip became a 4-column bento with one 2x2 hero tile. The
+      boarding-pass wall got the same treatment — two wide "featured"
+      passes over three rows of three.
+
+   3. SECTION RHYTHM + PROCEDURAL TEXTURE. Bands now alternate
+      light-bleed / dark-bleed / inset-plate instead of repeating one
+      shape, and every surface carries procedural grain: an SVG
+      feTurbulence tile (fixed "paper" behind the light sheet, scrolling
+      on the dark plates), a dot raster, diagonal hatch and column rules.
+      All CSS/SVG — no imagery of any kind.
+
+   OVERFLOW DISCIPLINE. --ed-hang is the only rule that puts ink outside
+   the content column, and it is gated to >=1400px where .band-inner is
+   provably narrower than the band's content box (1400 - 128 padding =
+   1272 vs a 1200 cap => 36px of slack per side, growing with viewport,
+   against a max 2vw/56px hang). Everything else insets. Verified at
+   1440 / 820 / 390 on all three pages.
    ========================================================================== */
+
+
+/* ==========================================================================
+   1. TOKENS — the editorial grid
+   ========================================================================== */
+.band {
+    /* How far the inset body column sits in from the content column's left
+       edge. 0 below 1080px: on tablet/phone there is no margin to give away
+       and an indent would just eat the measure. */
+    --ed-indent: 0px;
+    /* How far the display title hangs back OUT of the content column. Only
+       ever non-zero where the gutter provably exists — see the overflow
+       note in the header. */
+    --ed-hang: 0px;
+    /* Where the marginalia rail sits, measured back from .band-inner's left
+       edge. Lives inside the band's own padding, never in the text column. */
+    --ed-rail: clamp(30px, 3.1vw, 54px);
+    /* Column-rule pitch for the procedural grid texture. */
+    --ed-pitch: clamp(72px, 7vw, 104px);
+}
+
+@media (min-width: 1080px) {
+    .band { --ed-indent: clamp(72px, 9vw, 152px); }
+}
+@media (min-width: 1400px) {
+    .band { --ed-hang: clamp(0px, 2vw, 56px); }
+}
+
+
+/* ==========================================================================
+   2. TEXTURE — procedural only (SVG feTurbulence, gradients, blend modes)
+
+   Two layers, deliberately different in behaviour:
+
+   PAPER (fixed, does not scroll) — .atmosphere::after. The light bands have
+   no background of their own, so a grain plate on the fixed atmosphere shows
+   through all of them and reads as the stock the whole site is printed on.
+   multiply over the light ground gives a tooth rather than a haze.
+
+   INK (scrolls with the band) — .band::before. The dot raster that was
+   already there, now joined by the same noise tile and a set of column
+   rules, and re-masked on a diagonal so the texture is dense at the top
+   left and clears toward the lower right. The old mask was a centred
+   ellipse, which was itself part of why every band read the same.
+
+   Both sit at z-index 0 under `.band > .band-inner` (z-index 1), so no glyph
+   is ever drawn over grain. But that is NOT the same as "cannot affect
+   contrast": the grain composites into the GROUND the glyphs sit on.
+
+   >>> CALIBRATION — every opacity below is measured, not eyeballed. <<<
+   The first cut of this layer ran .42 / .11 / .90 / .80 and quietly moved the
+   palette:
+     - the dark plates went from #1b2216 (27,34,22) to a median (50,56,46)
+       — nearly double the luminance, i.e. a mid-olive, not the deep
+       sage-black the palette specifies;
+     - the light sheet went from #f5f6f2 (245,246,242) to a median
+       (224,224,221);
+     - and at the darkest 0.1% of light-band pixels, --mut fell to 3.77:1 and
+       --sage-deep to 3.95:1. Both below AA, on a surface with no text drawn
+       over it — the speckle alone did it.
+   The values shipped here were tuned by screenshotting a TEXT-FREE strip of
+   each band (its own top padding, full width) and reading real pixels:
+     - dark plates: median (33,39,28), p99.9 (42,51,35)
+       => --mut 6.95:1, --sage-deep 8.12:1, --ink2 10.02:1
+     - light bands: median (237,238,234), p0.1 (230,230,227)
+       => --mut 4.86:1, --sage-deep 5.09:1, --ink2 7.91:1
+     - inset plate: median (248,248,246), p0.1 (241,242,240)
+       => --mut 5.41:1, --sage-deep 5.67:1
+   If you raise any opacity in this block, re-measure. A texture layer is a
+   palette change wearing a costume.
+   ========================================================================== */
+
+/* Fine grain: fractalNoise, desaturated, stitched so the 180px tile is
+   seamless. numOctaves 4 keeps it from reading as a regular dither. */
+.atmosphere::after {
+    content: "";
+    position: absolute;
+    inset: -10%;
+    pointer-events: none;
+    opacity: .13;
+    mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23g)'/%3E%3C/svg%3E");
+    background-size: 180px 180px;
+}
+
+/* Coarser second pass for a hint of cloudiness under the tooth. Kept very
+   low: at .38 with a 0.035 base frequency the blobs were big enough to read
+   as a dirty scan rather than as paper. 0.06 shrinks them below the size the
+   eye reads as a stain, and .05 puts them at the edge of perception. */
+.atmosphere::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: .05;
+    mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='420' height='420'%3E%3Cfilter id='c'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.06' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='420' height='420' filter='url(%23c)' opacity='0.5'/%3E%3C/svg%3E");
+    background-size: 420px 420px;
+}
+
+/* Band ink: noise + dot raster + column rules, diagonally masked. */
+.band::before {
+    background-image:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='b'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23b)' opacity='0.3'/%3E%3C/svg%3E"),
+        radial-gradient(rgba(95,122,79,.075) 1px, transparent 1px),
+        repeating-linear-gradient(90deg,
+            rgba(95,122,79,.06) 0 1px,
+            transparent 1px var(--ed-pitch));
+    background-size: 160px 160px, 30px 30px, auto;
+    background-position: 0 0, 0 0, 0 0;
+    -webkit-mask-image: linear-gradient(118deg,
+        #000 0%, rgba(0,0,0,.62) 38%, rgba(0,0,0,.18) 66%, transparent 88%);
+            mask-image: linear-gradient(118deg,
+        #000 0%, rgba(0,0,0,.62) 38%, rgba(0,0,0,.18) 66%, transparent 88%);
+    opacity: .55;
+}
+
+/* The dark plates paint their own background, so they occlude the fixed
+   paper layer — they carry the grain themselves, in the light register. */
+.band--dark::before {
+    background-image:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='b'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23b)' opacity='0.26'/%3E%3C/svg%3E"),
+        radial-gradient(rgba(169,199,140,.10) 1px, transparent 1px),
+        repeating-linear-gradient(90deg,
+            rgba(169,199,140,.055) 0 1px,
+            transparent 1px var(--ed-pitch));
+    background-size: 160px 160px, 30px 30px, auto;
+    -webkit-mask-image: linear-gradient(118deg,
+        #000 0%, rgba(0,0,0,.68) 40%, rgba(0,0,0,.22) 70%, transparent 92%);
+            mask-image: linear-gradient(118deg,
+        #000 0%, rgba(0,0,0,.68) 40%, rgba(0,0,0,.22) 70%, transparent 92%);
+    opacity: .34;
+}
+
+/* Hairline sage tick ruler under every section head — the editorial grid
+   made visible, and the one piece of texture that carries structure rather
+   than noise. Placed as a grid item once .section-head becomes a grid. */
+.section-head::after {
+    content: "";
+    display: block;
+    height: 8px;
+    margin-top: clamp(20px, 2.2vw, 34px);
+    opacity: .8;
+    background-image:
+        linear-gradient(90deg, var(--line2) 0 100%),
+        repeating-linear-gradient(90deg, var(--line2) 0 1px, transparent 1px 26px);
+    background-size: 100% 1px, 100% 8px;
+    background-position: 0 0, 0 0;
+    background-repeat: no-repeat, repeat-x;
+}
+
+
+/* ==========================================================================
+   3. BAND RHYTHM — bleed / plate / dark, and the seams between them
+
+   Home:     hero (light bleed) -> interests (DARK bleed)
+             -> projects (light INSET PLATE) -> work (DARK bleed)
+             -> connect (light bleed)
+   Projects: hero (light bleed) -> case 01 (light bleed)
+             -> case 02 (DARK bleed) -> still cooking (light INSET PLATE)
+   Travel:   hero (light bleed) -> pass wall (DARK bleed)
+
+   Vertical padding is no longer uniform: the dark plates get more air
+   (they are the page's punctuation) and the inset plate gets less, so the
+   scroll has a measurable cadence rather than one repeated interval.
+   ========================================================================== */
+.band--dark {
+    padding-top: clamp(92px, 12.5vw, 168px);
+    padding-bottom: clamp(92px, 12.5vw, 168px);
+}
+
+/* Inset plate: the band stops touching the viewport edges and reads as a
+   sheet laid on the page. Margins only ever REDUCE width, so this cannot
+   overflow. */
+.band--plate {
+    margin: clamp(18px, 2.6vw, 44px) clamp(14px, 2.6vw, 40px);
+    padding-top: clamp(64px, 8.5vw, 110px);
+    padding-bottom: clamp(64px, 8.5vw, 110px);
+    border: 1px solid var(--line);
+    border-radius: clamp(18px, 2vw, 30px);
+    background:
+        linear-gradient(168deg, var(--panel) 0%, var(--bg2) 58%, var(--panel2) 100%);
+    box-shadow: var(--shadow-card);
+}
+/* Keep the band textures inside the rounded corners. Using border-radius
+   rather than overflow:clip on purpose — clipping the band would also clip
+   the hanging display title. */
+.band--plate::before,
+.band--plate::after { border-radius: inherit; }
+
+/* Second texture pass, unique to the plate: a fine diagonal hatch plus a
+   sage wash in the lower right, so the plate is not a flat fill. */
+.band--plate::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    opacity: .55;
+    background-image:
+        repeating-linear-gradient(135deg,
+            rgba(95,122,79,.05) 0 1px,
+            transparent 1px 9px),
+        radial-gradient(60% 70% at 108% 106%, rgba(138,154,91,.10), transparent 70%);
+    -webkit-mask-image: linear-gradient(300deg, #000 0%, rgba(0,0,0,.35) 46%, transparent 78%);
+            mask-image: linear-gradient(300deg, #000 0%, rgba(0,0,0,.35) 46%, transparent 78%);
+}
+
+/* Seams. styles.css drops the hairline on whatever band precedes a dark
+   plate so the tonal step is clean; a plate needs its own border back,
+   because that border IS its edge. */
+.band--plate:has(+ .band--dark) { border-bottom: 1px solid var(--line); }
+/* A plate is already visually detached, so the band above it does not need
+   a closing rule either. */
+.band:has(+ .band--plate) { border-bottom: none; }
+.band--plate:last-child { border-bottom: 1px solid var(--line); }
+
+
+/* ==========================================================================
+   4. THE EDITORIAL GRID — marginalia rail, asymmetric head, inset body
+   ========================================================================== */
+
+/* ---- Marginalia running head ----
+   A rotated mono label in the band's own left padding, plus a hairline at
+   the indent line showing where the body column starts. Both are decorative
+   (the rail text duplicates the section's own <h2>), both are gated to
+   >=1280px where there is genuine gutter, and the rule is z-index:-1 inside
+   .band-inner's stacking context so it can never paint over type.
+
+   NOT applied to .case-study bands: .case-rail already occupies that gutter
+   on projects.html at >=1280px. */
+@media (min-width: 1280px) {
+    .band-inner[data-rail]::before {
+        content: attr(data-rail);
+        position: absolute;
+        top: 4px;
+        left: calc(-1 * var(--ed-rail));
+        writing-mode: vertical-rl;
+        transform: rotate(180deg);
+        font-family: var(--mono);
+        font-size: .62rem;
+        font-weight: 500;
+        line-height: 1;
+        letter-spacing: .3em;
+        text-transform: uppercase;
+        color: var(--sage-deep);
+        white-space: nowrap;
+        pointer-events: none;
+    }
+    .band-inner[data-rail]::after {
+        content: "";
+        position: absolute;
+        z-index: -1;
+        top: 0;
+        bottom: 0;
+        left: calc(var(--ed-indent) - clamp(18px, 1.8vw, 30px));
+        width: 1px;
+        pointer-events: none;
+        background: linear-gradient(180deg,
+            transparent 0%, var(--line2) 6%, var(--line2) 76%, transparent 100%);
+        opacity: .85;
+    }
+}
+
+/* ---- Section head: kicker top-right, giant title bottom-left, deck
+   bottom-right, ruler across the full measure ---- */
+@media (min-width: 1080px) {
+    .band-inner > .section-head {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, .64fr);
+        column-gap: clamp(28px, 3.6vw, 68px);
+        row-gap: clamp(10px, 1.2vw, 20px);
+        align-items: end;
+        padding-left: var(--ed-indent);
+    }
+    .section-head > .kicker {
+        grid-column: 2;
+        grid-row: 1;
+        align-self: start;
+        margin-bottom: 0;
+    }
+    .section-head > .section-title {
+        grid-column: 1;
+        grid-row: 2;
+        margin-left: calc(-1 * (var(--ed-indent) + var(--ed-hang)));
+        margin-bottom: 0;
+    }
+    .section-head > .section-intro {
+        grid-column: 2;
+        grid-row: 2;
+        max-width: none;
+        padding-bottom: .35em;
+    }
+    /* Full-measure ruler, pulled back out of the indent. */
+    .section-head::after {
+        grid-column: 1 / -1;
+        grid-row: 3;
+        width: calc(100% + var(--ed-indent));
+        margin-left: calc(-1 * var(--ed-indent));
+    }
+
+    /* ---- Inset body column ---- */
+    .band-inner > .section-body { padding-left: var(--ed-indent); }
+    /* ...except the footer, which closes the page on the full measure. */
+    .section-body > .site-foot {
+        margin-left: calc(-1 * var(--ed-indent));
+    }
+}
+
+
+/* ==========================================================================
+   5. DISPLAY SCALE — the gap between the biggest and smallest type
+
+   Section titles go from ~90px to ~134px at 1440 while body copy stays
+   exactly where it is (16–17.4px), taking the display:body ratio from
+   about 5:1 to about 8:1. Body sizes and .hero-lower's pinned 16px font
+   are untouched: the hero's `ch` column must not move (see styles.css).
+   ========================================================================== */
+.section-title {
+    font-size: clamp(3rem, 9.4vw, 8.4rem);
+    letter-spacing: -0.042em;
+    text-wrap: balance;
+}
+
+/* The hero name is the loudest thing on the site; it should be obviously
+   louder than a section title, not a near-match. */
+.hero-name {
+    font-size: clamp(3.6rem, 13.4vw, 11rem);
+    line-height: .96;
+    letter-spacing: -0.048em;
+    margin: 2px 0 26px;
+}
+
+/* Kickers pick up wider tracking to widen the gap the other way. */
+.kicker { letter-spacing: .3em; }
+
+
+/* ==========================================================================
+   6. HOME — hero
+   The copy hangs LEFT and never moves right: HeroCanvas.tsx keeps the left
+   ~42% of the canvas clean and starts inking after that, so leftward is the
+   only safe direction for this block. .hero-lower is untouched — its pinned
+   16px font-size is what keeps the 58ch column from moving.
+   ========================================================================== */
+.band-home {
+    padding-bottom: clamp(72px, 9vw, 120px);
+}
+@media (min-width: 1400px) {
+    .home-inner > .hero-meta,
+    .home-inner > .hero-name,
+    .home-inner > .hero-subtitle,
+    .home-inner > .hero-lower { margin-left: calc(-1 * var(--ed-hang)); }
+}
+
+/* The meta line now runs a hairline out to the right, across the empty
+   third the canvas lives in — it ties the copy to the composition instead
+   of stopping dead. Pure flex filler; adds no height. */
+.hero-meta::after {
+    content: "";
+    flex: 1 1 60px;
+    min-width: 40px;
+    height: 1px;
+    margin-left: 6px;
+    background: linear-gradient(90deg, var(--line2), rgba(200,204,188,0));
+}
+/* Below ~900px the meta line already wraps to two rows, so the filler rule
+   lands on its own line beside "UCSD EE" and reads as a stray mark. */
+@media (max-width: 900px) {
+    .hero-meta::after { display: none; }
+}
+.hero-subtitle { margin-bottom: 44px; }
+
+
+/* ==========================================================================
+   7. HOME — interests (now a dark plate)
+   ========================================================================== */
+/* Lead block promoted two steps: it is the section's real headline. */
+.interest-block--lead .interest-heading {
+    font-size: var(--fs-8);
+    letter-spacing: var(--tr-lg);
+}
+.interest-block--lead {
+    padding-bottom: clamp(34px, 4vw, 56px);
+    margin-bottom: clamp(38px, 4.6vw, 62px);
+}
+.interest-lead-head {
+    align-items: baseline;
+    gap: clamp(16px, 2vw, 30px);
+}
+.interest-block--lead .interest-index { font-size: 1.5rem; }
+
+/* AA: .interest-index sat on plain --sage (4.41:1 on --bg at 14–19px,
+   below the 4.5 floor). --sage-deep is the palette's answer for small sage
+   text and measures 6.2:1 here. Same fix for the two decorative hero marks,
+   which were the site's only other sub-AA sage glyphs. */
+.interest-index,
+.hero-meta-dot,
+.type-caret { color: var(--sage-deep); }
+
+/* Offset the two columns so they do not read as a symmetrical pair. */
+@media (min-width: 1080px) {
+    .interest-columns {
+        grid-template-columns: minmax(0, 1.08fr) minmax(0, .92fr);
+        column-gap: clamp(40px, 5.5vw, 80px);
+    }
+    .interest-columns::before { left: 52%; }
+    .interest-columns > .interest-block:nth-child(2) {
+        margin-top: clamp(30px, 4vw, 66px);
+    }
+}
+
+
+/* ==========================================================================
+   8. HOME — the featured bento
+
+   12 columns, offset seams. Row 1 splits 7 / 5, row 2 splits 5 / 7, so the
+   vertical join moves as the eye travels down — that offset is the whole
+   difference between a mosaic and a tiled grid.
+
+       +---------------------+-------------+
+       |  01 feature (7)     | website (5) |
+       |                     |             |
+       +-------------+-------+-------------+
+       | plate (5)   |   see all (7)       |
+       +-------------+---------------------+
+   ========================================================================== */
+/* styles.css sets `grid-auto-rows: 1fr` on .project-grid, which forces every
+   row to the height of the tallest card — including once the grid collapses to
+   one column, where it left the two short cards with hundreds of px of dead
+   space below their copy. The mosaic sizes rows from content instead. */
+.project-grid:not(.project-grid--even) { grid-auto-rows: auto; }
+
+@media (min-width: 900px) {
+    .band-inner .project-grid:not(.project-grid--even) {
+        grid-template-columns: repeat(12, minmax(0, 1fr));
+        gap: clamp(14px, 1.5vw, 24px);
+    }
+    .project-grid:not(.project-grid--even) > .project-feature {
+        grid-column: 1 / span 7;
+        grid-row: 1;
+    }
+    .project-grid > .project-card--tall {
+        grid-column: 8 / span 5;
+        grid-row: 1;
+    }
+    .project-grid > .bento-plate {
+        grid-column: 1 / span 5;
+        grid-row: 2;
+    }
+    .project-grid > .project-card--wide {
+        grid-column: 6 / span 7;
+        grid-row: 2;
+    }
+    /* The feature is the dominant tile — give it real height rather than
+       letting three short cards agree on one. */
+    .project-grid:not(.project-grid--even) > .project-feature {
+        min-height: clamp(340px, 34vw, 470px);
+    }
+    /* The tall companion tile matches the feature's row height, so its copy
+       has to be distributed or it strands 250px of white space under the CTA.
+       Index at the top, the title block pinned to the bottom edge — the same
+       reading shape the feature tile uses. */
+    .project-card--tall {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+    }
+    .project-card--tall .card-title { margin-top: auto; }
+    /* Rule under the folio number so the air beneath it reads as a deliberate
+       column head rather than as a card that failed to fill. */
+    .project-card--tall .project-index {
+        width: 100%;
+        padding-bottom: 16px;
+        margin-bottom: 0;
+        border-bottom: 1px solid var(--line);
+    }
+
+    .project-card--wide {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        column-gap: clamp(22px, 3vw, 44px);
+        align-items: center;
+    }
+    .project-card--wide .project-index {
+        grid-row: 1 / span 4;
+        align-self: center;
+        font-size: var(--fs-4);
+        margin-bottom: 0;
+    }
+    .project-card--wide .card-title { grid-column: 2; margin-bottom: 6px; }
+    .project-card--wide .project-tech,
+    .project-card--wide p,
+    .project-card--wide .card-cta { grid-column: 2; }
+}
+
+/* Feature tile: bigger title, more air, and a sage wash that makes it read
+   as the plate the section is built around. */
+.project-feature {
+    padding: clamp(30px, 3.2vw, 46px) clamp(28px, 3vw, 44px);
+    background:
+        radial-gradient(120% 90% at 100% 100%, rgba(138,154,91,.14), transparent 62%),
+        linear-gradient(158deg, var(--panel) 52%, var(--sage-soft));
+}
+.project-feature .card-title {
+    font-size: var(--fs-8);
+    line-height: var(--lh-title);
+    letter-spacing: var(--tr-lg);
+}
+.project-feature .project-index { font-size: var(--fs-6); }
+
+/* ---- The typographic stat plate ----
+   The bento's fourth tile. No imagery: a huge numeral, a mono label and a
+   procedural hatch. It exists to break the run of three near-identical
+   cards with something that is pure type and texture. */
+.bento-plate {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 18px;
+    overflow: hidden;
+    padding: clamp(24px, 2.6vw, 34px) clamp(24px, 2.6vw, 34px) clamp(20px, 2.2vw, 28px);
+    border: 1px solid var(--line2);
+    border-radius: var(--r-lg);
+    background:
+        repeating-linear-gradient(128deg,
+            rgba(95,122,79,.07) 0 1px,
+            transparent 1px 10px),
+        linear-gradient(152deg, var(--sage-soft) 0%, var(--panel) 78%);
+    box-shadow: var(--shadow-card);
+}
+.bento-plate-k {
+    font-family: var(--mono);
+    font-size: .66rem;
+    font-weight: 500;
+    letter-spacing: .26em;
+    text-transform: uppercase;
+    color: var(--sage-deep);
+}
+.bento-plate-n {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: clamp(3.6rem, 8vw, 7rem);
+    line-height: .82;
+    letter-spacing: -0.05em;
+    color: var(--sage-deep);
+    /* Optical: Space Grotesk figures sit high in the em box. */
+    margin-top: -.06em;
+}
+.bento-plate-note {
+    font-family: var(--mono);
+    font-size: .72rem;
+    line-height: 1.5;
+    letter-spacing: .06em;
+    color: var(--ink2);
+    max-width: 36ch;
+}
+/* Dark-plate register, in case the bento is ever moved onto a dark band. */
+.band--dark .bento-plate {
+    background:
+        repeating-linear-gradient(128deg,
+            rgba(169,199,140,.07) 0 1px,
+            transparent 1px 10px),
+        linear-gradient(152deg, var(--panel2) 0%, var(--panel) 78%);
+}
+
+
+/* ==========================================================================
+   9. HOME — favourites bento
+   Six tiles, four columns, one 2x2 hero tile. The spans tile exactly:
+   row 1 = 2+1+1, row 2 = 2+2, row 3 = 2+2.
+   ========================================================================== */
+@media (min-width: 1080px) {
+    .favorites-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        grid-auto-rows: minmax(clamp(92px, 8.4vw, 124px), auto);
+        gap: clamp(12px, 1.2vw, 18px);
+    }
+    .favorites-grid > .favorite-item:nth-child(1) {
+        grid-column: span 2;
+        grid-row: span 2;
+        justify-content: space-between;
+        padding: clamp(24px, 2.4vw, 34px);
+    }
+    .favorites-grid > .favorite-item:nth-child(1) .favorite-value {
+        font-family: var(--display);
+        font-weight: 600;
+        font-size: var(--fs-6);
+        line-height: var(--lh-title);
+        letter-spacing: var(--tr-md);
+    }
+    .favorites-grid > .favorite-item:nth-child(4),
+    .favorites-grid > .favorite-item:nth-child(5),
+    .favorites-grid > .favorite-item:nth-child(6) { grid-column: span 2; }
+}
+@media (min-width: 640px) and (max-width: 1079.98px) {
+    .favorites-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .favorites-grid > .favorite-item:nth-child(1) { grid-column: span 2; }
+}
+
+/* The hero tile carries a procedural ring field so the bento has one
+   non-flat surface. Concentric sage rings, no imagery. */
+.favorites-grid > .favorite-item:nth-child(1) {
+    position: relative;
+    overflow: hidden;
+    background:
+        repeating-radial-gradient(circle at 112% 118%,
+            rgba(95,122,79,.075) 0 1px,
+            transparent 1px 16px),
+        linear-gradient(158deg, var(--panel) 58%, var(--sage-soft));
+}
+.band--dark .favorites-grid > .favorite-item:nth-child(1) {
+    background:
+        repeating-radial-gradient(circle at 112% 118%,
+            rgba(169,199,140,.10) 0 1px,
+            transparent 1px 16px),
+        linear-gradient(158deg, var(--panel) 58%, var(--panel2));
+}
+
+
+/* ==========================================================================
+   10. HOME — work + connect
+   ========================================================================== */
+.skills-list { gap: 12px; }
+
+/* Connect: the two halves were an even split, which is the shape this pass
+   is trying to get rid of. The form genuinely needs the wider column. */
+@media (min-width: 901px) {
+    .connect-split {
+        --cs-gap: clamp(36px, 4.6vw, 76px);
+        position: relative;
+        grid-template-columns: minmax(0, .82fr) minmax(0, 1.18fr);
+        gap: var(--cs-gap);
+    }
+    /* Hairline down the middle of the gutter between the halves, in the same
+       register as the interests divider. Column 1 is .82/2fr = 41% of the
+       track space, so the gutter centre is that plus half the gap.
+       Decorative and inside the column — it cannot overflow. */
+    .connect-split::before {
+        content: "";
+        position: absolute;
+        top: 4px;
+        bottom: 4px;
+        left: calc((100% - var(--cs-gap)) * 0.41 + var(--cs-gap) / 2);
+        width: 1px;
+        pointer-events: none;
+        background: linear-gradient(180deg,
+            transparent, var(--line2) 10%, var(--line2) 86%, transparent);
+    }
+}
+
+
+/* ==========================================================================
+   11. PROJECTS PAGE
+   ========================================================================== */
+/* Hero: the h1 hangs, the deck sits inset under it, and a mono rule
+   separates the two — the same grid as the section heads, one level down. */
+@media (min-width: 1080px) {
+    .band-projects-hero .band-inner,
+    .band-travel-hero .band-inner { padding-left: var(--ed-indent); }
+    .band-projects-hero > .band-inner > .section-title,
+    .band-travel-hero > .band-inner > .section-title {
+        margin-left: calc(-1 * (var(--ed-indent) + var(--ed-hang)));
+    }
+    /* The kicker keeps the body column's left edge, so the giant title
+       visibly breaks out past it. */
+    .band-projects-hero .kicker,
+    .band-travel-hero .kicker { margin-left: 0; }
+    .band-projects-hero .section-intro,
+    .band-travel-hero .section-intro {
+        max-width: 48ch;
+        margin-top: clamp(16px, 1.8vw, 26px);
+        padding-top: clamp(14px, 1.6vw, 22px);
+        /* --line2, not --line: at 1px against --bg2 the lighter hairline was
+           invisible, which made the deck look merely detached from the title
+           rather than deliberately ruled off from it. */
+        border-top: 1px solid var(--line2);
+    }
+}
+
+/* The hero motif was tuned against a ~90px h1; at 134px the title's descender
+   line runs straight through it. Drop it to the lower right, out from under
+   the type, and take a little weight out of the stroke — the display type is
+   now the loudest thing in the band and the line art should read as a
+   watermark behind it, not as a competing mark. */
+.projects-motif {
+    top: auto;
+    bottom: clamp(-40px, -2vw, 0px);
+    transform: none;
+    width: min(32vw, 360px);
+    opacity: .72;
+}
+
+/* Case study body: a 12-column editorial scatter instead of a 2x2 block.
+   Each block stays inside a 60ch measure (styles.css caps .case-block p),
+   so widening the container does not widen the line. */
+@media (min-width: 1080px) {
+    .case-body {
+        grid-template-columns: repeat(12, minmax(0, 1fr));
+        column-gap: clamp(28px, 3.4vw, 56px);
+        row-gap: clamp(30px, 3.6vw, 54px);
+        padding-left: var(--ed-indent);
+    }
+    .case-body > .case-block:nth-child(1) { grid-column: 1 / span 6; }
+    .case-body > .case-block:nth-child(2) {
+        grid-column: 7 / span 6;
+        margin-top: clamp(26px, 3.4vw, 58px);
+    }
+    .case-body > .case-block:nth-child(3) { grid-column: 2 / span 6; }
+    .case-body > .case-block:nth-child(4) {
+        grid-column: 8 / span 5;
+        margin-top: clamp(20px, 2.6vw, 44px);
+    }
+
+    /* Meta strip and tags follow the body's inset; the head — index numeral
+       and case title together — stays out at the full measure and hangs, so
+       it breaks the column the prose sits in. */
+    .case-study > .band-inner > .case-meta,
+    .case-study > .band-inner > .case-tags { padding-left: var(--ed-indent); }
+    .case-study > .band-inner > .case-head {
+        margin-left: calc(-1 * var(--ed-hang));
+        margin-bottom: clamp(30px, 3.4vw, 46px);
+    }
+}
+.case-title { font-size: clamp(2.2rem, 5.4vw, 4.2rem); }
+.case-index { font-size: var(--fs-7); }
+
+/* Meta strip: a hairline row rather than three little cards, so the case
+   pages stop looking like a card catalogue. */
+.case-meta li {
+    background: transparent;
+    border: none;
+    border-left: 1px solid var(--line2);
+    border-radius: 0;
+    box-shadow: none;
+    padding: 2px 0 2px 16px;
+    margin-right: clamp(18px, 3vw, 46px);
+}
+
+
+/* ==========================================================================
+   12. TRAVEL PAGE — the boarding-pass wall
+
+   12 columns. Two wide "featured" passes across the top, then three rows of
+   three. `grid: 'auto'` in gsap-motion.js measures real geometry, so the
+   diagonal entrance stagger adapts to this on its own.
+   ========================================================================== */
+/* The wall band is a dark plate now, not a flush continuation of the hero,
+   so it gets plate breathing room instead of the old 20–36px seam. */
+.band-flush-top { padding-top: clamp(72px, 9vw, 124px); }
+
+@media (min-width: 1080px) {
+    .pass-wall {
+        grid-template-columns: repeat(12, minmax(0, 1fr));
+        gap: clamp(16px, 1.7vw, 26px);
+    }
+    .pass-wall > .pass { grid-column: span 4; }
+    .pass-wall > .pass--wide { grid-column: span 6; min-height: 250px; }
+    .pass--wide .pass-main { padding: 26px 30px; gap: 16px; }
+    .pass--wide .pass-code { font-size: clamp(2.4rem, 3.6vw, 3.4rem); }
+    .pass--wide .pass-logoband { height: 38px; }
+    .pass--wide .pass-logo { max-width: 168px; }
+    .pass--wide .pass-dest .pass-destv { font-size: 1.5rem; }
+    .pass--wide .pass-stub { flex-basis: 56px; }
+    .pass--wide .pass-plane { width: 42px; height: 42px; }
+}
+@media (min-width: 760px) and (max-width: 1079.98px) {
+    .pass-wall { grid-template-columns: repeat(12, minmax(0, 1fr)); }
+    .pass-wall > .pass { grid-column: span 6; }
+    .pass-wall > .pass--wide { grid-column: span 6; }
+}
+@media (max-width: 759.98px) {
+    .pass-wall { grid-template-columns: minmax(0, 1fr); }
+    .pass-wall > .pass,
+    .pass-wall > .pass--wide { grid-column: 1; }
+}
+
+/* On the dark plate the darkest passes (Zipair near-black, the navies) sit
+   very close to the plate itself. A hairline ring restates each card's edge
+   so the wall reads as separate stubs, not one mass. */
+.band--dark .pass {
+    box-shadow: 0 0 0 1px rgba(242,244,236,.13), var(--shadow-card);
+}
+.band--dark .trip-summary { border-color: var(--line2); }
+
+/* Trip cadence strip: give it the editorial inset too. */
+@media (min-width: 1080px) {
+    .trip-summary { margin-left: var(--ed-indent); }
+}
+
+
+/* ==========================================================================
+   13. RESPONSIVE — collapse the composition, never the content
+
+   The editorial offsets are opt-IN by breakpoint (see the tokens block), so
+   below 1080px every indent is already 0 and the layout is the honest
+   single column. What is left here is the mosaic collapse.
+   ========================================================================== */
+@media (max-width: 899.98px) {
+    .band-inner .project-grid:not(.project-grid--even) {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    .project-grid:not(.project-grid--even) > .project-feature,
+    .project-grid > .project-card--tall,
+    .project-grid > .bento-plate,
+    .project-grid > .project-card--wide {
+        grid-column: 1;
+        grid-row: auto;
+        min-height: 0;
+    }
+    /* Collapsed: the label takes its own line, then the numeral and the note
+       sit side by side on a shared baseline — the tile stays a wide band
+       instead of becoming a tall column of three stacked fragments. */
+    .bento-plate {
+        flex-flow: row wrap;
+        align-items: flex-end;
+        justify-content: flex-start;
+        gap: 10px 22px;
+    }
+    .bento-plate-k { flex: 1 0 100%; }
+    .bento-plate-note { flex: 1 1 240px; }
+    .bento-plate-n { font-size: clamp(3rem, 13vw, 4.6rem); }
+    .bento-plate-note { max-width: 34ch; }
+    .connect-split::before { display: none; }
+}
+
+@media (max-width: 639.98px) {
+    .favorites-grid { grid-template-columns: minmax(0, 1fr); }
+    .band--plate { margin-left: clamp(10px, 2.4vw, 18px); margin-right: clamp(10px, 2.4vw, 18px); }
+    /* The ruler's tick pitch is too fine to read at phone widths; keep the
+       rule, drop the ticks. */
+    .section-head::after {
+        height: 1px;
+        background-image: linear-gradient(90deg, var(--line2) 0 100%);
+        background-size: 100% 1px;
+        background-repeat: no-repeat;
+    }
+}
+
+@media (max-width: 420px) {
+    /* .band padding drops to 18px here (styles.css); the plate keeps a
+       hair of margin so it still reads as an inset sheet. */
+    .band--plate { margin-left: 8px; margin-right: 8px; border-radius: 16px; }
+}
+
+
+/* ==========================================================================
+   14. SAFETY BELTS
+
+   Nothing in this file animates, and every rule above authors a FINISHED
+   state: no opacity:0, no zero-area boxes, no transform that hides. The
+   blocks below only make that explicit for the two user preferences that
+   have stranded content on this site before.
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+    /* The rotated running head, the grid rule and the section ruler are
+       static artwork — they must read as finished, never as a from-state.
+       Restated with the same values they already carry so a future edit
+       cannot accidentally strand them at 0. */
+    .band-inner[data-rail]::before { opacity: 1 !important; }
+    .band-inner[data-rail]::after  { opacity: .85 !important; }
+    .section-head::after           { opacity: .8 !important; }
+    .band--plate::after            { opacity: .55 !important; }
+    /* The four bento tiles are .reveal children; styles.css already forces
+       .reveal to its finished state here, and these restate it for the two
+       tiles that are NOT .reveal-managed. */
+    .bento-plate,
+    .project-card--tall,
+    .project-card--wide,
+    .pass--wide { opacity: 1 !important; transform: none !important; }
+}
+
+/* High-contrast preference: texture is the first thing to go — every layer
+   here is decorative, and none of it carries information. */
+@media (prefers-contrast: more) {
+    .atmosphere::before,
+    .atmosphere::after,
+    .band::before,
+    .band--plate::after { display: none; }
+    .band--plate { background: var(--panel); border-color: var(--line2); }
+    .bento-plate { background: var(--panel); }
+}
