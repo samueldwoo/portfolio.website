@@ -90,10 +90,27 @@ const pageLinks = [
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
     <slot name="head" />
 
+    <!-- ASSET PATHS ARE ROOT-ABSOLUTE ("/styles.css"), NOT RELATIVE. Do not
+         "tidy" the leading slash away.
+
+         These were relative while astro.config set `build.format: 'file'`, which
+         emitted every page at the root (/travel.html), so "styles.css" resolved
+         to /styles.css. @astrojs/vercel hard-forces `build.format: "directory"`,
+         so pages now emit at /travel/index.html and a relative "styles.css"
+         resolves to /travel/styles.css — a 404.
+
+         Measured on the built output before this fix: /projects and /travel each
+         threw 21 severe console errors and rendered with NO CSS and NO JS at all.
+         All 13 refs here plus the 10 airline logos in travel.astro were broken;
+         the homepage was fine only because it happens to live at the root.
+
+         The redirects in astro.config.mjs do NOT cover this. They rewrite an
+         incoming PAGE url; they cannot touch a relative ASSET url inside the
+         HTML that gets served. -->
     <!-- The hand-written stylesheet, served verbatim from public/ as one
          global sheet. Deliberately NOT imported through Astro/Vite: no
          scoping, no splitting, no hashing — same file, same cascade. -->
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="/styles.css">
 
     <!-- Domain-split overhaul layer, loaded in cascade order AFTER styles.css
          so each file wins on equal specificity. One file per domain because
@@ -101,10 +118,10 @@ const pageLinks = [
          surface — the split is what lets navigation, scroll, layout and
          micro-interaction work proceed in parallel without rewriting the same
          hunks. Each file documents what it owns; keep edits inside your file. -->
-    <link rel="stylesheet" href="css/layout.css">
-    <link rel="stylesheet" href="css/nav.css">
-    <link rel="stylesheet" href="css/scroll.css">
-    <link rel="stylesheet" href="css/motion.css">
+    <link rel="stylesheet" href="/css/layout.css">
+    <link rel="stylesheet" href="/css/nav.css">
+    <link rel="stylesheet" href="/css/scroll.css">
+    <link rel="stylesheet" href="/css/motion.css">
 </head>
 <body>
     <!-- Fixed background atmosphere: faint sage radial wash + abstract shapes -->
@@ -314,13 +331,13 @@ const pageLinks = [
          motion-ux.js runs LAST: its nav-indicator watches the `is-active`
          class that script.js's scroll-spy sets, so the spy must have run
          and placed the initial active link first. -->
-    <script is:inline src="gsap.min.js"></script>
-    <script is:inline src="ScrollTrigger.min.js"></script>
-    <script is:inline src="SplitText.min.js"></script>
-    <script is:inline src="gsap-motion.js"></script>
-    <script is:inline src="anime.min.js"></script>
-    <script is:inline src="script.js"></script>
-    <script is:inline src="motion.min.js"></script>
-    <script is:inline src="motion-ux.js"></script>
+    <script is:inline src="/gsap.min.js"></script>
+    <script is:inline src="/ScrollTrigger.min.js"></script>
+    <script is:inline src="/SplitText.min.js"></script>
+    <script is:inline src="/gsap-motion.js"></script>
+    <script is:inline src="/anime.min.js"></script>
+    <script is:inline src="/script.js"></script>
+    <script is:inline src="/motion.min.js"></script>
+    <script is:inline src="/motion-ux.js"></script>
 </body>
 </html>
