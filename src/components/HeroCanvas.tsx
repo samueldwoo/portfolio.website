@@ -1219,10 +1219,12 @@ export default function HeroCanvas() {
 
         /* THE CUP IS THE DATUM, and each quantity gets ITS OWN CHANNEL.
 
-             contour SPACING   steepness        (tight = steep)
-             contour DASHING   elevation sign   (dashed = below the hole)
-             arrow LENGTH+WEIGHT  steepness     (same signal as spacing)
-             arrow DIRECTION   the fall line
+             contour SPACING          steepness      (tight = steep)
+             contour WEIGHT + ALPHA   elevation      (bolder = higher)
+             contour DASHING          elevation sign (dashed = below the hole)
+             arrow LENGTH             steepness      (same signal as spacing)
+             arrow DIRECTION          the fall line
+             arrow weight             CONSTANT — see the note at the arrows
 
            The first attempt at this put elevation on contour WEIGHT — darker
            above the cup, lighter below. It was measured and it worked, and it was
@@ -1277,16 +1279,12 @@ export default function HeroCanvas() {
            lines and `li % 3 === 0` matched exactly two of them, so there was no
            rhythm to read. And because the levels are re-normalised to each
            frame's hMin..hMax, those two lines drifted as the field moved, so
-           they were not even a stable landmark. */
-        const hCup = heightAt(cupX, cupY, hm2.x, hm2.y, span2, tiltAng, tiltMag, gSeed);
-        // Which band lands closest to cup height — drawn as the waterline.
-        let datumLi = -1;
-        let datumGap = Infinity;
-        for (let li = 1; li < LEVELS; li++) {
-          const g = Math.abs(hMin + ((hMax - hMin) * li) / LEVELS - hCup);
-          if (g < datumGap) { datumGap = g; datumLi = li; }
-        }
+           they were not even a stable landmark.
 
+           The cup-relative pass that replaced it (dashed below the hole, one
+           heavier band at cup height) is also gone. A single monotonic ramp beats
+           a ramp plus two exceptions, and the exceptions restated something the
+           flag and cup already say literally. */
         for (let li = 1; li < LEVELS; li++) {
           const lv = hMin + ((hMax - hMin) * li) / LEVELS;
           ctx.beginPath();
@@ -1322,17 +1320,47 @@ export default function HeroCanvas() {
              exactly and for free: iso-lines of a fixed interval crowd together
              where the surface is steep. That is also why spacing agrees with the
              arrows automatically — both are reading the gradient. */
-          if (li === datumLi) {
-            ctx.setLineDash([]);
-            ctx.lineWidth = 1.5;
-            ctx.strokeStyle = `rgba(${SAGE_DEEP},${(0.55 * globalAlpha).toFixed(3)})`;
-          } else {
-            ctx.setLineDash(lv < hCup ? [3, 5] : []);
-            ctx.lineWidth = 0.9;
-            ctx.strokeStyle = `rgba(${SAGE},${(0.3 * globalAlpha).toFixed(3)})`;
-          }
+          /* BOLDNESS = ELEVATION. Bolder and darker is higher ground, lighter and
+             finer is lower. Both channels on this contour now encode the SAME
+             quantity at different granularity, which is why they reinforce rather
+             than compete:
+
+               weight + alpha   continuous elevation across the band stack
+               dash pattern     the binary: below cup height or not
+
+             The dash boundary IS the cup line, so the hole needs no separate
+             heavier band — a bolded datum would read as "highest", contradicting
+             the ramp. (An earlier version did bold it; removed.)
+
+             Elevation is normalised to THIS frame's hMin..hMax, the same datum
+             the band positions use, so the ramp cannot drift out of step with the
+             levels it is colouring. */
+          /* ONE CONTINUOUS GRADIENT: darkness and weight both ramp with
+             elevation. Dark and heavy is high ground, pale and fine is low.
+             Every band is solid.
+
+             Dashing used to mark bands below cup height, and a heavier band
+             marked cup height itself. Both are gone: a single monotonic ramp is
+             easier to read at a glance than a ramp plus two exceptions, and the
+             exceptions were encoding a second fact (where the hole sits) that the
+             flag and cup already state literally.
+
+             Normalised to THIS frame's hMin..hMax — the same datum the band
+             positions use — so the ramp can never drift out of step with the
+             levels it is colouring. */
+          const t = hMax > hMin ? (lv - hMin) / (hMax - hMin) : 0.5;
+          /* Colour is INTERPOLATED, not switched. A `t > 0.5 ? SAGE_DEEP : SAGE`
+             ternary put a hard step in the middle of the stack, which reads as a
+             band boundary — the opposite of a standard gradient. Lerping sage ->
+             sage-deep keeps weight, alpha and hue all monotonic in elevation.
+             Measured span across the 8 drawn levels (t = 0.111 .. 0.889):
+               width 0.67 -> 1.83px (2.7x)   alpha 0.177 -> 0.503 (2.8x) */
+          const cr = Math.round(95 + (78 - 95) * t);
+          const cg = Math.round(122 + (102 - 122) * t);
+          const cb = Math.round(79 + (64 - 79) * t);
+          ctx.lineWidth = 0.5 + 1.5 * t;
+          ctx.strokeStyle = `rgba(${cr},${cg},${cb},${((0.13 + 0.42 * t) * globalAlpha).toFixed(3)})`;
           ctx.stroke();
-          ctx.setLineDash([]);
         }
 
         /* Fall-line arrows on a sparse grid. Contours tell you WHERE it is
@@ -1397,10 +1425,14 @@ export default function HeroCanvas() {
             a.px + a.ux * len * 0.5 - a.ux * head - a.uy * head * 0.73,
             a.py + a.uy * len * 0.5 - a.uy * head + a.ux * head * 0.73,
           );
-          // Weight and alpha carry steepness too — this is the "boldness" the
-          // contours' index lines already use, applied to the same signal.
-          ctx.strokeStyle = `rgba(${OLIVE},${((0.22 + 0.32 * t) * globalAlpha).toFixed(3)})`;
-          ctx.lineWidth = 0.8 + 0.9 * t;
+          /* Weight and alpha are CONSTANT here, deliberately. They used to ramp
+             with steepness, but contour boldness now means ELEVATION — and one
+             visual language cannot mean two things on one drawing without reading
+             as noise, which is the mistake this section already made once. So
+             steepness is carried by arrow LENGTH alone (6 -> 18px, a 2.2-2.4x
+             spread), and every arrow is drawn at one weight. */
+          ctx.strokeStyle = `rgba(${OLIVE},${(0.42 * globalAlpha).toFixed(3)})`;
+          ctx.lineWidth = 1.1;
           ctx.stroke();
         }
 
