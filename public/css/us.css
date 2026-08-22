@@ -68,225 +68,175 @@
 }
 
 /* ============================================================
-   ACT I — THE CRUDE GATE
+   ACT I — THE GATE. There is almost no CSS here, on purpose.
 
-   Everything here is ugly ON PURPOSE. What it is NOT is broken:
-   contrast stays >= 4.5:1, every control is keyboard reachable,
-   focus is visible, inputs are 16px so iOS does not zoom, and
-   targets are >= 44px. "Looks like 1999" must not mean "cannot
-   be used by a person on a phone".
+   Sam asked for "comically crude": a white screen, a text box, a
+   horrible font, no design at all. So this section exists mostly
+   to UNDO things — the browser default is the aesthetic, and the
+   only rules that survive are the ones without which the page
+   would be broken rather than ugly.
+
+   The joke is the absence. A styled-to-look-unstyled page reads
+   as a choice; a genuinely unstyled one reads as a page someone
+   abandoned, which is the bit. So: no background, no card, no
+   colour system, no spacing scale, no border-radius anywhere.
+
+   WHAT IS DELIBERATELY KEPT, and why each one is not optional:
+
+     * font-size: 16px on the input. Below 16, iOS Safari zooms
+       the viewport on focus and she has to pinch back out to see
+       the question. That is a real usability bug, not ugliness.
+     * min-height 44px on the input and button. Ugly is fine;
+       untappable is not.
+     * A visible :focus-visible ring. The 1996 default is no
+       indicator at all, and a keyboard user genuinely cannot
+       operate the page without one.
+     * The status words (ASKING / LOCKED / VERIFIED) still carry
+       meaning as TEXT, never as colour.
+
+   Everything else is Times New Roman on white, left-aligned,
+   default link blue, default table borders. If you are tempted to
+   add polish here, that is the feature working.
    ============================================================ */
+
 .crude {
-    margin: 0;
-    padding: 18px 14px 60px;
-    background: #ffffff;
-    /* The default-serif stack IS the joke. Do not add a webfont. */
+    /* Times specifically, not the `serif` keyword: on macOS `serif`
+       resolves to something with actual taste. Times New Roman at
+       17px with default leading is the look. */
     font-family: "Times New Roman", Times, serif;
     font-size: 17px;
-    line-height: 1.45;
-    color: #000000;
-    /* Kill the smooth-scroll and any inherited niceness. */
-    scroll-behavior: auto;
+    color: #000;
+    background: #fff;
+    /* The browser default 8px body margin, restated because
+       styles.css is not loaded here and Astro adds nothing. */
+    margin: 8px;
+    padding: 0;
 }
 
-.crude-wrap {
-    max-width: 640px;
-    margin: 0 auto;
-}
+/* No max-width, no centring. Text runs the full window like a
+   document nobody laid out. */
+.crude-wrap { max-width: none; margin: 0; padding: 0; }
 
-/* Deliberately centered, deliberately underlined, deliberately loud. */
 .crude h1 {
-    font-size: 26px;
-    font-weight: 700;
-    text-align: center;
-    text-transform: uppercase;
-    letter-spacing: 0.02em;
-    margin: 6px 0 2px;
+    /* Default h1 size and weight. The only change is removing the
+       uppercasing and letter-spacing the earlier version added. */
+    font-size: 2em;
+    font-weight: bold;
+    text-transform: none;
+    letter-spacing: normal;
+    text-align: left;
+    margin: .67em 0;
 }
 
-.crude-sub {
-    text-align: center;
-    font-size: 15px;
-    margin: 0 0 14px;
-}
+.crude-sub { text-align: left; margin: 0 0 1em; }
 
-.crude hr {
-    border: 0;
-    border-top: 1px solid #808080;
-    margin: 14px 0;
-}
+/* Default rule. Not rainbow, not sage, not a gradient. */
+.crude hr { border: 0; border-top: 1px solid #000; margin: 1em 0; }
 
-.crude a {
-    color: #0000ee;             /* 8.6:1 on white */
-    text-decoration: underline;
-}
+.crude a { color: #0000ee; text-decoration: underline; }
 .crude a:visited { color: #551a8b; }
 
-/* The fake system log. Monospace, small, grey — but not so grey it
-   fails contrast: #595959 is 7:1 on white. */
+/* The fake log stays monospace because a <pre> is monospace. No
+   panel, no border, no background. */
 .crude-log {
-    font-family: var(--us-mono);
-    font-size: 12.5px;
-    line-height: 1.7;
-    color: #595959;
-    background: #f2f2f2;
-    border: 1px solid #c0c0c0;
-    padding: 8px 10px;
-    margin: 0 0 16px;
-    white-space: pre-wrap;
-    word-break: break-word;
-}
-.crude-log b { color: #000; font-weight: 700; }
-
-/* A real <table border="1">, because of course it is. */
-.crude-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin: 0 0 18px;
-    font-size: 14px;
-}
-.crude-table th,
-.crude-table td {
-    border: 1px solid #000000;
-    padding: 6px 8px;
-    text-align: left;
-}
-.crude-table th {
-    background: #c0c0c0;
-    font-weight: 700;
-}
-.crude-table td.is-done { background: #dfffdf; }
-.crude-table td.is-now  { background: #ffffcc; font-weight: 700; }
-
-/* The question block */
-.crude-q {
-    margin: 0 0 6px;
-    font-size: 19px;
-    font-weight: 700;
-}
-.crude-count {
-    font-family: var(--us-mono);
-    font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: #595959;
-    margin: 0 0 10px;
-}
-
-.crude-form {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    align-items: stretch;
-    margin: 0 0 12px;
-}
-
-/* Win98 inset field. 16px minimum: anything smaller and iOS Safari
-   zooms the viewport on focus, which is a genuine usability bug and
-   not part of the bit. */
-.crude-input {
-    flex: 1 1 220px;
-    min-height: 44px;
-    padding: 8px 10px;
-    font-family: var(--us-mono);
-    font-size: 16px;
+    font-family: monospace;
+    font-size: 13px;
     color: #000;
-    background: #ffffff;
-    border: 2px inset #808080;
-    border-radius: 0;
+    background: transparent;
+    border: 0;
+    padding: 0;
+    margin: 0 0 1em;
+    white-space: pre-wrap;
 }
-.crude-input:focus {
-    outline: 3px solid #0000ee;
-    outline-offset: 1px;
+.crude-log b { font-weight: bold; }
+
+/* <table border="1"> and nothing else. */
+.crude-table { border-collapse: collapse; margin: 0 0 1em; font-size: 15px; }
+.crude-table th,
+.crude-table td { border: 1px solid #000; padding: 2px 5px; text-align: left; }
+.crude-table th { font-weight: bold; }
+/* State is the WORD in the cell. No fills — colour is not the signal. */
+.crude-table td.is-done,
+.crude-table td.is-now { background: transparent; font-weight: normal; }
+
+.crude-q { font-size: 1em; font-weight: bold; margin: 0 0 .3em; }
+.crude-count {
+    font-family: inherit;
+    font-size: 1em;
+    text-transform: none;
+    letter-spacing: normal;
+    color: #000;
+    margin: 0 0 .3em;
 }
 
-/* Beveled grey button, the way they used to be. */
-.crude-submit {
-    min-height: 44px;
-    padding: 8px 20px;
+/* Label above, box below, button after. No flex, no gap. */
+.crude-form { margin: 0 0 1em; }
+
+.crude-input {
+    display: block;
+    /* A short box, like every form in 1997. */
+    width: 20em;
+    max-width: 100%;
+    /* 16px MINIMUM — see the header. This is the one number here
+       that is a requirement and not a joke. */
     font-family: "Times New Roman", Times, serif;
     font-size: 16px;
-    font-weight: 700;
+    min-height: 44px;
+    padding: 2px;
+    margin: .2em 0 .4em;
     color: #000;
-    background: #c0c0c0;
-    border: 2px outset #e8e8e8;
+    background: #fff;
+    border: 1px solid #000;
+    border-radius: 0;
+}
+
+.crude-submit {
+    font-family: "Times New Roman", Times, serif;
+    font-size: 16px;
+    min-height: 44px;
+    padding: 2px 10px;
     border-radius: 0;
     cursor: pointer;
 }
-.crude-submit:active { border-style: inset; }
-.crude-submit:focus-visible {
-    outline: 3px solid #0000ee;
+.crude-submit[disabled] { cursor: default; }
+
+/* Focus ring. Kept because without it the page is unusable by
+   keyboard, which is a different thing from ugly. */
+.crude-input:focus-visible,
+.crude-submit:focus-visible,
+.crude a:focus-visible {
+    outline: 2px solid #0000ee;
     outline-offset: 1px;
 }
-.crude-submit[disabled] { color: #6a6a6a; cursor: progress; }
 
-/* Feedback. Colour is never the only signal — each of these also
-   carries a text prefix in the markup ("WRONG.", "HINT:", "OK."). */
+/* Messages are plain text with a word prefix ("WRONG.", "HINT:",
+   "OK.") written by the script. No border, no fill, no colour —
+   the prefix is what carries the meaning. */
 .crude-msg {
-    font-family: var(--us-mono);
-    font-size: 14px;
-    padding: 8px 10px;
-    margin: 0 0 12px;
-    border: 1px solid;
+    font-family: inherit;
+    font-size: 1em;
+    color: #000;
+    background: transparent;
+    border: 0;
+    padding: 0;
+    margin: 0 0 1em;
 }
-.crude-msg[data-kind="bad"]  { color: #a30000; border-color: #a30000; background: #fff0f0; }
-.crude-msg[data-kind="hint"] { color: #6a4a00; border-color: #6a4a00; background: #fffbe6; }
-.crude-msg[data-kind="good"] { color: #005c1f; border-color: #005c1f; background: #f0fff4; }
 .crude-msg[hidden] { display: none; }
 
-/* The blinking cursor. Steps, not a fade — a smooth blink is a
-   modern affectation. */
-.crude-caret {
-    display: inline-block;
-    width: 0.6em;
-    background: #000;
-    animation: crude-blink 1s steps(1) infinite;
-}
-@keyframes crude-blink { 0%, 50% { opacity: 1; } 50.01%, 100% { opacity: 0; } }
+.crude-noscript { margin: 0 0 1em; font-weight: bold; }
 
-.crude-foot {
-    margin-top: 26px;
-    font-size: 12.5px;
-    color: #595959;
-    text-align: center;
-}
-.crude-counter {
-    display: inline-block;
-    font-family: var(--us-mono);
-    font-size: 13px;
-    color: #00ff33;
-    background: #000;
-    border: 1px solid #808080;
-    padding: 1px 6px;
-    letter-spacing: 0.14em;
-}
+.crude-foot { margin: 2em 0 0; font-size: 13px; }
 
-.crude-noscript {
-    border: 2px solid #a30000;
-    background: #fff0f0;
-    color: #a30000;
-    padding: 10px 12px;
-    margin: 0 0 16px;
-    font-family: var(--us-mono);
-    font-size: 14px;
-}
+/* The caret. A literal blinking underscore, resting VISIBLE so
+   the line never reads as truncated. */
+.crude-caret { animation: crude-blink 1s steps(1) infinite; }
+@keyframes crude-blink { 0%, 60% { opacity: 1; } 60.01%, 100% { opacity: 0; } }
 
-/* The one concession to the reveal: when the gate is passed, the
-   whole crude document goes to black before the redirect. Phase 3
-   replaces this with a GSAP Flip into the studio. */
-.crude.is-opening {
-    background: #000;
-    transition: background 420ms cubic-bezier(0.7, 0, 0.3, 1);
-}
-.crude.is-opening .crude-wrap {
-    opacity: 0;
-    transition: opacity 300ms ease-out;
-}
+/* The cut to the studio: the page just goes white and empty. */
+.crude.is-opening .crude-wrap { display: none; }
 
 @media (prefers-reduced-motion: reduce) {
     .crude-caret { animation: none; opacity: 1; }
-    .crude.is-opening,
-    .crude.is-opening .crude-wrap { transition: none; }
 }
 
 /* ============================================================

@@ -70,7 +70,7 @@ const showPlaceholderWarning = import.meta.env.DEV && gateNeedsReview();
          the redirects and JSON responses that cannot carry a meta tag. -->
     <meta name="robots" content="noindex, nofollow, noarchive">
     <meta name="referrer" content="no-referrer">
-    <title>access terminal</title>
+    <title>Samuel Woo&apos;s Home Page</title>
     <!-- Absolute path: this page is at /stronger, so "css/us.css" would
          resolve to /stronger/css/us.css and 404. -->
     <!-- Installable-app metadata. `scope: /stronger/` in the manifest keeps the
@@ -97,19 +97,22 @@ const showPlaceholderWarning = import.meta.env.DEV && gateNeedsReview();
 <body class="crude" id="crude">
 <div class="crude-wrap">
 
-    <h1>Samuel Woo &mdash; Personal Server</h1>
-    <p class="crude-sub"><i>(under construction)</i></p>
+    <h1>Samuel Woo</h1>
+    <p class="crude-sub">Private page. Please answer the questions.</p>
 
     <hr>
 
-    <pre class="crude-log" aria-hidden="true">ACCESS TERMINAL v0.9b
-&gt; initializing ................ <b>ok</b>
-&gt; mounting /home/sam .......... <b>ok</b>
-&gt; locating visitor ............ <b>ok</b>
-&gt; checking credentials ........ <b>FAILED</b>
-&gt; reason: you are not on the list
-&gt; the list has one name on it
-&gt; awaiting verification<span class="crude-caret">&nbsp;</span></pre>
+    <hr>
+
+    {/* Plain sentences, not a fake boot log in a monospace panel. A themed
+        terminal reads as a DESIGN CHOICE; two flat lines of body text read as a
+        page written by someone who does not make websites, which is the joke
+        Sam actually asked for. */}
+    <p>This page is private.</p>
+    <p>
+        You are not on the list. The list has one name on it. If you are that
+        person, answer the questions below and it will let you in.
+    </p>
 
     <noscript>
         <p class="crude-noscript">
@@ -214,9 +217,9 @@ const showPlaceholderWarning = import.meta.env.DEV && gateNeedsReview();
     <hr>
 
     <p class="crude-foot">
-        Best viewed in Netscape Navigator 4.0 at 800&times;600.<br>
-        <span class="crude-counter" id="counter">0000001</span><br>
-        visitors since forever
+        visitors: 1<br>
+        {/* The give-up route, after three misses. See the script. */}
+        <span id="q-giveup-slot"></span>
     </p>
 </div>
 
