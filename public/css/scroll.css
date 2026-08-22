@@ -88,10 +88,28 @@ html.gsap-on .band-home {
     html.gsap-on .band-home { min-height: 100svh; }
 }
 
-html.gsap-on .home-inner,
-html.gsap-on .hero-name,
-html.gsap-on .hero-lower,
-html.gsap-on .hero-canvas-wrap { will-change: transform; }
+/* `will-change` on the four planes the pin actually moves — AND ONLY AT THE
+   WIDTHS WHERE THE PIN RUNS.
+
+   The query is a copy of gsap-motion.js §4a's `mmHero.add("(min-height: 560px)
+   and (min-width: 900px)")`; keep the two in step. Below it the pin is
+   deliberately not created, so an unconditional hint promoted four nodes to
+   their own compositor layers — including `.hero-canvas-wrap`, a full-width
+   <canvas> box, and `.hero-name`, a display-type <h1> whose text rasterises
+   differently once it is on its own layer — for an animation that never
+   arrives. `will-change` is a promise to the compositor, and a promise that is
+   never kept is pure cost: it is held for the entire life of the document
+   because nothing here ever takes it back.
+
+   Measured at a 390x900 viewport: 4 permanently-promoted nodes before, 0
+   after. At 1440 the count is unchanged, which is the point — the desktop
+   hint is real and stays. */
+@media (min-width: 900px) and (min-height: 560px) {
+    html.gsap-on .home-inner,
+    html.gsap-on .hero-name,
+    html.gsap-on .hero-lower,
+    html.gsap-on .hero-canvas-wrap { will-change: transform; }
+}
 
 /* Line-art plane. Injected by gsap-motion.js, so it exists only when we are
    allowed to animate — there is no reduced-motion state of it to get wrong.
@@ -190,14 +208,23 @@ html.gsap-on .hero-fg .hero-fg-line { stroke-width: calc(1.1px * var(--contour))
    now shows every pass at once, and nothing here is scroll-driven.
 
    Nothing injects `.hstage` / `.hviewport` / `.pass-depth` any more, so these
-   rules matched nothing and are deleted rather than left as dead weight. The
-   reduced-motion collapse in section 4 is kept: it is inert now, but it is
-   cheap insurance if a horizontal treatment is ever reintroduced.
+   rules matched nothing and are deleted rather than left as dead weight.
+
+   The reduced-motion collapse that used to accompany them in section 4 is gone
+   for the same reason — see the note at the top of that section. Keeping
+   `display: none` / `display: contents` rules for markup nothing builds any
+   more is not "cheap insurance": deleting section 3's rules while leaving
+   section 4's is precisely what broke this file. That deletion took section
+   4's OPENING COMMENT DELIMITER with it, leaving section 4's header as bare
+   text; the parser then swallowed the header and the whole @media block that
+   followed it as one invalid selector and dropped both. Measured before the
+   repair: 0 prefers-reduced-motion rules in scroll.css against 4 in
+   styles.css, 2 in layout.css, 1 in motion.css.
 
    NOTE the overflow contract this section used to carry: `.pass-wall` was the
    only box on the site permitted to exceed the viewport width. That permission
    is withdrawn — nothing should be wider than its scrollport now, and
-   /tmp/gate.py asserts exactly that at 1440/820/390.
+   tools/a11y-motion/gate_dir.py asserts exactly that at 1440/820/390.
    ========================================================================== */
 
 
@@ -212,33 +239,60 @@ html.gsap-on .hero-fg .hero-fg-line { stroke-width: calc(1.1px * var(--contour))
    FINISHED AND VISIBLE.
 
    Never add a `display: none`, an `opacity: 0` or an off-screen transform to
-   this block. Stranding content invisible is the #1 regression in this repo
-   and this is the last line of defence against it.
+   this block for anything that carries CONTENT. Stranding content invisible is
+   the #1 regression in this repo and this is the last line of defence against
+   it. (`.hero-fg` at the bottom is the one exception, and it is only allowed
+   because it is aria-hidden ornament that JS injects — see its own note.)
+
+   EVERY SELECTOR HERE MUST MATCH SOMETHING THAT EXISTS. The rules for the
+   deleted filmstrip (`.hstage`, `.hviewport`, `.pass-depth`, `.hstage-foot`,
+   and a `display: grid !important` on `.pass-wall`) were removed with section
+   3's markup: dead rules kept "as insurance" are what made this block's own
+   deletion hazardous, and one of them was a `display: none` sitting directly
+   under the paragraph forbidding them.
+
+   The reduced-motion state of `.pass-wall` and its tilted `.pass` children is
+   layout.css's, not this file's — it authors the tilt with independent
+   `rotate` / `translate` deliberately so the tilt survives as a resting STATE
+   here. A `transform: none !important` from this file would not have touched
+   it, but claiming ownership of that box from here invites someone to add one.
    ========================================================================== */
 @media (prefers-reduced-motion: reduce) {
-    /* Collapse the whole horizontal track back to the plain wall. */
-    .hstage, .hviewport, .pass-depth {
-        display: contents !important;
-        transform: none !important;
-        opacity: 1 !important;
-    }
-    .pass-wall {
-        display: grid !important;
-        width: auto !important;
-        transform: none !important;
-        will-change: auto !important;
-    }
-    .pass-depth > .pass { min-height: 190px; }
-    .hstage-foot { display: none !important; }
-
-    /* Parallax planes sit exactly where the static layout puts them. */
+    /* Parallax planes sit exactly where the static layout puts them.
+       These are the nodes gsap-motion.js §2/§4/§4a writes an inline `y` to.
+       An `!important` author declaration outranks a normal inline style, so
+       this genuinely reverts GSAP's per-frame writes rather than merely
+       competing with them — measured: 12 of 13 planes on `/` still carried a
+       live inline transform after a mid-session preference flip while this
+       block was being dropped by the parser, 0 afterwards. */
     .home-inner, .hero-name, .hero-lower, .hero-canvas-wrap,
-    .section-head, .shape-plx, .hero-fg-plx {
+    .section-head, .shape-plx, .shape-drift, .hero-fg-plx,
+    .motif-parallax, .glow-sage, .glow-olive {
         transform: none !important;
         opacity: 1 !important;
         will-change: auto !important;
     }
     .hero-canvas-wrap { display: block !important; }
+
+    /* Four additions to that list, all previously uncovered by ANY file:
+
+       `.shape-drift`  — §2's ambient drift is the only tween on the page with
+                         `repeat: -1`, so it is the one thing that keeps moving
+                         forever after a mid-session flip rather than merely
+                         resting somewhere wrong.
+       `.glow-sage` /  — §4's background wash. Full-viewport blurred gradients
+       `.glow-olive`     at z-index -2: the least noticeable motion here and
+                         also the largest AREA of it, which is exactly the
+                         combination a vestibular-sensitive reader reports as
+                         "the page is swimming" without being able to point at
+                         a moving object.
+       `.motif-parallax` — §4's hero-motif <g>.
+
+       None of the three carries an authored transform, so `none` is their true
+       static state, not an approximation of it. Verified before adding: a
+       `transform: none !important` on `.shape-field--travel` WOULD have been
+       wrong (styles.css centres it with translateY(-50%)), which is why the
+       drift group and not the field is the node listed here. */
 
     /* Contour density resets to the resting hairline: `--contour: 1`
        reproduces styles.css's stroke-widths exactly. */

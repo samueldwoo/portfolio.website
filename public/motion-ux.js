@@ -64,6 +64,35 @@
    change and fully unwind: inline transforms cleared, cursor and halo
    removed, flag dropped.
 
+   THE UNWIND MUST DISARM, NOT JUST TIDY UP. This was a real bug, and
+   the shape of it is worth keeping in mind because it is the kind that
+   passes every "is anything stranded?" check.
+
+   Dropping `html.motion-on` and `.motion-spring` is what hands
+   `transform` back to the stylesheet — but those two classes are also
+   the ONLY hooks the reduced-motion belts in styles.css are keyed on
+   (`html.motion-on .motion-spring { transform: none !important }`). So
+   an unwind that removed the flags while leaving the gesture handlers
+   attached made things WORSE than doing nothing: the next hover wrote a
+   fresh inline spring, and the belt that would have neutralised it had
+   just been unhooked.
+
+   Measured, on a mid-session flip with the pointer then moved onto
+   `.btn-resume`: computed transform `matrix(1, 0, 0, 1, 0, -3)`, a live
+   spring, after the reader had asked for reduced motion. It read as
+   `none` on `.pass` / `.project-card` / `.bubble` only because those
+   elements happen to ALSO be matched by unrelated belts
+   (`.reveal { transform: none !important }`, `.skills-list > *`), which
+   is luck, not design — the four button-shaped claims
+   (`.btn-resume`, `.nav-cta`, `.nav-toggle`, the submit button) match
+   none of them and were uncovered.
+
+   So `unwind()` now sets `live = false` FIRST. Every write in this file
+   goes through `animate()` below, which is inert once that flag drops,
+   and every gesture binding is collected in `bindings` and torn down.
+   Nothing here can start moving again afterwards, whether or not any
+   stylesheet is there to catch it.
+
    ---- Three deliberate restrictions on Motion's own gestures ----
    1. `Motion.press()` sets `tabIndex = 0` on any target that is not
       natively focusable, to give the gesture keyboard support. That is
@@ -105,6 +134,51 @@
     var claimed = [];
     /* Every node this file appended to the document, for the same reason. */
     var injected = [];
+    /* Teardown functions from Motion's own gesture helpers (`hover()` and
+       `press()` each return one), so the unwind can genuinely unbind rather
+       than leave live listeners behind a flag. */
+    var bindings = [];
+
+    /* ---------- The one gate every write goes through ----------
+       `live` is true for the whole normal life of the document and false
+       for good once the reader turns reduced motion on. Nothing in this
+       file may call `M.animate` directly: routing every call through here
+       is what makes the unwind a single assignment instead of a promise to
+       remember nine call sites. See the reduced-motion note in the header
+       for why "tidy up but stay armed" was not good enough.
+
+       In-flight animations are tracked so the unwind can stop them too — a
+       spring created one frame before the flip would otherwise keep writing
+       all the way to its target. */
+    var live = true;
+    var inflight = [];
+
+    function animate(target, props, transition) {
+        if (!live) return null;
+        var controls = M.animate(target, props, transition);
+        if (controls) {
+            inflight.push(controls);
+            // Keep the list short; a finished animation cannot write anything.
+            if (controls.finished && typeof controls.finished.then === "function") {
+                var drop = function () {
+                    var i = inflight.indexOf(controls);
+                    if (i > -1) inflight.splice(i, 1);
+                };
+                controls.finished.then(drop, drop);
+            }
+        }
+        return controls;
+    }
+
+    function stopInflight() {
+        inflight.forEach(function (c) {
+            try {
+                if (typeof c.stop === "function") c.stop();
+                else if (typeof c.cancel === "function") c.cancel();
+            } catch (err) { /* already finished: nothing to stop */ }
+        });
+        inflight.length = 0;
+    }
 
     /* ---------- Spring vocabulary ----------
        Calm and editorial: nothing overshoots more than a hair, except
@@ -280,7 +354,7 @@
             if (state.hover) { y = opts.lift; scale = opts.hoverScale || 1; }
             if (state.press) { y = opts.pressLift; scale = opts.pressScale || 0.99; }
             el.style.willChange = "transform";
-            M.animate(el, { y: y, scale: scale },
+            animate(el, { y: y, scale: scale },
                 state.press ? SPRING.press
                             : (state.released ? SPRING.release : opts.spring));
         }
@@ -301,7 +375,7 @@
                 t.transformPerspective = opts.perspective || 900;
             }
             el.style.willChange = "transform";
-            M.animate(el, t, transition || SPRING.magnet);
+            animate(el, t, transition || SPRING.magnet);
         }
 
         /* Releasing the magnet has to cancel any pointermove frame that is
@@ -340,7 +414,10 @@
             }, 760);
         }
 
-        M.hover(el, function () {
+        // Motion's gesture helpers each return their own teardown; keep it so
+        // the reduced-motion unwind can unbind rather than merely flag.
+        bindings.push(M.hover(el, function () {
+            if (!live) return;
             state.hover = true;
             state.released = false;
             if (settleTimer) { clearTimeout(settleTimer); settleTimer = null; }
@@ -354,10 +431,11 @@
                 if (opts.enter) opts.enter(el, false);
                 settle();
             };
-        });
+        }));
 
         if (opts.pressable) {
             var onPress = function () {
+                if (!live) return;
                 state.press = true;
                 state.released = false;
                 if (settleTimer) { clearTimeout(settleTimer); settleTimer = null; }
@@ -370,7 +448,7 @@
                 };
             };
             if (isNativelyFocusable(el) && typeof M.press === "function") {
-                M.press(el, onPress);            // keyboard press support included
+                bindings.push(M.press(el, onPress));   // keyboard press too
             } else {
                 pressPointer(el, onPress);       // pointer only, no tabIndex
             }
@@ -489,7 +567,7 @@
     function planeTaxi(pass, on) {
         var plane = pass.querySelector(".pass-plane");
         if (!plane) return;
-        M.animate(plane, { x: on ? 7 : 0 },
+        animate(plane, { x: on ? 7 : 0 },
             on ? { type: "spring", stiffness: 420, damping: 15, mass: 0.5 } : SPRING.home);
     }
 
@@ -522,8 +600,32 @@
             if (Math.abs(x - (el.__mxProxX || 0)) < 0.2) return;
             el.__mxProxX = x;
             el.__mxProxLean = Math.abs(x) > 0.2;   // tells settle() to keep its hands off
-            el.style.willChange = "transform";
-            M.animate(el, { x: x, rotate: rz }, el.__mxProxLean ? SPRING.magnet : SPRING.home);
+            /* `will-change` is a hint with a real cost, and section 1 hands it
+               back in settle(); this block never did, so a single mouse move
+               anywhere within 160px of a CTA promoted it to its own compositor
+               layer for the rest of the document's life. Registered in
+               `claimed` for the same reason — the unwind has to know this
+               element was written to, and `lean()` is reachable on elements
+               springify() never claimed (the submit button is claimed, but the
+               selector sets here and there are maintained separately and have
+               drifted apart before). */
+            if (claimed.indexOf(el) === -1) claimed.push(el);
+            if (el.__mxProxLean) {
+                el.style.willChange = "transform";
+            } else {
+                // Back at rest: drop the hint once the return spring has run.
+                var controls = animate(el, { x: x, rotate: rz }, SPRING.home);
+                var release = function () {
+                    if (!el.__mxProxLean) el.style.removeProperty("will-change");
+                };
+                if (controls && controls.finished && controls.finished.then) {
+                    controls.finished.then(release, release);
+                } else {
+                    release();
+                }
+                return;
+            }
+            animate(el, { x: x, rotate: rz }, SPRING.magnet);
         }
 
         function update() {
@@ -668,8 +770,8 @@
         function shape() {
             var s = SHAPE[stateName] || SHAPE.idle;
             var k = pressed ? 0.8 : 1;
-            M.animate(ring, { scale: s.ring * k, opacity: visible ? s.op : 0 }, SPRING.cursor);
-            M.animate(dot, { scale: s.dot * (pressed ? 0.7 : 1), opacity: visible ? 1 : 0 }, SPRING.cursor);
+            animate(ring, { scale: s.ring * k, opacity: visible ? s.op : 0 }, SPRING.cursor);
+            animate(dot, { scale: s.dot * (pressed ? 0.7 : 1), opacity: visible ? 1 : 0 }, SPRING.cursor);
             ring.classList.toggle("is-field", stateName === "field");
         }
 
@@ -694,7 +796,7 @@
             if (label.textContent === text) return;
             label.textContent = text || "";
             label.classList.toggle("is-on", !!text);
-            M.animate(label, { opacity: text ? 1 : 0 }, { duration: 0.16 });
+            animate(label, { opacity: text ? 1 : 0 }, { duration: 0.16 });
         }
 
         function resolve(target) {
@@ -733,6 +835,13 @@
         }, { passive: true });
 
         function tick() {
+            // The follow hosts are written directly rather than through
+            // `animate()` (a spring re-targeted every frame is a chase, not a
+            // spring), so this is the one write in the file the `live` gate
+            // does not cover on its own. Unwind removes these nodes, so the
+            // writes would be harmless — but the rAF loop would keep running
+            // for the rest of the session, which is not.
+            if (!live) { running = false; return; }
             // Critically-damped follow: the dot is nearly locked to the
             // pointer, the ring lags a frame or two, and that lag is the
             // whole reason the pair reads as alive.
@@ -821,7 +930,7 @@
                 if (links[i].classList.contains("is-active")) { active = links[i]; break; }
             }
             if (!active) {                       // hero / no section claimed
-                M.animate(ind, { opacity: 0 }, { duration: 0.18 });
+                animate(ind, { opacity: 0 }, { duration: 0.18 });
                 shown = false;
                 return;
             }
@@ -836,11 +945,11 @@
                 // First appearance: no slide in from a meaningless origin.
                 ind.style.left = left + "px";
                 ind.style.width = width + "px";
-                M.animate(ind, { opacity: 1 }, { duration: instant ? 0 : 0.2 });
+                animate(ind, { opacity: 1 }, { duration: instant ? 0 : 0.2 });
                 shown = true;
                 return;
             }
-            M.animate(ind, { left: left + "px", width: width + "px", opacity: 1 }, SPRING.nav);
+            animate(ind, { left: left + "px", width: width + "px", opacity: 1 }, SPRING.nav);
         }
 
         var scheduled = false;
@@ -902,14 +1011,22 @@
             if (!open) { clearRows(); return; }
             if (!window.matchMedia("(max-width: 760px)").matches) return;
 
-            M.animate(rows,
+            /* Same conditional-`.finished` reasoning as section 7, and it
+               matters more here: this is the one animation in the file that
+               writes `opacity: 0`, so the row cleanup is what keeps the panel
+               from opening onto invisible links. If `animate()` is inert
+               (post-unwind) the rows were never hidden, and clearing straight
+               away is exactly right. */
+            var rowsIn = animate(rows,
                 { opacity: [0, 1], y: [-10, 0] },
                 {
                     delay: M.stagger ? M.stagger(0.035) : 0,
                     duration: 0.34,
                     type: "spring", stiffness: 420, damping: 30
                 }
-            ).finished.then(clearRows, clearRows);
+            );
+            if (rowsIn && rowsIn.finished) rowsIn.finished.then(clearRows, clearRows);
+            else clearRows();
         }).observe(navLinks, { attributes: true, attributeFilter: ["class"] });
     })();
 
@@ -957,7 +1074,7 @@
             // another. The first appearance, and every scroll re-pin, is
             // instant — a halo flying in from a stale position reads as a
             // glitch, and a spring chasing the scroll offset reads as lag.
-            M.animate(halo, {
+            animate(halo, {
                 x: r.left - pad,
                 y: r.top - pad,
                 width: r.width + pad * 2,
@@ -972,7 +1089,7 @@
             current = null;
             if (!shown) return;
             shown = false;
-            M.animate(halo, { opacity: 0 }, { duration: 0.16 });
+            animate(halo, { opacity: 0 }, { duration: 0.16 });
         }
 
         document.addEventListener("focusin", function (e) {
@@ -1031,10 +1148,16 @@
                 if (claimed.indexOf(el) === -1) claimed.push(el);
                 // Amplitude decays 8 → 0 so it reads as a shake settling,
                 // not as a vibration.
-                M.animate(el, { x: [0, -8, 6, -4, 2, 0] },
-                    { duration: 0.42, ease: [0.2, 0.7, 0.2, 1] })
-                    .finished.then(function () { el.style.removeProperty("transform"); },
-                                   function () { el.style.removeProperty("transform"); });
+                /* `animate()` returns null once the unwind has run, so the
+                   `.finished` chain has to be conditional — a form submitted
+                   after a mid-session preference flip would otherwise throw a
+                   TypeError inside a native `invalid` handler. Running the
+                   cleanup directly reaches the same end state. */
+                var shake = animate(el, { x: [0, -8, 6, -4, 2, 0] },
+                    { duration: 0.42, ease: [0.2, 0.7, 0.2, 1] });
+                var wipe = function () { el.style.removeProperty("transform"); };
+                if (shake && shake.finished) shake.finished.then(wipe, wipe);
+                else wipe();
             });
 
             var clear = function () {
@@ -1183,19 +1306,55 @@
 
     /* ============================================================
        9. Runtime reduced-motion unwind
-       If the reader turns the OS setting on mid-visit, drop the flag
-       (returning every claimed element to its CSS hover state), wipe
-       every inline transform we wrote, and remove every node we added.
-       Cheap insurance against the one way this file could leave
-       something stuck.
+       If the reader turns the OS setting on mid-visit: DISARM first, then
+       tidy. The order matters and is the whole point — see the
+       reduced-motion note in the file header for the bug that taught it.
+
+       Disarming is three things, and none of them is optional:
+         1. `live = false`, so every `animate()` in this file is inert from
+            this instant. Nothing new can start.
+         2. `stopInflight()`, so a spring created on the frame before the
+            flip cannot keep writing its way to a target. Without this the
+            element lands wherever that tween was headed — which, if the
+            pointer happened to be resting on it, is the hover lift.
+         3. `bindings`, Motion's own `hover()` / `press()` teardowns, so the
+            listeners are gone rather than merely gated.
+
+       Only then do we drop `motion-on` / `.motion-spring`, because those
+       two classes are what the reduced-motion belts in styles.css are keyed
+       on: removing them while anything here was still armed left the page
+       with a live spring and nothing able to override it.
+
+       `clearTransform` runs twice — now, and once more after the longest
+       spring in SPRING could possibly have settled — because step 2 depends
+       on Motion exposing a stop API on its playback controls, and this file
+       should not be one API rename away from stranding a lift.
        ============================================================ */
     function unwind() {
-        root.classList.remove("motion-on");
-        root.classList.remove("mx-exiting");
-        claimed.forEach(function (el) {
-            clearTransform(el);
-            el.classList.remove("motion-spring");
+        live = false;                       // 1. nothing new may start
+        stopInflight();                     // 2. nothing in flight may finish
+        bindings.forEach(function (off) {   // 3. nothing may fire again
+            if (typeof off === "function") {
+                try { off(); } catch (err) { /* helper already torn down */ }
+            }
         });
+        bindings.length = 0;
+
+        root.classList.remove("motion-on");
+        root.classList.remove("motion-cursor");
+        root.classList.remove("mx-exiting");
+
+        var tidy = function () {
+            claimed.forEach(function (el) {
+                clearTransform(el);
+                el.classList.remove("motion-spring");
+                delete el.__mxProxX;
+                delete el.__mxProxLean;
+            });
+        };
+        tidy();
+        window.setTimeout(tidy, 1200);      // longer than any SPRING here
+
         injected.forEach(function (el) {
             if (el && el.parentNode) el.parentNode.removeChild(el);
         });

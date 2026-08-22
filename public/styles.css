@@ -549,11 +549,6 @@ a { color: inherit; text-decoration: none; }
    band, which is correct — it's the section's only real call to action. */
 .band--dark .btn-resume,
 .band--dark .contact-form button {
-    /* 44px minimum tap target (WCAG 2.5.5): measured 96x42, 2px short.
-       Must live on THIS base rule, not the `.band--dark` variant — the
-       connect band is light in the current band rhythm, so the dark
-       variant never matches and computed min-height stayed `auto`. */
-    min-height: 44px;
     color: #161c11;
     background: var(--sage);
 }
@@ -1318,6 +1313,12 @@ a.bubble.ticker:hover::after { transform: translate(2px, -2px); opacity: 1; }
     box-shadow: 0 0 0 3px rgba(95,122,79,.22);
 }
 .contact-form button {
+    /* 44px minimum tap target (WCAG 2.5.5): measured 96x42, 2px short.
+       Anchored to THIS base rule. Twice I matched the substring inside
+       `.band--dark .contact-form button {` instead, and the connect band is
+       LIGHT in the current rhythm, so the dark variant never applies and
+       computed min-height stayed `auto`. */
+    min-height: 44px;
     align-self: flex-start;
     font-family: var(--mono);
     font-size: .78rem;

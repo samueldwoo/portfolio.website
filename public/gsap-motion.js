@@ -65,12 +65,19 @@
 (function () {
     "use strict";
 
-    var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    var reduceQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    var reduceMotion = reduceQuery.matches;
     var gsap = window.gsap;
 
     // Hard stop before any gsap.set(): a bail-out here must leave the DOM
     // exactly as the CSS painted it (all content visible).
     if (!gsap || reduceMotion) return;
+
+    /* Callbacks the §10 unwind runs if the reader turns reduced motion ON
+       mid-visit. Anything below that hides a node, pins a section, or starts a
+       `repeat: -1` tween registers here — those three are exactly the states
+       that a CSS `!important` belt cannot reach on its own. */
+    var unwindHooks = [];
 
     var ScrollTrigger = window.ScrollTrigger;
     var hasST = !!ScrollTrigger;
@@ -1237,6 +1244,7 @@
            text appears with no animation, which is the correct failure
            direction. */
         var hidden = [];
+        var liveSplits = [];
         claims.forEach(function (c) {
             hidden.push(c.el);
             var head = c.el.closest(".case-head");
@@ -1284,6 +1292,19 @@
                 return;
             }
 
+            /* Track the split for as long as its wrappers are in the DOM, so
+               the §10 unwind can revert() them. Without this, a preference flip
+               landing mid-tween leaves the mask divs behind permanently: the
+               text still READS correctly (styles.css forces `.srline-mask` to
+               `overflow: visible`, and SplitText's aria-label survives), but
+               `text-wrap: balance` and text selection stay broken for the rest
+               of the visit. */
+            liveSplits.push(split);
+            var untrack = function () {
+                var i = liveSplits.indexOf(split);
+                if (i > -1) liveSplits.splice(i, 1);
+            };
+
             // Lines start below the mask, so the element itself is safe
             // to show the instant the wrappers exist.
             reveal(el);
@@ -1294,6 +1315,7 @@
                     // first so no inline transform survives the revert.
                     gsap.set(lines, { clearProps: "all" });
                     split.revert();
+                    untrack();
                 }
             });
             tl.from(lines, {
@@ -1342,6 +1364,107 @@
         setTimeout(function () {
             hidden.slice().forEach(reveal);
         }, 4000);
+
+        /* Belt 4 — the reduced-motion unwind (§10). `hidden` is the ONE set on
+           the page held invisible by an inline opacity with no CSS belt behind
+           it: §8 strips `.reveal` off these headings, so
+           `.reveal { opacity: 1 !important }` no longer matches them and there
+           is no `.section-title { opacity: 1 }` rule to fall back on. Belt 3
+           would still get there, but making a reader who has just asked for
+           less motion wait up to four seconds for the headings is the wrong
+           answer. */
+        unwindHooks.push(function () {
+            hidden.slice().forEach(reveal);
+            liveSplits.slice().forEach(function (s) {
+                try { s.revert(); } catch (err) { /* already reverted */ }
+            });
+            liveSplits.length = 0;
+        });
+    }
+
+    /* ============================================================
+       10. Runtime reduced-motion unwind
+
+       Everything above is gated on the ONE read of the media query at the top
+       of this file, which is correct for a reader who arrives with the
+       preference set — nothing is ever built. It is not enough for a reader who
+       turns it on while looking at the page, and three of the states here
+       cannot be undone from a stylesheet at all:
+
+         THE PIN. `#home` is held still with `position: fixed` plus an injected
+           pin-spacer. No `transform: none !important` unpins it. A section that
+           refuses to scroll is the single most disorienting thing on the page
+           and it would have survived the flip untouched.
+         `repeat: -1` TWEENS. The `.shape-drift` ambient drift (§2) and the
+           `.flight-dot` arc (§3) run forever. scroll.css can neutralise the
+           first (it writes `transform`), but the second animates the `cx`/`cy`
+           ATTRIBUTES of an SVG circle — there is no property for CSS to
+           override, so only stopping the tween stops the motion.
+         INLINE `opacity: 0`. §8's claimed headings — see belt 4 above.
+
+       ORDER, and why each step is where it is:
+         1. Kill every ScrollTrigger with revert=true. `kill(true)` is what
+            removes the pin-spacer and puts the section back in the flow;
+            `kill()` alone leaves the spacer behind and the document 765px too
+            tall.
+         2. Kill the tweens, including the endless ones. `globalTimeline.clear()`
+            catches every tween this file created without needing a registry.
+         3. Run the hooks, so anything held invisible is shown.
+         4. Clear the inline props GSAP wrote on the nodes it owns. Deliberately
+            an explicit list rather than `killTweensOf("*")` + a blanket
+            clearProps: this file is not the only writer on the page, and
+            wiping inline styles it does not own is how one system's cleanup
+            becomes another's stranding bug.
+         5. Drop `html.gsap-on` LAST. It is the flag every gated layout rule in
+            scroll.css hangs off, so dropping it first would re-lay-out the
+            hero while the pin was still in place.
+
+       scroll.css's `@media (prefers-reduced-motion: reduce)` block stays as the
+       belt behind this: if this handler never runs (an old engine with no
+       `addEventListener` on MediaQueryList) the CSS still lands every plane in
+       its static position. Neither is a substitute for the other — the CSS
+       cannot unpin, and JS that throws leaves nothing.
+       ============================================================ */
+    function unwindGsap() {
+        if (hasST) {
+            ScrollTrigger.getAll().forEach(function (t) {
+                try { t.kill(true); } catch (err) { /* already dead */ }
+            });
+        }
+        try { gsap.globalTimeline.clear(); } catch (err) { /* nothing running */ }
+
+        unwindHooks.forEach(function (fn) {
+            try { fn(); } catch (err) { /* a hook must not block the rest */ }
+        });
+
+        /* The nodes this file writes inline transforms to, and nothing else.
+           `.brand-ltr` is included because the wordmark spring (§1) is the one
+           hover effect here that is not scroll-linked, so a flip mid-hover
+           would otherwise leave the letters lifted. */
+        var owned = ".shape-plx, .shape-drift, .hero-fg-plx, .motif-parallax," +
+                    " .glow-sage, .glow-olive, .section-head, .home-inner," +
+                    " .hero-name, .hero-lower, .hero-canvas-wrap, .trip-mark," +
+                    " .timeline-rail, .case-rail-fill, .case-rail-head," +
+                    " .brand-ltr, .brand-rule, .brand-dot," +
+                    " .shape-line, .shape-ring, .shape-tick, .shape-dot," +
+                    " .pass.gsap-reveal, .gsap-reveal, .srline";
+        try {
+            gsap.set(toArray(owned), { clearProps: "all" });
+        } catch (err) { /* selector matched nothing on this page */ }
+
+        // The injected foreground plane only ever existed to be parallaxed.
+        toArray(".hero-fg").forEach(function (el) {
+            if (el.parentNode) el.parentNode.removeChild(el);
+        });
+
+        document.documentElement.style.removeProperty("--contour");
+        document.documentElement.classList.remove("gsap-on");
+    }
+
+    if (typeof reduceQuery.addEventListener === "function") {
+        reduceQuery.addEventListener("change", function (e) {
+            if (e.matches) unwindGsap();
+        });
     }
 
     /* Late webfont/image loads shift layout; recalc so triggers that
