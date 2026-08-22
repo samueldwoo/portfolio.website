@@ -165,7 +165,12 @@ const pageLinks = [
     <!-- Fixed top navigation bar. Always visible: it condenses on the way
          down but never translates away, never fades and never needs to be
          hunted for. -->
-    <header class="topbar" aria-label="Primary">
+    {/* No aria-label here. <header> at body level IS the `banner` landmark, so
+        aria-label="Primary" named the BANNER "Primary" — measured: Chrome's AX
+        tree reported `banner(Primary)`, i.e. a screen reader announced "Primary
+        banner". "Primary" belongs on the nav landmark below, which is what it
+        was written for. */}
+    <header class="topbar">
         <div class="topbar-inner">
             {/* Springy wordmark: per-letter spans so GSAP can stagger them, plus a
                 sage rule that sweeps in underneath. No icon — the type IS the mark.
@@ -185,7 +190,12 @@ const pageLinks = [
                 owns its transform + width and nothing else writes them. It is
                 aria-hidden decoration; `aria-current` on the link is what
                 actually announces the active section. */}
-            <nav class="nav-links" id="nav-links" aria-label="Sections">
+            {/* "Primary", not "Sections": this row carries the cross-page
+                Projects/Travel links as well as same-page hashes, and the rail
+                below was already called "Sections on this page" — two nav
+                landmarks whose names differ by four words is a landmark list
+                nobody can navigate by. */}
+            <nav class="nav-links" id="nav-links" aria-label="Primary">
                 <span class="nav-marker" id="nav-marker" aria-hidden="true"></span>
                 <a href={href('interests')} class="nav-link" {...spy('interests')}>Interests</a>
                 {/* `data-nav-page` marks the link for the page you are ON. It is
@@ -216,8 +226,12 @@ const pageLinks = [
                     button carrying its own key hint — because a hidden Cmd-K is
                     a feature only its author knows about. script.js rewrites the
                     kbd to "Ctrl K" off macOS. */}
+                {/* aria-expanded, maintained by script.js: with aria-haspopup
+                    alone there was no way for a screen reader to tell whether
+                    the palette it controls is currently open. */}
                 <button class="nav-cmd" id="nav-cmd" type="button"
                         aria-haspopup="dialog" aria-controls="cmdk"
+                        aria-expanded="false"
                         aria-keyshortcuts="Meta+K Control+K"
                         aria-label="Jump to a section or page">
                     <svg class="nav-cmd-icon" viewBox="0 0 20 20" aria-hidden="true">
@@ -228,9 +242,13 @@ const pageLinks = [
                     <kbd id="nav-cmd-key" aria-hidden="true">⌘K</kbd>
                 </button>
 
+                {/* The label is STABLE. It used to flip to "Close menu" on open,
+                    which double-encoded the state next to aria-expanded ("Close
+                    menu, expanded") — and could never be heard anyway, because
+                    showModal() makes everything outside the drawer inert. */}
                 <button class="nav-toggle" id="nav-toggle" type="button"
                         aria-haspopup="dialog" aria-controls="nav-drawer"
-                        aria-expanded="false" aria-label="Open menu">
+                        aria-expanded="false" aria-label="Menu">
                     <span class="nav-toggle-bar" aria-hidden="true"></span>
                     <span class="nav-toggle-bar" aria-hidden="true"></span>
                     <span class="nav-toggle-bar" aria-hidden="true"></span>
@@ -252,7 +270,7 @@ const pageLinks = [
     {/* Right-edge section rail (>=1024px). Filled in by script.js from this
         page's own `.band` elements — empty is display:none, so a JS-off
         reader sees nothing rather than an empty gutter. */}
-    <nav class="section-rail" id="section-rail" aria-label="Sections on this page"></nav>
+    <nav class="section-rail" id="section-rail" aria-label="On this page"></nav>
 
     <slot />
 
@@ -275,7 +293,7 @@ const pageLinks = [
             </div>
 
             <button class="drawer-search drawer-stagger" id="drawer-search" type="button"
-                    aria-haspopup="dialog" aria-controls="cmdk">
+                    aria-haspopup="dialog" aria-controls="cmdk" aria-expanded="false">
                 <svg viewBox="0 0 20 20" aria-hidden="true">
                     <circle cx="9" cy="9" r="5.5" stroke-linecap="round"></circle>
                     <path d="M13.2 13.2 17.5 17.5" stroke-linecap="round"></path>
@@ -326,18 +344,43 @@ const pageLinks = [
                     <circle cx="9" cy="9" r="5.5" stroke-linecap="round"></circle>
                     <path d="M13.2 13.2 17.5 17.5" stroke-linecap="round"></path>
                 </svg>
+                {/* aria-expanded starts FALSE and is written by renderPalette()
+                    from the live result count. It used to be hard-coded "true",
+                    so a query that matched nothing still told the screen reader
+                    the popup was open — measured: 0 options, aria-expanded=true. */}
                 <input id="cmdk-input" class="cmdk-input" type="text"
                        placeholder="Jump to a section or page…"
-                       role="combobox" aria-expanded="true" aria-controls="cmdk-list"
+                       role="combobox" aria-expanded="false" aria-controls="cmdk-list"
                        aria-autocomplete="list" aria-label="Jump to a section or page"
                        autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
                 {/* A real button: pointer users get a close control, and a modal
                     with a single focusable child leaves Tab with nowhere to go
-                    (Chrome drops focus to the document and the ring disappears). */}
-                <button type="button" class="cmdk-esc" id="cmdk-close" aria-label="Close">esc</button>
+                    (Chrome drops focus to the document and the ring disappears).
+
+                    The accessible name has to CONTAIN the visible word "esc" or
+                    this fails WCAG 2.5.3 Label in Name (Level A) — with
+                    aria-label="Close", a voice-control user saying "click esc"
+                    addressed nothing. Measured as the only 2.5.3 miss in the
+                    chrome. */}
+                <button type="button" class="cmdk-esc" id="cmdk-close"
+                        aria-label="Close (esc)">esc</button>
             </div>
-            <ul class="cmdk-list" id="cmdk-list" role="listbox" aria-label="Results"></ul>
-            <p class="cmdk-empty" id="cmdk-empty" hidden>Nothing matches that.</p>
+            {/* A DIV, not a UL. role="listbox" may only own `option` and `group`
+                children, and the group headings were `li[role="presentation"]`
+                whose text ("This page", "Site", "Reach out") was still exposed
+                INSIDE the listbox. renderPalette() now emits
+                div[role=group][aria-label] wrappers around div[role=option]
+                rows, which is legal ARIA and legal HTML — a `li` cannot contain
+                the `li`s a nested group would need. */}
+            <div class="cmdk-list" id="cmdk-list" role="listbox" aria-label="Results"></div>
+            {/* Visual empty state only; the announcement is the status region
+                below, so this must not be read a second time. */}
+            <p class="cmdk-empty" id="cmdk-empty" hidden aria-hidden="true">Nothing matches that.</p>
+            {/* The result count had NO announcement at all: typing a query that
+                matched nothing simply went quiet — aria-activedescendant was
+                cleared and nothing replaced it. script.js writes a debounced
+                count here so the region speaks once per pause, not per keystroke. */}
+            <p class="nav-sr" id="cmdk-status" role="status" aria-live="polite"></p>
             <div class="cmdk-foot" aria-hidden="true">
                 <span><kbd>↑</kbd><kbd>↓</kbd> move</span>
                 <span><kbd>↵</kbd> open</span>

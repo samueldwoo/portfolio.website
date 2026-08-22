@@ -70,7 +70,7 @@ PROBE_PATH = HERE / "probe.js"
 MASK_RECORDER_PATH = HERE / "mask_recorder.js"
 WEBKIT_RUNNER = HERE / "webkit_runner.mjs"
 
-DEFAULT_PAGES = ["index.html", "projects.html", "travel.html"]
+DEFAULT_PAGES = ["", "projects/", "travel/"]   # directory format (Vercel adapter forces it)
 
 # Scroll choreography. MUST stay in step with the constants in
 # webkit_runner.mjs — if one engine waits longer than another, a timing

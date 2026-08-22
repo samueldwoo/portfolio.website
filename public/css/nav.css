@@ -16,7 +16,16 @@
      - The active state is a clearly filled marker, not a subtle underline.
      - Sage identity and type stack are FIXED. Small sage text uses --sage-deep.
      - Every control must be keyboard operable with a visible :focus-visible
-       ring, and must not regress the existing skip-link.
+       ring, and must not regress the existing skip-link. NOTHING in this file
+       may set `outline: none` without drawing a replacement — that is how the
+       palette's text field ended up with no focus indicator at all.
+     - Reduced motion must be honoured on ::backdrop TOO. styles.css relies on
+       `* { animation: none !important }`, and `*` does not match pseudo-
+       elements, so every dialog animation here needs an explicit opt-out in
+       section 13. Verified by tools/a11y_chrome.py, which opens both dialogs
+       under prefers-reduced-motion and fails on any running animation.
+     - Interactive targets in the chrome are >= 44x44 at phone widths. Measured,
+       not eyeballed: tools/a11y_chrome.py --only tap.
    ==========================================================================
 
    WHAT THIS OVERHAUL SHIPS (four affordances, one system)
@@ -319,9 +328,17 @@ html.nav-marker-js .nav-marker {
 /* ==========================================================================
    5. Section rail (>=1024px)
    ========================================================================== */
+/* The `right` offset is 8px tighter than it looks: the tick's hit column grew
+   from 38px to 44px below, and at 1024px the whole page gutter is only 51px
+   (measured: content right edge 973, viewport 1024). The old
+   `clamp(8px, 1.2vw, 20px)` resolved to 12.3px there, which with a 44px column
+   would have put the rail 5px OVER the content. Backing the offset off by 8px
+   keeps a positive clearance at every width the rail is enabled at — measured
+   in tools/a11y_chrome.py, which fails if the clearance ever goes negative.
+   The dot stays centred in the column, so the extra 6px is invisible padding. */
 .section-rail {
     position: fixed;
-    right: clamp(8px, 1.2vw, 20px);
+    right: clamp(2px, calc(1.2vw - 8px), 20px);   /* explicit calc() for older WebKit */
     top: 50%;
     transform: translateY(-50%);
     z-index: 190;
@@ -330,11 +347,16 @@ html.nav-marker-js .nav-marker {
 }
 .section-rail:empty { display: none !important; }
 
+/* Geometry follows .rail-tick: the spine has to run centre-of-first-dot to
+   centre-of-last-dot and sit behind the dot column. Column is 44px wide
+   (centre 22, so a 2px spine sits at right: 21px) and 44px tall (so the first
+   and last dot centres are 22px in from each end). These four numbers move
+   together — if the tick size changes, change these. */
 .rail-spine {
     position: absolute;
-    right: 18px;
-    top: 15px;
-    bottom: 15px;
+    right: 21px;
+    top: 22px;
+    bottom: 22px;
     width: 2px;
     border-radius: 2px;
     background: var(--line2);
@@ -364,13 +386,15 @@ html.nav-marker-js .nav-marker {
    an in-flow label would make every tick ~130px wide, and that box keeps its
    hit area even at opacity 0: an invisible strip down the right edge of the
    viewport, quietly swallowing clicks meant for the content underneath. */
+/* 44x44, up from a measured 38x30. Height was free; width came out of the
+   `right` offset above rather than out of the content gutter. */
 .rail-tick {
     position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 38px;
-    min-height: 30px;
+    width: 44px;
+    min-height: 44px;
 }
 .rail-dot {
     position: relative;
@@ -397,7 +421,9 @@ html.nav-marker-js .nav-marker {
    hides nothing from a screen reader and strands no content. */
 .rail-label {
     position: absolute;
-    right: 30px;
+    /* 27px clears the dot inside the now-44px column (dot left edge sits 27px
+       from the column's right edge); +6px keeps the gap the 38px column had. */
+    right: 33px;
     top: 50%;
     font: 500 11px/1 var(--mono);
     letter-spacing: .07em;
@@ -585,7 +611,10 @@ html.nav-marker-js .nav-marker {
     border-color: var(--sage-deep);
     color: #fff;
 }
-.drawer-link.is-active .drawer-num { color: rgba(255, 255, 255, .78); }
+/* .78 alpha measured 4.62:1 on the sage-deep fill from the rendered bitmap —
+   over the 4.5 line for 10.6px type, but by 0.12, which is inside the noise of
+   a font-smoothing change. .88 buys real headroom for the same visual weight. */
+.drawer-link.is-active .drawer-num { color: rgba(255, 255, 255, .88); }
 .drawer-link[aria-current="page"] {
     background: var(--sage-soft);
     color: var(--sage-deep);   /* 5.2:1 on the chip */
@@ -661,11 +690,14 @@ html.nav-marker-js .nav-marker {
 .cmdk.is-closing::backdrop { animation: nav-fade-out .16s ease both; }
 @keyframes cmdk-out { to { opacity: 0; transform: translateY(-6px); } }
 
+/* Vertical padding trimmed from 14px to 10px because the two controls inside
+   both grew to a 44px minimum below; the head lands at 64px rather than the
+   72px it would otherwise have taken. */
 .cmdk-head {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 14px 16px;
+    padding: 10px 12px 10px 16px;
     border-bottom: 1px solid var(--line);
     background: linear-gradient(180deg, rgba(230, 235, 220, .55), rgba(230, 235, 220, 0));
 }
@@ -677,27 +709,48 @@ html.nav-marker-js .nav-marker {
     stroke-width: 1.9;
     fill: none;
 }
+/* `outline: none` used to live here with NOTHING replacing it, so the palette's
+   text field — one of only TWO tab stops in the whole dialog — had no focus
+   indicator at all. Measured: outline "none 3px", box-shadow "none",
+   :focus-visible true. That is a flat WCAG 2.4.7 failure, and it meant tabbing
+   between the input and the esc button made the ring blink out of existence.
+   The ring is drawn explicitly instead, tight to the field so it reads as part
+   of the search row rather than a floating box.
+   min-height 44px: the field measured 252x24, well under the 44px tap minimum
+   the drawer and the collapsed palette trigger were already raised to. */
 .cmdk-input {
     flex: 1 1 auto;
     min-width: 0;
+    min-height: 44px;
     font-family: var(--sans);
     font-size: 1.02rem;
     color: var(--ink);
     background: transparent;
     border: 0;
-    outline: none;
     padding: 2px 0;
+}
+.cmdk-input:focus-visible {
+    outline: 2px solid var(--sage);
+    outline-offset: 1px;
+    border-radius: 8px;
 }
 .cmdk-input::placeholder { color: var(--mut); }
 /* A real button, not a decorative <kbd>. Two reasons: pointer users get a
    close affordance, and a modal with only ONE focusable child sends Tab to
    nowhere — Chrome drops focus to the document and the ring vanishes. Two
    stops make the native cycle wrap properly. */
+/* 44x44, up from a measured 43.1x26. It is the palette's only pointer close
+   control and it is present at phone widths, where 26px tall is a miss on the
+   same scale as the three targets already fixed elsewhere in this file. The
+   11px label is unchanged — the box grew, the type did not. */
 .cmdk-esc {
     display: inline-flex;
     align-items: center;
-    min-height: 26px;
-    padding: 0 9px;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    min-height: 44px;
+    padding: 0;
     font: 500 11px/1 var(--mono);
     letter-spacing: .1em;
     text-transform: uppercase;
@@ -723,14 +776,21 @@ html.nav-marker-js .nav-marker {
     overflow-y: auto;
     overscroll-behavior: contain;
 }
-.cmdk-group {
+/* `.cmdk-group` is now the role="group" WRAPPER (a listbox may only own
+   `option` and `group`; the heading used to be a bare li[role=presentation]
+   whose text leaked into the listbox). `.cmdk-group-label` is the heading that
+   used to carry these styles. Deliberately a plain block, NOT display:contents
+   — Chrome and WebKit have both dropped ARIA roles off display:contents boxes,
+   which would silently delete the group semantics this change exists to add. */
+.cmdk-group { display: block; }
+.cmdk-group-label {
     font: 500 10px/1 var(--mono);
     letter-spacing: .16em;
     text-transform: uppercase;
     color: var(--sage-deep);
     padding: 12px 10px 7px;
 }
-.cmdk-list > .cmdk-group:first-child { padding-top: 4px; }
+.cmdk-list > .cmdk-group:first-child > .cmdk-group-label { padding-top: 4px; }
 
 .cmdk-item {
     display: flex;
@@ -792,6 +852,23 @@ html.nav-marker-js .nav-marker {
     text-align: center;
     color: var(--mut);
     font-size: .92rem;
+}
+
+/* Screen-reader-only text. There is no such utility in styles.css (us-song.css
+   has an `.sr-only`, but that sheet is not loaded by Base.astro), so the
+   palette's status region needs its own. clip-path rather than
+   `clip: rect(...)`, and NOT `display:none`/`visibility:hidden` — either of
+   those would take the live region out of the a11y tree and silence it. */
+.nav-sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    border: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
 }
 
 .cmdk-foot {
@@ -904,7 +981,12 @@ html:not(.nav-js) .nav-links {
     .nav-links { display: none; }
     .nav-toggle { display: flex; }
     .topbar-inner { padding: 0 clamp(16px, 4vw, 24px); }
-    .brand { padding: 8px 0; }
+    /* min-width, not more padding: the wordmark is four glyphs of a webfont, so
+       its measured width swings with whether Space Grotesk has landed yet —
+       40.5px on the fallback, 48.2px once swapped, and only one of those clears
+       44. .brand is inline-flex, so min-width applies and the glyphs stay
+       left-aligned exactly where they were. Height is already 53-59px here. */
+    .brand { padding: 8px 0; min-width: 44px; }
     :root { --bar-h: 62px; --bar-h-min: 54px; }
     .topbar-spacer { height: 62px; }
     /* No JS: the links get their own full-width row under the wordmark
@@ -964,9 +1046,28 @@ html:not(.nav-js) .nav-links {
     /* styles.css already kills all animation; these kill the transitions and
        pin the two decorative from-states to their finished values. Nothing
        here may hide anything. */
-    .topbar, .topbar-inner, .brand, .nav-link, .nav-cta, .nav-cmd,
+    .topbar, .topbar-inner, .brand, .nav-link, .nav-cta, .nav-cmd, .cmdk-input,
     .nav-marker, .rail-dot, .rail-label, .drawer-link, .nav-toggle-bar {
         transition: none !important;
+    }
+
+    /* THE ::backdrop LEAK. styles.css relies on `* { animation: none
+       !important }`, and `*` does not match pseudo-elements — so both dialogs
+       kept running `nav-fade-in` on their ::backdrop with reduced motion set.
+       Measured on the built site: opening the palette under
+       prefers-reduced-motion:reduce reported a running animation
+       `cmdk::backdrop nav-fade-in` on all three pages. A backdrop that fades is
+       a full-viewport animation, which is exactly what the query asks not to
+       happen. The element-side panels are restated for the same reason the rest
+       of this block is: so the guarantee is legible here and does not depend on
+       a wildcard in another file. */
+    .nav-dialog::backdrop,
+    .drawer.is-closing::backdrop,
+    .cmdk.is-closing::backdrop,
+    .drawer-panel,
+    .cmdk-panel,
+    .drawer-stagger {
+        animation: none !important;
     }
     /* The bar does not condense under reduced motion: without a transition
        the height change is a 14px jump on every scroll reversal, which is

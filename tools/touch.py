@@ -667,7 +667,15 @@ def run_page(driver, base, page, dev, results_root):
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[1])
     ap.add_argument("--base", required=True)
-    ap.add_argument("--pages", default="index.html,projects.html,travel.html")
+    # Directory-format URLs. @astrojs/vercel hard-forces build.format
+    # "directory", so the built pages are /, /projects/ and /travel/, and
+    # "projects.html" is a 301 in production and a flat 404 on a static server.
+    # This default used to be the .html list; the 404 body it fetched has no
+    # meta viewport, so the CDP device override reported innerWidth=980 and the
+    # suite failed its own "the override is real" assertion on 2 of 3 pages.
+    # That it failed loudly rather than passing quietly is the only reason the
+    # stale URL was visible at all.
+    ap.add_argument("--pages", default="./,projects/,travel/")
     ap.add_argument("--device", default="iphone14",
                     help="one of: %s (comma-separate for several)" % ", ".join(DEVICES))
     ap.add_argument("--headed", action="store_true")

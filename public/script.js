@@ -455,10 +455,8 @@
         drawer.classList.remove("is-closing");
         drawerClosing = false;
         drawer.showModal();
-        if (navToggle) {
-            navToggle.setAttribute("aria-expanded", "true");
-            navToggle.setAttribute("aria-label", "Close menu");
-        }
+        // aria-expanded carries the state; the label stays "Menu" (see Base.astro).
+        if (navToggle) navToggle.setAttribute("aria-expanded", "true");
     }
     function finishDrawerClose() {
         drawerClosing = false;
@@ -485,10 +483,7 @@
         // every other close path, then let our own close run.
         drawer.addEventListener("cancel", function (e) { e.preventDefault(); closeDrawer(); });
         drawer.addEventListener("close", function () {
-            if (navToggle) {
-                navToggle.setAttribute("aria-expanded", "false");
-                navToggle.setAttribute("aria-label", "Open menu");
-            }
+            if (navToggle) navToggle.setAttribute("aria-expanded", "false");
             drawer.classList.remove("is-closing");
             unlockScroll();
             // The platform restores focus to the opener, but only if focus was
@@ -540,7 +535,20 @@
     var cmdkInput = document.getElementById("cmdk-input");
     var cmdkList  = document.getElementById("cmdk-list");
     var cmdkEmpty = document.getElementById("cmdk-empty");
+    var cmdkStatus = document.getElementById("cmdk-status");
     var hasPalette = canDialog && palette && cmdkInput && cmdkList;
+
+    /* Both controls that open the palette advertise it with aria-haspopup, but
+       neither said whether it was OPEN — measured: #nav-cmd had no
+       aria-expanded attribute at all, on every page. One place to keep the two
+       triggers honest. */
+    var paletteTriggers = ["nav-cmd", "drawer-search"];
+    function setPaletteExpanded(open) {
+        paletteTriggers.forEach(function (id) {
+            var el = document.getElementById(id);
+            if (el) el.setAttribute("aria-expanded", open ? "true" : "false");
+        });
+    }
 
     var paletteItems = [];
     var shown = [];        // flat list of currently rendered items
@@ -636,13 +644,24 @@
             var inGroup = hits.filter(function (h) { return h.item.group === group; });
             if (!inGroup.length) return;
             inGroup.sort(function (a, b) { return (b.score - a.score) || (a.order - b.order); });
-            var head = document.createElement("li");
-            head.className = "cmdk-group";
-            head.setAttribute("role", "presentation");
+            /* role="group" wrapper rather than a bare heading row. A listbox may
+               only own `option` and `group`; the old `li[role="presentation"]`
+               heading left "This page" / "Site" / "Reach out" sitting loose
+               inside the listbox as exposed text. The heading itself is
+               aria-hidden now — the group's aria-label carries the same words
+               once, in the place ARIA expects them. */
+            var wrap = document.createElement("div");
+            wrap.className = "cmdk-group";
+            wrap.setAttribute("role", "group");
+            wrap.setAttribute("aria-label", group);
+            var head = document.createElement("div");
+            head.className = "cmdk-group-label";
+            head.setAttribute("aria-hidden", "true");
             head.textContent = group;
-            cmdkList.appendChild(head);
+            wrap.appendChild(head);
+            cmdkList.appendChild(wrap);
             inGroup.forEach(function (h) {
-                var li = document.createElement("li");
+                var li = document.createElement("div");
                 li.className = "cmdk-item" + (h.item.current ? " is-current" : "");
                 li.id = "cmdk-opt-" + shown.length;
                 li.setAttribute("role", "option");
@@ -660,12 +679,33 @@
                 li.appendChild(g);
                 li.appendChild(lab);
                 li.appendChild(meta);
-                cmdkList.appendChild(li);
+                wrap.appendChild(li);
                 shown.push({ el: li, item: h.item });
             });
         });
         if (cmdkEmpty) cmdkEmpty.hidden = shown.length > 0;
+        /* A combobox whose popup is empty is NOT expanded. This was hard-coded
+           "true" in the markup and never changed, so "zzzqqq" left the screen
+           reader believing a listbox of results was on screen. */
+        cmdkInput.setAttribute("aria-expanded", shown.length ? "true" : "false");
+        announceCount(shown.length, q);
         select(0);
+    }
+
+    /* Debounced, because renderPalette() runs on every keystroke and a
+       role="status" region rewritten per character is unusable — the reader
+       never finishes a phrase. One announcement per typing pause is the
+       APG-recommended behaviour for a combobox result count. */
+    var announceTimer = null;
+    function announceCount(n, query) {
+        if (!cmdkStatus) return;
+        if (announceTimer) clearTimeout(announceTimer);
+        announceTimer = setTimeout(function () {
+            if (!query) { cmdkStatus.textContent = ""; return; }   // full list; options speak
+            cmdkStatus.textContent = n === 0
+                ? "No results. Nothing matches that."
+                : (n === 1 ? "1 result." : n + " results.");
+        }, 420);
     }
 
     /* Wraps at both ends. The highlight is announced through
@@ -712,6 +752,7 @@
         palette.classList.remove("is-closing");
         paletteClosing = false;
         palette.showModal();
+        setPaletteExpanded(true);
         cmdkInput.focus();
         cmdkInput.select();
     }
@@ -733,7 +774,18 @@
         palette.addEventListener("cancel", function (e) { e.preventDefault(); closePalette(); });
         palette.addEventListener("close", function () {
             palette.classList.remove("is-closing");
+            setPaletteExpanded(false);
+            /* Stop the status region holding a stale "No results." that a
+               reader would hit again the next time the palette opens. */
+            if (announceTimer) clearTimeout(announceTimer);
+            if (cmdkStatus) cmdkStatus.textContent = "";
             unlockScroll();
+            /* The platform restores focus to the opener, but only when focus was
+               still inside the dialog at close time — the same gap the drawer
+               already covers. Without this, closing the palette from a row that
+               had been removed by a re-render dropped the ring to <body>. */
+            var opener = document.getElementById("nav-cmd");
+            if (document.activeElement === document.body && opener) opener.focus();
         });
         palette.addEventListener("click", function (e) {
             if (e.target === palette) { closePalette(); return; }
