@@ -15,7 +15,8 @@
     "env:push": "node scripts/env-push.mjs",
     "typecheck": "astro check",
     "photos:prep": "node scripts/photos-prep.mjs",
-    "photos:push": "node scripts/photos-prep.mjs --push"
+    "photos:push": "node scripts/photos-prep.mjs --push",
+    "carriage:numbers": "node scripts/carriage-numbers.mjs"
   },
   "dependencies": {
     "@astrojs/react": "^6.0.4",
