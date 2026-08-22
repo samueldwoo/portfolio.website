@@ -120,6 +120,38 @@
     transition: height .3s var(--nav-ease);
 }
 
+/* TRUE-CENTRING THE LINK TRACK.
+   `space-between` centres the middle child only when the two outer children
+   are the same width, and they never are: `.brand` is four glyphs, while
+   `.topbar-tools` carries the palette trigger plus the menu button. Measured
+   at 1024/1280/1440/2560, `.nav-links`' centre sat 44.3px LEFT of the
+   viewport centre at EVERY width -- exactly (brandW - toolsW) / 2, so the
+   error is structural, not a breakpoint bug, and it does not shrink on a
+   wider screen.
+
+   A 3-column grid with equal side tracks centres the middle track on the
+   container itself, independent of what the sides contain.
+
+   SCOPED DELIBERATELY, two ways:
+     - `html.nav-js` only. The no-JS bar relies on `flex-wrap: wrap` plus
+       `.nav-links { flex: 1 0 100% }` to drop the links onto a second full
+       -width row (see section 11); both properties are inert in grid, which
+       would leave a no-JS reader with a squeezed one-row bar -- the exact
+       state that fallback exists to prevent.
+     - `min-width: 761px` only. Below that the drawer takes over and
+       `.nav-links` is `display: none`, so there is no middle child to centre.
+   `minmax(0, 1fr)`, not `1fr`: a bare `1fr` floors at min-content, so the
+   wordmark could push the track off-centre again at 761-900px instead of
+   letting its own column shrink. */
+@media (min-width: 761px) {
+    html.nav-js .topbar-inner {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    }
+    html.nav-js .topbar-inner > .brand { justify-self: start; }
+    html.nav-js .topbar-inner > .topbar-tools { justify-self: end; }
+}
+
 /* ---- Condensed: shorter, denser, lifted. Still a full-width, fully
    opaque-enough, fully interactive bar — nothing is hidden. ---- */
 html.nav-condensed .topbar {

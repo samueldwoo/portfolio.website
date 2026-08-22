@@ -12,8 +12,17 @@
  * exact DOM position its static predecessor used.
  *
  * The right-hand cell genuinely differed between pages, so it's a prop:
- *   index.html      -> "Built with plain HTML, CSS & JS" (plain text)
+ *   index.html      -> the stack tagline (plain text)
  *   projects/travel -> "Back home ↗" link to /#home (root-absolute: see Base.astro)
+ *
+ * The tagline names the ACTUAL stack. It used to read "Built with plain HTML,
+ * CSS & JS", which stopped being true once the site moved to Astro and grew a
+ * React island (HeroCanvas) plus GSAP, ScrollTrigger, SplitText, anime.js and
+ * Motion — 467KB of script on the home page. On a portfolio read by engineers
+ * that is a claim disproved by opening the network tab, so it costs more
+ * credibility than the "no framework" flex earns. Astro/GSAP/Motion are named
+ * because they are the three a visitor can actually see the effects of; the
+ * full list is in Base.astro's script block.
  *
  * The year is hardcoded to 2026 exactly as before; script.js overwrites
  * #year with the live year at runtime.
@@ -28,7 +37,7 @@ const { right } = Astro.props;
 <footer class="site-foot">
     <span>© <span id="year">2026</span> Samuel Woo</span>
     {right === 'built' ? (
-        <span>Built with plain HTML, CSS &amp; JS</span>
+        <span>Built with Astro, GSAP &amp; Motion</span>
     ) : (
         <span><a href="/#home" class="foot-link">Back home ↗</a></span>
     )}
