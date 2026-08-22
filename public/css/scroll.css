@@ -104,11 +104,15 @@ html.gsap-on .band-home {
    Measured at a 390x900 viewport: 4 permanently-promoted nodes before, 0
    after. At 1440 the count is unchanged, which is the point — the desktop
    hint is real and stays. */
+/* `.hero-canvas-wrap` was DROPPED from this list: the hero pin no longer
+   scrubs the canvas plane (gsap-motion.js §4a — the putting green must hold
+   still while you aim at it), so promoting a full-width <canvas> to its own
+   compositor layer for the whole life of the page now buys nothing and costs
+   the layer. The four planes that still parallax keep the hint. */
 @media (min-width: 900px) and (min-height: 560px) {
     html.gsap-on .home-inner,
     html.gsap-on .hero-name,
-    html.gsap-on .hero-lower,
-    html.gsap-on .hero-canvas-wrap { will-change: transform; }
+    html.gsap-on .hero-lower { will-change: transform; }
 }
 
 /* Line-art plane. Injected by gsap-motion.js, so it exists only when we are

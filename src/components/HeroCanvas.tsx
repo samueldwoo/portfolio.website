@@ -218,12 +218,34 @@ function heightAt(
      So: cut the amplitudes and LOWER the frequencies. Lower frequency is the half
      that fixes readability -- the same relief spread over fewer, wider features
      produces fewer contour crossings and a dominant direction you can actually
-     read, while still having ridges and hollows to find. 0.58 + 0.13 = 0.71 of
-     undulation against a 0.60-1.35 plane puts the fall line back in charge
-     without returning to the bare tilt of 0.42/0.16. */
+     read, while still having ridges and hollows to find.
+
+     >>> DIFFICULTY RESTORED, 2026-08-22. The first pass at this cut too deep:
+     0.58/0.13 with the gentler plane left the green "a bit plain and easy", and
+     the reviewer wanted the old challenge back. The measurement agrees, and it
+     is the RESTABLE AREA that shows it -- the share of the play box flat enough
+     for a ball to hold (|grad| < SLOPE_ACCEL * REST_SLOPE), measured over 60
+     rounds on a 48x48 grid:
+
+         amplitudes 0.58/0.13, plane 0.60-1.35   ->  40.7% restable, mean slope  82
+         amplitudes 1.16/0.26, plane 0.78-1.76   ->  20.8% restable, mean slope 124
+         the version the reviewer liked                ~22% restable, mean slope ~130
+
+     40.7% is twice as much safe ground as the liked design ever had, which is
+     exactly what "easy" felt like: almost anywhere the ball stopped, it stayed.
+     So the amplitudes double to 1.16/0.26 and the plane goes up 1.3x with them.
+
+     THE FREQUENCIES DO NOT MOVE. 0.85/2.0 is what made the green readable and
+     it is the whole reason this is not a revert: the relief comes back as FEWER,
+     BROADER rolls rather than the fine wrinkles of the 1.25/2.9 version. Plane
+     share of relief lands at 63% -- above the 56% of the unreadable build, and
+     the features carrying the remainder are wide enough to read a line off.
+     Difficulty came back through amplitude and tilt; legibility is held by
+     frequency. Those are separate dials and this file has now been wrong in
+     both directions by moving them together. */
   const undul =
-    fbm(nx * 0.85 + seed, ny * 0.85 - seed) * 0.58 +
-    fbm(nx * 2.0 - seed * 1.7, ny * 2.0 + seed * 1.3) * 0.13;
+    fbm(nx * 0.85 + seed, ny * 0.85 - seed) * 1.16 +
+    fbm(nx * 2.0 - seed * 1.7, ny * 2.0 + seed * 1.3) * 0.26;
   return plane + undul;
 }
 
@@ -594,7 +616,7 @@ export default function HeroCanvas() {
       const r2 = hash2(round * 11 + 5, 29);
       const r3 = hash2(round * 17 + 3, 71);
       tiltAng = r1 * TAU;
-      tiltMag = 0.6 + r2 * 0.75;   // shallow to properly severe
+      tiltMag = 0.78 + r2 * 0.975;  // shallow to properly severe (1.3x, see heightAt)
       gSeed = 2 + r3 * 9;
     };
 
@@ -1294,13 +1316,17 @@ export default function HeroCanvas() {
            the LINES carry everything, and they are faded at the box edges by the
            same gradient discipline the rest of the layer uses, so the green has
            no visible border. */
-        /* 9 -> 7 levels (8 drawn lines -> 6). Reviewed on a real display:
+        /* 9 -> 8 levels (8 drawn lines -> 7). Went to 7 when the relief was cut,
+           back to 8 now that the amplitudes have doubled -- there is more to
+           describe, and the bands are re-normalised to each frame's hMin..hMax
+           so a level count is a density choice, not a range choice. Original
+           review on a real display:
            "there typically aren't this many contours". The levels are
            re-normalised to each frame's hMin..hMax, so cutting the count widens
            every band rather than clipping the range — the whole relief is still
            described, in fewer lines. Pairs with the lower undulation amplitude
            in heightAt(): less relief AND fewer bands to express it. */
-        const LEVELS = 7;
+        const LEVELS = 8;
         ctx.lineWidth = 1;
 
         /* THE CUP IS THE DATUM, and each quantity gets ITS OWN CHANNEL.

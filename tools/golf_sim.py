@@ -122,7 +122,7 @@ class Green:
             r2 = hash2(round_no * 11 + 5, 29)
             r3 = hash2(round_no * 17 + 3, 71)
             self.tilt_ang = r1 * TAU
-            self.tilt_mag = (0.6 + r2 * 0.75) * tilt_scale
+            self.tilt_mag = (0.78 + r2 * 0.975) * tilt_scale
             self.g_seed = 2 + r3 * 9
             self._place_cup()
             self._pick_start()
@@ -240,9 +240,9 @@ class Green:
         # MIRROR of HeroCanvas.tsx heightAt(). Amplitudes 1.05/0.40 -> 0.58/0.13
         # and frequencies 1.25/2.9 -> 0.85/2.0: fewer, broader contours so the
         # fall line is readable again. Keep bit-identical with the component.
-        undul = (fbm(nx * 0.85 + self.g_seed, ny * 0.85 - self.g_seed) * 0.58
+        undul = (fbm(nx * 0.85 + self.g_seed, ny * 0.85 - self.g_seed) * 1.16
                  + fbm(nx * 2.0 - self.g_seed * 1.7,
-                       ny * 2.0 + self.g_seed * 1.3) * 0.13) * self.undul_scale
+                       ny * 2.0 + self.g_seed * 1.3) * 0.26) * self.undul_scale
         return plane + undul
 
     def slope_at(self, x, y):

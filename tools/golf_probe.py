@@ -75,8 +75,8 @@ function heightAt(x, y, cx, cy, span, tiltAng, tiltMag, seed) {
   // the PROBE was stale. If you change the field, change it here too.
   /* MIRROR of HeroCanvas.tsx heightAt(). Kept bit-identical on purpose:
      a stale mirror here once produced a false PORT MISMATCH. */
-  const undul = fbm(nx * 0.85 + seed, ny * 0.85 - seed) * 0.58 +
-    fbm(nx * 2.0 - seed * 1.7, ny * 2.0 + seed * 1.3) * 0.13;
+  const undul = fbm(nx * 0.85 + seed, ny * 0.85 - seed) * 1.16 +
+    fbm(nx * 2.0 - seed * 1.7, ny * 2.0 + seed * 1.3) * 0.26;
   return plane + undul;
 }
 const out = [];

@@ -648,11 +648,31 @@
                 // which IS the depth cue: the canvas moves least (and the
                 // wrong way, so it reads as further off), the injected
                 // foreground moves ~4x the block itself.
-                if (heroCanvas) {
-                    tl.fromTo(heroCanvas,
-                        { y: 0, scale: 1 },
-                        { y: vh(0.06), scale: 1.12, transformOrigin: "50% 42%" }, 0);
-                }
+                /* THE CANVAS PLANE DOES NOT MOVE. It used to be scrubbed
+                   y: 0 -> 6vh and scale: 1 -> 1.12 across the pin, which was
+                   wrong for two independent reasons.
+
+                   1. It is not decoration. The canvas is the putting green —
+                      an interactive game with a pointer-driven aim. Reviewed:
+                      "we should also make it so that when we scroll down, the
+                      golf game actually stays stationary". Parallaxing a
+                      playfield moves the target while the player is aiming at
+                      it.
+                   2. The scale actively fought the input layer. Scaling the
+                      wrapper means the canvas's CSS box no longer matches its
+                      backing store, so every pointer coordinate has to be
+                      divided by the live scale before it means anything —
+                      which is exactly why HeroCanvas.tsx's `toCanvas()` reads
+                      `rect.width / cssW` on every event. Measured over a
+                      0 -> 700px scroll: scale ran 1.0000 -> 1.0991, i.e. a 10%
+                      coordinate error that the component was paying to undo
+                      every frame.
+
+                   `heroCanvas` deliberately STAYS in `planes` below: it is a
+                   clearProps target, so any inline transform left over from a
+                   build that did scrub it gets cleaned up rather than stranded.
+                   The other four planes still parallax — the depth effect is
+                   unchanged for everything that is not the game. */
                 tl.fromTo(heroInner, { y: 0 }, { y: vh(-0.1) }, 0);
                 if (heroName) tl.fromTo(heroName, { y: 0 }, { y: vh(-0.055) }, 0);
                 if (heroLower) tl.fromTo(heroLower, { y: 0 }, { y: vh(0.045) }, 0);
