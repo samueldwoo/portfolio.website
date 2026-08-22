@@ -399,9 +399,18 @@ const pageLinks = [
          whether to skip .gsap-reveal nodes. anime.min.js only has to precede
          script.js.
 
-         motion.min.js is Motion's (motion.dev) own UMD bundle — its
-         `dist/motion.js`, which exposes the whole vanilla API on
-         `window.Motion` from a plain <script>, so no bundler is involved.
+         motion-shim.js REPLACED motion.min.js (Motion's 136.4KB UMD bundle).
+         motion-ux.js used four of Motion's entry points — animate, hover,
+         press, stagger — and the rest of the bundle was dead weight: 40.3KB
+         brotli, the largest single vendor file on the page. The shim
+         re-implements those four on GSAP, which is already here, and so must
+         load AFTER gsap.min.js. See motion-shim.js's own header for why the
+         springs are integrated rather than eased (velocity has to survive the
+         magnet's per-frame re-target) and why every frame is written through
+         `gsap.set` (motion-ux.js's axis partition needs two concurrent
+         animations on one element to COMPOSE, which is GSAP's transform cache
+         doing the work).
+
          motion-ux.js runs LAST: its nav-indicator watches the `is-active`
          class that script.js's scroll-spy sets, so the spy must have run
          and placed the initial active link first. -->
@@ -411,7 +420,7 @@ const pageLinks = [
     <script is:inline src="/gsap-motion.js"></script>
     <script is:inline src="/anime.min.js"></script>
     <script is:inline src="/script.js"></script>
-    <script is:inline src="/motion.min.js"></script>
+    <script is:inline src="/motion-shim.js"></script>
     <script is:inline src="/motion-ux.js"></script>
 </body>
 </html>

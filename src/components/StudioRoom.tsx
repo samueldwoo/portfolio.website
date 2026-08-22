@@ -678,18 +678,37 @@ const CARRIAGE_LINES_BOTH_EDGES = true;
 const CARRIAGE_LINE_COLOR = 0xe8eaee;
 
 /**
- * SPRING COLOURS — SAM, THIS IS THE LINE TO EDIT.  <<<<<<<<<<<<<<<<<<<<<<<<<<<
+ * SPRING COLOURS — now the REAL ones, from Sam.
  *
- * One entry per spring, front to back, and the array length sets the count.
+ * [solidcore]'s custom machine ("Sweatlana") carries EIGHT springs in four
+ * colour-coded resistance grades. This is the actual hardware, not a guess and
+ * not the AI render's invention:
  *
- * The reference photograph is AI-generated and its springs are wrong — real
- * reformer springs at a studio like this are bare steel coils, and the blue ones
- * in the image are an invention. So the default here is chrome/steel with a
- * little variation down the row, which is defensible and matches the machine
- * rather than the render. If you want their real colour-coded resistance
- * springs, put the hexes in this array; five entries, front-most first.
+ *   white  x2   extra light   ~3.5 lb each
+ *   gray   x3   light/medium  ~7 lb    (= 2 white)
+ *   black  x2   heavy         ~21 lb   (= 3 gray)
+ *   blue   x1   extra heavy   ~88 lb   (= 4 black)
+ *
+ * Ordered light-to-heavy front to back, which is how the bay reads and also
+ * makes the blue single the visual anchor at the end of the row — worth keeping
+ * if you re-order, because one saturated spring among seven neutrals is doing
+ * real compositional work.
+ *
+ * IMPORTANT, and the reason these are not pure #fff / #000: this bay sits in a
+ * near-black room under blue LED. A literal white would blow out and a literal
+ * black would disappear into the chassis, so each is pulled toward the middle
+ * just enough to read as its own grade under that light. The BLUE is the one
+ * exception to THE ONE RULE's "nothing warm but the photos" — it is hardware
+ * colour, not grading, and it is theirs.
+ *
+ * The array length still sets the spring count, so this is a single edit.
  */
-const SPRING_COLORS = [0xc4c7cd, 0xa8abb2, 0xc4c7cd, 0x93969c, 0xb4b7bd];
+const SPRING_COLORS = [
+  0xe2e4e6, 0xe2e4e6,                 // white  x2  — extra light, ~3.5 lb
+  0x9a9ca1, 0x9a9ca1, 0x9a9ca1,       // gray   x3  — light/medium, ~7 lb
+  0x14151a, 0x14151a,                 // black  x2  — heavy, ~21 lb
+  0x1e46d2,                           // blue   x1  — extra heavy, ~88 lb
+];
 const SPRING_COUNT_FROM_COLORS = true;
 
 /* ---------------------------------------------------------------------------
