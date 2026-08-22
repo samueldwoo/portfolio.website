@@ -1,0 +1,104 @@
+====================================================================================================
+RESPONSIVE (CDP-forced viewports)
+====================================================================================================
+  ok         390 /           doc 390>390 (+0) wide-elements=0
+           chars/line: .bento-plate-note=30  .card p=38  .exp-item p=41  .hero-intro=41  .interest-copy=43  .prose p=47  .section-intro=43   <<< OUT OF 45-85 BAND: {'.bento-plate-note': 30, '.card p:not([class])': 38, '.exp-item p:not(.exp-company)': 41, '.hero-intro': 41, '.interest-copy': 43, '.section-intro': 43}
+  ok         390 /projects/  doc 390>390 (+0) wide-elements=0
+           chars/line: .card p=34  .case-block p=49  .section-intro=43   <<< OUT OF 45-85 BAND: {'.card p:not([class])': 34, '.section-intro': 43}
+  ok         390 /travel/    doc 390>390 (+0) wide-elements=0
+           chars/line: .section-intro=44   <<< OUT OF 45-85 BAND: {'.section-intro': 44}
+  OVERFLOW   820 /           doc 820>820 (+0) wide-elements=3
+           svg.[object                              left=-74 right=402
+           g.[object                                left=-55 right=319
+           path.[object                             left=-55 right=265
+           chars/line: .bento-plate-note=30  .card p=78  .exp-item p=87  .hero-intro=69  .interest-copy=79  .prose p=88  .section-intro=56   <<< OUT OF 45-85 BAND: {'.bento-plate-note': 30, '.exp-item p:not(.exp-company)': 87, '.prose p': 88}
+  ok         820 /projects/  doc 820>820 (+0) wide-elements=0
+           chars/line: .card p=77  .case-block p=47  .section-intro=70
+  ok         820 /travel/    doc 820>820 (+0) wide-elements=0
+           chars/line: .section-intro=75
+  OVERFLOW  1024 /           doc 1024>1024 (+0) wide-elements=6
+           div.hero-canvas-wrap                     left=-61 right=1085
+           canvas.hero-canvas                       left=-61 right=1085
+           svg.[object                              left=-92 right=502
+           g.[object                                left=-68 right=399
+           path.[object                             left=-68 right=331
+           path.[object                             left=-1 right=399
+           chars/line: .bento-plate-note=33  .card p=51  .exp-item p=89  .hero-intro=69  .interest-copy=79  .prose p=88  .section-intro=56   <<< OUT OF 45-85 BAND: {'.bento-plate-note': 33, '.exp-item p:not(.exp-company)': 89, '.prose p': 88}
+  ok        1024 /projects/  doc 1024>1024 (+0) wide-elements=0
+           chars/line: .card p=27  .case-block p=56  .section-intro=70   <<< OUT OF 45-85 BAND: {'.card p:not([class])': 27}
+  ok        1024 /travel/    doc 1024>1024 (+0) wide-elements=0
+           chars/line: .section-intro=75
+  OVERFLOW  1440 /           doc 1440>1440 (+0) wide-elements=6
+           div.hero-canvas-wrap                     left=-86 right=1526
+           canvas.hero-canvas                       left=-86 right=1526
+           svg.[object                              left=-130 right=490
+           g.[object                                left=-105 right=383
+           path.[object                             left=-105 right=313
+           path.[object                             left=-35 right=383
+           chars/line: .bento-plate-note=33  .card p=46  .exp-item p=89  .hero-intro=69  .interest-copy=79  .prose p=88  .section-intro=31   <<< OUT OF 45-85 BAND: {'.bento-plate-note': 33, '.exp-item p:not(.exp-company)': 89, '.prose p': 88, '.section-intro': 31}
+  ok        1440 /projects/  doc 1440>1440 (+0) wide-elements=0
+           chars/line: .card p=27  .case-block p=49  .section-intro=64   <<< OUT OF 45-85 BAND: {'.card p:not([class])': 27}
+  ok        1440 /travel/    doc 1440>1440 (+0) wide-elements=0
+           chars/line: .section-intro=64
+  OVERFLOW  1920 /           doc 1920>1920 (+0) wide-elements=6
+           div.hero-canvas-wrap                     left=-115 right=2035
+           canvas.hero-canvas                       left=-115 right=2035
+           svg.[object                              left=-173 right=447
+           g.[object                                left=-148 right=340
+           path.[object                             left=-148 right=269
+           path.[object                             left=-78 right=340
+           chars/line: .bento-plate-note=33  .card p=57  .exp-item p=89  .hero-intro=69  .interest-copy=79  .prose p=88  .section-intro=37   <<< OUT OF 45-85 BAND: {'.bento-plate-note': 33, '.exp-item p:not(.exp-company)': 89, '.prose p': 88, '.section-intro': 37}
+  ok        1920 /projects/  doc 1920>1920 (+0) wide-elements=0
+           chars/line: .card p=31  .case-block p=58  .section-intro=64   <<< OUT OF 45-85 BAND: {'.card p:not([class])': 31}
+  ok        1920 /travel/    doc 1920>1920 (+0) wide-elements=0
+           chars/line: .section-intro=64
+  OVERFLOW  2560 /           doc 2560>2560 (+0) wide-elements=6
+           div.hero-canvas-wrap                     left=-153 right=2713
+           canvas.hero-canvas                       left=-153 right=2713
+           svg.[object                              left=-230 right=390
+           g.[object                                left=-206 right=282
+           path.[object                             left=-206 right=212
+           path.[object                             left=-135 right=282
+           chars/line: .bento-plate-note=33  .card p=78  .exp-item p=89  .hero-intro=69  .interest-copy=79  .prose p=88  .section-intro=46   <<< OUT OF 45-85 BAND: {'.bento-plate-note': 33, '.exp-item p:not(.exp-company)': 89, '.prose p': 88}
+  ok        2560 /projects/  doc 2560>2560 (+0) wide-elements=0
+           chars/line: .card p=43  .case-block p=75  .section-intro=64   <<< OUT OF 45-85 BAND: {'.card p:not([class])': 43}
+  ok        2560 /travel/    doc 2560>2560 (+0) wide-elements=0
+           chars/line: .section-intro=64
+
+====================================================================================================
+200% ZOOM (WCAG 1.4.4) -- CSS viewport halved at deviceScaleFactor 2
+====================================================================================================
+  ok       z200   720 /           doc 720>720 (+0) wide-elements=0
+           chars/line: .bento-plate-note=30  .card p=71  .exp-item p=76  .hero-intro=69  .interest-copy=71  .prose p=82  .section-intro=56   <<< OUT OF 45-85 BAND: {'.bento-plate-note': 30}
+  ok       z200   720 /projects/  doc 720>720 (+0) wide-elements=0
+           chars/line: .card p=67  .case-block p=81  .section-intro=70
+  ok       z200   720 /travel/    doc 720>720 (+0) wide-elements=0
+           chars/line: .section-intro=73
+  ok       z200   640 /           doc 640>640 (+0) wide-elements=0
+           chars/line: .bento-plate-note=30  .card p=62  .exp-item p=69  .hero-intro=68  .interest-copy=62  .prose p=72  .section-intro=56   <<< OUT OF 45-85 BAND: {'.bento-plate-note': 30}
+  ok       z200   640 /projects/  doc 640>640 (+0) wide-elements=0
+           chars/line: .card p=61  .case-block p=75  .section-intro=64
+  ok       z200   640 /travel/    doc 640>640 (+0) wide-elements=0
+           chars/line: .section-intro=64
+  ok       z200   410 /           doc 410>410 (+0) wide-elements=0
+           chars/line: .bento-plate-note=30  .card p=43  .exp-item p=47  .hero-intro=44  .interest-copy=43  .prose p=51  .section-intro=46   <<< OUT OF 45-85 BAND: {'.bento-plate-note': 30, '.card p:not([class])': 43, '.hero-intro': 44, '.interest-copy': 43}
+  ok       z200   410 /projects/  doc 410>410 (+0) wide-elements=0
+           chars/line: .card p=41  .case-block p=52  .section-intro=46   <<< OUT OF 45-85 BAND: {'.card p:not([class])': 41}
+  ok       z200   410 /travel/    doc 410>410 (+0) wide-elements=0
+           chars/line: .section-intro=44   <<< OUT OF 45-85 BAND: {'.section-intro': 44}
+
+====================================================================================================
+prefers-reduced-motion
+====================================================================================================
+  ok       rm     390 /           doc 390>390 (+0) wide-elements=0
+           chars/line: .bento-plate-note=30  .card p=38  .exp-item p=41  .hero-intro=41  .interest-copy=43  .prose p=47  .section-intro=43   <<< OUT OF 45-85 BAND: {'.bento-plate-note': 30, '.card p:not([class])': 38, '.exp-item p:not(.exp-company)': 41, '.hero-intro': 41, '.interest-copy': 43, '.section-intro': 43}
+  ok       rm     390 /projects/  doc 390>390 (+0) wide-elements=0
+           chars/line: .card p=34  .case-block p=49  .section-intro=43   <<< OUT OF 45-85 BAND: {'.card p:not([class])': 34, '.section-intro': 43}
+  ok       rm     390 /travel/    doc 390>390 (+0) wide-elements=0
+           chars/line: .section-intro=44   <<< OUT OF 45-85 BAND: {'.section-intro': 44}
+  ok       rm    1440 /           doc 1440>1440 (+0) wide-elements=0
+           chars/line: .bento-plate-note=33  .card p=46  .exp-item p=89  .hero-intro=69  .interest-copy=79  .prose p=88  .section-intro=31   <<< OUT OF 45-85 BAND: {'.bento-plate-note': 33, '.exp-item p:not(.exp-company)': 89, '.prose p': 88, '.section-intro': 31}
+  ok       rm    1440 /projects/  doc 1440>1440 (+0) wide-elements=0
+           chars/line: .card p=27  .case-block p=49  .section-intro=64   <<< OUT OF 45-85 BAND: {'.card p:not([class])': 27}
+  ok       rm    1440 /travel/    doc 1440>1440 (+0) wide-elements=0
+           chars/line: .section-intro=64

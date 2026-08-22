@@ -1,0 +1,26 @@
+
+=== GATE: BEFORE (own worktree, HEAD) ===
+
+-- normal --
+  ok                     @1440 
+  ok                     @820  
+  ok                     @390  
+  ok      projects/      @1440 
+  ok      projects/      @820  
+  ok      projects/      @390  
+  ok      travel/        @1440 
+  ok      travel/        @820  
+  ok      travel/        @390  
+
+-- reduced-motion --
+  ok                     @1440 
+  ok                     @820  
+  ok                     @390  
+  ok      projects/      @1440 
+  ok      projects/      @820  
+  ok      projects/      @390  
+  ok      travel/        @1440 
+  ok      travel/        @820  
+  ok      travel/        @390  
+
+RESULT: PASS

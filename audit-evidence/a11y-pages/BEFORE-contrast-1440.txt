@@ -1,0 +1,37 @@
+
+================================================================================================
+CONTRAST @ 1440px  (reduced-motion, finished state, real pixels)
+================================================================================================
+
+--- /  (135 text styles, page 1440x7452) ---
+  no failures
+
+--- /projects/  (77 text styles, page 1440x4619) ---
+  no failures
+
+--- /travel/  (170 text styles, page 1440x2088) ---
+  FAIL  2.68 (need 4.5) img-of-text   17.4px img.pass-logo pass-logo--white       bg=#6ba3d6 fg=#ffffff a=1.00 'Korean Air'
+  FAIL  2.75 (need 4.5) small          9.0px span.pass-k                           bg=#6ba3d6 fg=#30587c a=0.61 'Date'
+  FAIL  2.95 (need 4.5) small          9.0px span.pass-k                           bg=#0a7d3f fg=#9fccb4 a=0.61 'Date'
+  FAIL  3.36 (need 4.5) small          9.0px span.pass-k                           bg=#6ba3d6 fg=#254b6c a=0.72 'Destination'
+  FAIL  3.36 (need 4.5) small          9.0px span.pass-k                           bg=#6ba3d6 fg=#254b6c a=0.72 'Spent on'
+  FAIL  3.38 (need 4.5) small          9.0px span.pass-k                           bg=#b01e2e fg=#e0a7ad a=0.61 'Date'
+  FAIL  3.48 (need 4.5) small          9.0px span.pass-k                           bg=#7a5a34 fg=#cbbeb0 a=0.61 'Date'
+  FAIL  3.49 (need 4.5) small          9.0px span.pass-k                           bg=#0a7d3f fg=#badac9 a=0.72 'Destination'
+  FAIL  3.49 (need 4.5) small          9.0px span.pass-k                           bg=#0a7d3f fg=#badac9 a=0.72 'Spent on'
+  FAIL  3.63 (need 4.5) small         12.8px span.pass-idx                         bg=#097139 fg=#b9cbc1 a=0.80 '09' [aria-hidden]
+  FAIL  3.68 (need 4.5) small         12.8px span.pass-idx                         bg=#6093c1 fg=#193853 a=0.80 '02' [aria-hidden]
+  FAIL  3.75 (need 4.5) small          9.6px span.                                 bg=#6ba3d6 fg=#204464 a=0.78 'Osaka'
+  FAIL  3.75 (need 4.5) small          9.6px span.                                 bg=#6ba3d6 fg=#204464 a=0.78 'Seoul'
+  FAIL  3.82 (need 4.5) small          9.6px span.                                 bg=#0a7d3f fg=#c9e2d4 a=0.78 'San Jose'
+  FAIL  3.82 (need 4.5) small          9.6px span.                                 bg=#0a7d3f fg=#c9e2d4 a=0.78 'San Diego'
+  FAIL  4.16 (need 4.5) small          9.0px span.pass-k                           bg=#7a5a34 fg=#d9d0c6 a=0.72 'Destination'
+  FAIL  4.16 (need 4.5) small          9.0px span.pass-k                           bg=#7a5a34 fg=#d9d0c6 a=0.72 'Spent on'
+  FAIL  4.17 (need 4.5) small          9.0px span.pass-k                           bg=#b01e2e fg=#e8c0c4 a=0.72 'Destination'
+  FAIL  4.17 (need 4.5) small          9.0px span.pass-k                           bg=#b01e2e fg=#e8c0c4 a=0.72 'Spent on'
+  FAIL  4.24 (need 4.5) small         10.2px span.pass-date                        bg=#0a7d3f fg=#daebe2 a=0.85 'May 2026'
+  FAIL  4.26 (need 4.5) small         10.2px span.pass-date                        bg=#6ba3d6 fg=#193c59 a=0.85 'Sep 2025'
+  FAIL  4.31 (need 4.5) small         12.8px span.pass-idx                         bg=#6e512f fg=#cbc6c0 a=0.80 '11' [aria-hidden]
+  FAIL  4.46 (need 4.5) small         12.8px span.pass-idx                         bg=#9e1b29 fg=#d4bcbe a=0.80 '06' [aria-hidden]
+
+TOTAL FAILURES: 23

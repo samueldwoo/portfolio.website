@@ -1,0 +1,15 @@
+CONTRAST @ 390px  (reduced-motion, finished state, real pixels)
+  no failures
+  no failures
+  no failures
+TOTAL FAILURES: 0
+CONTRAST @ 820px  (reduced-motion, finished state, real pixels)
+  no failures
+  no failures
+  no failures
+TOTAL FAILURES: 0
+CONTRAST @ 2560px  (reduced-motion, finished state, real pixels)
+  no failures
+  no failures
+  no failures
+TOTAL FAILURES: 0

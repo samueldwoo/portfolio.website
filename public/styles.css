@@ -161,6 +161,26 @@ a { color: inherit; text-decoration: none; }
 }
 .skip-link:focus { top: 12px; }
 
+/* ---- Visually hidden, still in the accessibility tree ----
+   For structure a sighted reader gets from LAYOUT and a screen-reader reader
+   gets from nothing: the boarding-pass wall's section heading, and the "to"
+   that turns "San Jose Tokyo" into a route. NOT `display:none` and NOT
+   `visibility:hidden` — both remove the node from the a11y tree, which is the
+   opposite of the point. `clip-path` rather than the legacy `clip` rect, and
+   1x1 rather than 0x0 so the box is still laid out and still has a computed
+   text node for name computation. */
+.visually-hidden {
+    position: absolute !important;
+    width: 1px;
+    height: 1px;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+}
+
 /* ---------- Background atmosphere ---------- */
 .atmosphere {
     position: fixed;
@@ -627,8 +647,14 @@ a { color: inherit; text-decoration: none; }
 }
 .subhead-flush { margin-top: 0; }
 
+/* MEASURE. 66ch measured 88 real characters per line at every viewport from
+   820 to 2560 — over the 85 ceiling. `ch` is the advance of "0", which in
+   Inter is ~1.34x the average lowercase glyph, so an Nch cap realizes ~1.34N
+   characters. 60ch (the value `.case-block p` and --card-measure already use)
+   measures 80. Counted from per-glyph Range rects on the longest realized
+   line, not inferred from `ch`. */
 .prose p {
-    max-width: 66ch;
+    max-width: 60ch;
     font-size: var(--fs-1);
     line-height: var(--lh-prose);
     margin-bottom: 1em;
@@ -1190,11 +1216,21 @@ a.bubble.ticker:hover::after { transform: translate(2px, -2px); opacity: 1; }
     font-weight: 600;
     margin: 4px 0 12px;
 }
+/* MEASURE. This was the site's worst line length: 68ch realized 89 real
+   characters per line from 1024 up (87 at 820), against a 60-85 comfortable
+   band. It is font-relative, so it read the same at 1512 and at 3840 and was
+   NOT introduced by the fluid --content-max; the layout.css notes on
+   --card-measure and --display-scale record it as a known outlier left alone
+   because tightening it rewraps the work band. Rewrapping is a visual change,
+   not a defect, and 89 characters is a real reading cost on the longest
+   paragraphs on the site — so it is tightened here to the same 60ch every
+   other prose block uses. Measured after: 80 characters at 1024-2560.
+   Both layout.css notes have been corrected to match. */
 .exp-item p:not(.exp-company) {
     color: var(--ink2);
     line-height: var(--lh-prose);
     margin-bottom: .85em;
-    max-width: 68ch;
+    max-width: 60ch;
 }
 .exp-item p:last-child { margin-bottom: 0; }
 
@@ -1669,9 +1705,49 @@ a.bubble.ticker:hover::after { transform: translate(2px, -2px); opacity: 1; }
 }
 
 /* A single boarding pass: colored main body + perforated tear-off stub */
+/* ---- PASS LABEL DIMMING — ONE TOKEN, MEASURED, NON-COMPOUNDING ------------
+   The secondary fields on a pass (the mono keys, the city pair, the date, the
+   stub folio) are dimmed so the airport codes and the destination read as the
+   card's headline. That dimming used to be four independent hardcoded
+   `opacity` values, and it put 22 text styles below AA.
+
+   TWO BUGS, both measured on the built output at 1440 with real composited
+   pixels (median of each element's own box from a full-page screenshot):
+
+   1. THE DIMS COMPOUNDED. `.pass-k` sits INSIDE `.pass-date`, so .85 x .72
+      resolved to .61 — the "Date" key rendered a full step darker than the
+      identical "Destination" / "Spent on" keys at .72. That was not a design
+      decision, it was multiplication.
+
+   2. THERE IS ALMOST NO CONTRAST BUDGET ON TWO FILLS. At FULL ink, every
+      airline fill against its own --pass-ink measures:
+        zipair 17.89  jetblue 14.15  alaska 14.29  aeromexico 13.95
+        hawaiian 10.41  aircanada 6.84  roadtrip 6.29  korean 5.48  frontier 5.23
+      So Korean (#6ba3d6 + navy ink) and Frontier (#0a7d3f + white ink) start at
+      ~5.2-5.5:1 and CANNOT afford any dim at all: the minimum alpha that still
+      clears 4.5:1 is .881 for Korean and .892 for Frontier.
+
+   Measured failures at the old values (need 4.5:1 at these sizes — 9.0px,
+   9.6px, 10.2px, 12.8px are all "small text"):
+        .pass-k   on korean   .61 -> 2.75    on frontier .61 -> 2.95
+        .pass-k   on aircanada .61 -> 3.38   on roadtrip .61 -> 3.48
+        .pass-k   on korean   .72 -> 3.36    on frontier .72 -> 3.49
+        .pass-k   on roadtrip .72 -> 4.16    on aircanada .72 -> 4.17
+        .pass-cities on korean .78 -> 3.75   on frontier .78 -> 3.82
+        .pass-date on frontier .85 -> 4.24   on korean   .85 -> 4.26
+        .pass-idx  on frontier .80 -> 3.63   on korean   .80 -> 3.68
+        .pass-idx  on roadtrip .80 -> 4.31   on aircanada .80 -> 4.46
+
+   THE FIX. One token, applied once per element so it can never compound, with
+   the two fills that have no budget opting out. .84 is the deepest single dim
+   that keeps every remaining fill above 4.5:1 including the stub's
+   `filter: brightness(.9)`; the two opt-outs then sit at their full-ink
+   5.48 / 5.23. The look is preserved on 7 of the 9 fills and the two that
+   change are the two that were illegible. */
 .pass {
     --pass-bg: #4e6640;
     --pass-ink: #ffffff;
+    --pass-dim: .84;
     display: flex;
     align-items: stretch;
     border-radius: 16px;
@@ -1734,7 +1810,7 @@ a.bubble.ticker:hover::after { transform: translate(2px, -2px); opacity: 1; }
     letter-spacing: .08em;
     text-transform: uppercase;
     text-align: right;
-    opacity: .85;
+    opacity: var(--pass-dim);
     white-space: nowrap;
 }
 
@@ -1748,8 +1824,13 @@ a.bubble.ticker:hover::after { transform: translate(2px, -2px); opacity: 1; }
     font-size: .6rem;
     letter-spacing: .1em;
     text-transform: uppercase;
-    opacity: .78;
+    opacity: var(--pass-dim);
 }
+/* The city pair carries a `.visually-hidden` "to" between the two names (see
+   travel.astro), so `:last-child` is still the DESTINATION: the hidden span is
+   the middle child, and being `position: absolute` it leaves the flex line
+   entirely, so `justify-content: space-between` still pins the two visible
+   names to the card's outer edges exactly as before. */
 .pass-cities span:last-child { text-align: right; }
 
 /* Middle: ORIGIN ✈ DEST code pair */
@@ -1793,9 +1874,13 @@ a.bubble.ticker:hover::after { transform: translate(2px, -2px); opacity: 1; }
     font-size: .56rem;
     letter-spacing: .14em;
     text-transform: uppercase;
-    opacity: .72;
+    opacity: var(--pass-dim);
     margin-bottom: 3px;
 }
+/* `.pass-k` inside `.pass-date` would multiply the dim by itself (.84 x .84 =
+   .71) and reproduce the compounding bug the token was introduced to remove.
+   The parent already carries the dim; the child must not add a second one. */
+.pass-date .pass-k { opacity: 1; }
 .pass-dest .pass-destv {
     font-family: var(--display);
     font-weight: 600;
@@ -1842,7 +1927,7 @@ a.bubble.ticker:hover::after { transform: translate(2px, -2px); opacity: 1; }
     font-weight: 500;
     writing-mode: vertical-rl;
     letter-spacing: .12em;
-    opacity: .8;
+    opacity: var(--pass-dim);
 }
 .pass-barcode {
     width: 20px;
@@ -1868,6 +1953,26 @@ a.bubble.ticker:hover::after { transform: translate(2px, -2px); opacity: 1; }
 .pass--roadtrip   { --pass-bg: #7a5a34; }
 /* Korean is a light card — dim the stub differently + darker perforation */
 .pass--korean .pass-stub::before { border-left-color: rgba(11,42,68,.4); }
+
+/* ---- THE TWO FILLS WITH NO CONTRAST BUDGET ----
+   Measured at FULL ink against their own --pass-ink: korean 5.48:1,
+   frontier 5.23:1 — the two lowest of the nine, and both under the 5.36:1
+   that --pass-dim: .84 needs to leave in reserve. The minimum alpha that
+   still clears AA is .881 (korean) and .892 (frontier), i.e. a dim so slight
+   it does no design work. So these two opt out entirely.
+   After: korean .pass-k 2.75 -> 5.48, frontier .pass-k 2.95 -> 5.23. */
+.pass--korean,
+.pass--frontier { --pass-dim: 1; }
+
+/* ---- KOREAN AIR WORDMARK: an IMAGE OF TEXT at 2.68:1 ----
+   `.pass-logo--white` forces every logo to pure white with
+   `brightness(0) invert(1)`. That is right on the eight dark fills and wrong
+   on the one light one: measured white ink against the real #6ba3d6 plate at
+   2.68:1, and WCAG 1.4.3 covers images of text at 4.5:1 exactly as it covers
+   live text. Dropping the `invert(1)` forces the same silhouette to pure
+   black instead — measured 7.84:1 on the same plate — which also matches the
+   card's own dark --pass-ink register rather than fighting it. */
+.pass--korean .pass-logo--white { filter: brightness(0); }
 
 @media (max-width: 900px) {
     .pass-wall { grid-template-columns: repeat(2, 1fr); }

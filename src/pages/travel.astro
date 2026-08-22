@@ -54,12 +54,14 @@ const spanLabel = `${MONTH_ABBR[firstM - 1]} ${firstY} – ${MONTH_ABBR[lastM - 
     page="travel"
     skipTarget="travel"
 >
-    <!-- Airline-wordmark approximations: script (Alaska/Hawaiian), condensed grotesk (Korean/Air Canada/Zip), geometric sans weights cover the rest -->
-    <link
-        slot="head"
-        href="https://fonts.googleapis.com/css2?family=Kaushan+Script&family=Oswald:wght@500;600;700&family=Archivo:wght@600;700;800&display=swap"
-        rel="stylesheet"
-    />
+    {/* The Kaushan Script / Oswald / Archivo stylesheet that used to load here
+        is GONE. It was described as "airline-wordmark approximations", but the
+        wordmarks are all <img> logos now and nothing referenced those three
+        families: grepped across public/ and src/, the only hit was the <link>
+        itself. It cost a third-party stylesheet request plus up to six font
+        files on the critical path of this page for zero rendered glyphs.
+        `.pass-airline` ("Road Trip", the one text wordmark left) uses the
+        site's own --display stack. */}
 
     <main class="content">
 
@@ -93,8 +95,19 @@ const spanLabel = `${MONTH_ABBR[firstM - 1]} ${firstY} – ${MONTH_ABBR[lastM - 
              gallery wall does. `.band--dark` redefines tokens for its
              subtree; each `.pass` carries its own `--pass-bg`/`--pass-ink`,
              so no pass colour or contrast moves. -->
-        <section class="band band-flush-top band--dark" aria-label="Boarding passes">
+        <section class="band band-flush-top band--dark" aria-labelledby="wall-title">
             <div class="band-inner" data-rail="02 / Boarding passes">
+                {/* HEADING STRUCTURE. Audited, this page had exactly ONE heading
+                    on it — the h1 — while the boarding-pass wall, which is the
+                    entire substance of the page, had no heading at all: a
+                    reader navigating by heading found nothing after "Where I've
+                    been". The band identifies itself visually through its
+                    inverted plate and its rotated `data-rail` running head,
+                    neither of which reaches the accessibility tree (the rail is
+                    generated content). This h2 supplies the missing rung and
+                    also gives the section a real accessible name, replacing the
+                    free-floating `aria-label` that duplicated it. */}
+                <h2 id="wall-title" class="visually-hidden">Boarding passes</h2>
 
                 <!-- Trip cadence. The wall below is ordered by feel, not by
                      date, so the one fact it genuinely hides is WHEN the trips
@@ -161,13 +174,13 @@ const spanLabel = `${MONTH_ABBR[firstM - 1]} ${firstY} – ${MONTH_ABBR[lastM - 
                 <div class="pass-wall">
 
                     <!-- 01 Tokyo -->
-                    <article class="pass pass--zipair reveal gsap-reveal">
+                    <article class="pass pass--zipair reveal gsap-reveal" aria-labelledby="pass-1-route">
                         <div class="pass-main">
                             <div class="pass-head">
-                                <span class="pass-logoband"><img class="pass-logo pass-logo--white" src="/assets/airlines/zipair-t-c.png" alt="Zip Air"></span>
+                                <span class="pass-logoband"><img class="pass-logo pass-logo--white" src="/assets/airlines/zipair-t-c.png" alt="Zip Air" width="305" height="72"></span>
                                 <span class="pass-date"><span class="pass-k">Date</span>Sep 2025</span>
                             </div>
-                            <div class="pass-cities"><span>San Jose</span><span>Tokyo</span></div>
+                            <div class="pass-cities" id="pass-1-route"><span>San Jose</span><span class="visually-hidden">to</span><span>Tokyo</span></div>
                             <div class="pass-route">
                                 <span class="pass-code">SJC</span>
                                 <svg class="pass-plane" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12h16m0 0l-4-4m4 4l-4 4M20 6v12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -185,13 +198,13 @@ const spanLabel = `${MONTH_ABBR[firstM - 1]} ${firstY} – ${MONTH_ABBR[lastM - 
                     </article>
 
                     <!-- 02 Seoul -->
-                    <article class="pass pass--korean reveal gsap-reveal">
+                    <article class="pass pass--korean reveal gsap-reveal" aria-labelledby="pass-2-route">
                         <div class="pass-main">
                             <div class="pass-head">
-                                <span class="pass-logoband"><img class="pass-logo pass-logo--white" src="/assets/airlines/korean-c.png" alt="Korean Air"></span>
+                                <span class="pass-logoband"><img class="pass-logo pass-logo--white" src="/assets/airlines/korean-c.png" alt="Korean Air" width="1996" height="234"></span>
                                 <span class="pass-date"><span class="pass-k">Date</span>Sep 2025</span>
                             </div>
-                            <div class="pass-cities"><span>Osaka</span><span>Seoul</span></div>
+                            <div class="pass-cities" id="pass-2-route"><span>Osaka</span><span class="visually-hidden">to</span><span>Seoul</span></div>
                             <div class="pass-route">
                                 <span class="pass-code">KIX</span>
                                 <svg class="pass-plane" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12h16m0 0l-4-4m4 4l-4 4M20 6v12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -209,13 +222,13 @@ const spanLabel = `${MONTH_ABBR[firstM - 1]} ${firstY} – ${MONTH_ABBR[lastM - 
                     </article>
 
                     <!-- 03 Mexico City -->
-                    <article class="pass pass--aeromexico reveal gsap-reveal">
+                    <article class="pass pass--aeromexico reveal gsap-reveal" aria-labelledby="pass-3-route">
                         <div class="pass-main">
                             <div class="pass-head">
-                                <span class="pass-logoband"><img class="pass-logo pass-logo--white" src="/assets/airlines/aeromexico-c.png" alt="Aeroméxico"></span>
+                                <span class="pass-logoband"><img class="pass-logo pass-logo--white" src="/assets/airlines/aeromexico-c.png" alt="Aeroméxico" width="3770" height="606"></span>
                                 <span class="pass-date"><span class="pass-k">Date</span>Apr 2026</span>
                             </div>
-                            <div class="pass-cities"><span>San Jose</span><span>Mexico City</span></div>
+                            <div class="pass-cities" id="pass-3-route"><span>San Jose</span><span class="visually-hidden">to</span><span>Mexico City</span></div>
                             <div class="pass-route">
                                 <span class="pass-code">SJC</span>
                                 <svg class="pass-plane" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12h16m0 0l-4-4m4 4l-4 4M20 6v12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -233,13 +246,13 @@ const spanLabel = `${MONTH_ABBR[firstM - 1]} ${firstY} – ${MONTH_ABBR[lastM - 
                     </article>
 
                     <!-- 04 Hawaii -->
-                    <article class="pass pass--hawaiian reveal gsap-reveal">
+                    <article class="pass pass--hawaiian reveal gsap-reveal" aria-labelledby="pass-4-route">
                         <div class="pass-main">
                             <div class="pass-head">
-                                <span class="pass-logoband"><img class="pass-logo pass-logo--white" src="/assets/airlines/hawaiian-t-c.png" alt="Hawaiian Airlines"></span>
+                                <span class="pass-logoband"><img class="pass-logo pass-logo--white" src="/assets/airlines/hawaiian-t-c.png" alt="Hawaiian Airlines" width="968" height="268"></span>
                                 <span class="pass-date"><span class="pass-k">Date</span>May 2026</span>
                             </div>
-                            <div class="pass-cities"><span>San Jose</span><span>Honolulu</span></div>
+                            <div class="pass-cities" id="pass-4-route"><span>San Jose</span><span class="visually-hidden">to</span><span>Honolulu</span></div>
                             <div class="pass-route">
                                 <span class="pass-code">SJC</span>
                                 <svg class="pass-plane" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12h16m0 0l-4-4m4 4l-4 4M20 6v12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -257,13 +270,13 @@ const spanLabel = `${MONTH_ABBR[firstM - 1]} ${firstY} – ${MONTH_ABBR[lastM - 
                     </article>
 
                     <!-- 05 New York -->
-                    <article class="pass pass--jetblue reveal gsap-reveal">
+                    <article class="pass pass--jetblue reveal gsap-reveal" aria-labelledby="pass-5-route">
                         <div class="pass-main">
                             <div class="pass-head">
-                                <span class="pass-logoband"><img class="pass-logo pass-logo--white" src="/assets/airlines/jetblue-c.png" alt="JetBlue"></span>
+                                <span class="pass-logoband"><img class="pass-logo pass-logo--white" src="/assets/airlines/jetblue-c.png" alt="JetBlue" width="1249" height="410"></span>
                                 <span class="pass-date"><span class="pass-k">Date</span>Oct 2025</span>
                             </div>
-                            <div class="pass-cities"><span>San Jose</span><span>New York</span></div>
+                            <div class="pass-cities" id="pass-5-route"><span>San Jose</span><span class="visually-hidden">to</span><span>New York</span></div>
                             <div class="pass-route">
                                 <span class="pass-code">SJC</span>
                                 <svg class="pass-plane" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12h16m0 0l-4-4m4 4l-4 4M20 6v12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -281,13 +294,13 @@ const spanLabel = `${MONTH_ABBR[firstM - 1]} ${firstY} – ${MONTH_ABBR[lastM - 
                     </article>
 
                     <!-- 06 Vancouver -->
-                    <article class="pass pass--aircanada reveal gsap-reveal">
+                    <article class="pass pass--aircanada reveal gsap-reveal" aria-labelledby="pass-6-route">
                         <div class="pass-main">
                             <div class="pass-head">
-                                <span class="pass-logoband"><img class="pass-logo pass-logo--white" src="/assets/airlines/aircanada-t-c.png" alt="Air Canada"></span>
+                                <span class="pass-logoband"><img class="pass-logo pass-logo--white" src="/assets/airlines/aircanada-t-c.png" alt="Air Canada" width="2164" height="283"></span>
                                 <span class="pass-date"><span class="pass-k">Date</span>Jul 2026</span>
                             </div>
-                            <div class="pass-cities"><span>San Jose</span><span>Vancouver</span></div>
+                            <div class="pass-cities" id="pass-6-route"><span>San Jose</span><span class="visually-hidden">to</span><span>Vancouver</span></div>
                             <div class="pass-route">
                                 <span class="pass-code">SJC</span>
                                 <svg class="pass-plane" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12h16m0 0l-4-4m4 4l-4 4M20 6v12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -305,13 +318,13 @@ const spanLabel = `${MONTH_ABBR[firstM - 1]} ${firstY} – ${MONTH_ABBR[lastM - 
                     </article>
 
                     <!-- 07 Seattle -->
-                    <article class="pass pass--alaska reveal gsap-reveal">
+                    <article class="pass pass--alaska reveal gsap-reveal" aria-labelledby="pass-7-route">
                         <div class="pass-main">
                             <div class="pass-head">
-                                <span class="pass-logoband"><img class="pass-logo pass-logo--white" src="/assets/airlines/alaska-c.png" alt="Alaska Airlines"></span>
+                                <span class="pass-logoband"><img class="pass-logo pass-logo--white" src="/assets/airlines/alaska-c.png" alt="Alaska Airlines" width="2308" height="700"></span>
                                 <span class="pass-date"><span class="pass-k">Date</span>Jun 2026</span>
                             </div>
-                            <div class="pass-cities"><span>San Jose</span><span>Seattle</span></div>
+                            <div class="pass-cities" id="pass-7-route"><span>San Jose</span><span class="visually-hidden">to</span><span>Seattle</span></div>
                             <div class="pass-route">
                                 <span class="pass-code">SJC</span>
                                 <svg class="pass-plane" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12h16m0 0l-4-4m4 4l-4 4M20 6v12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -329,13 +342,13 @@ const spanLabel = `${MONTH_ABBR[firstM - 1]} ${firstY} – ${MONTH_ABBR[lastM - 
                     </article>
 
                     <!-- 08 Detroit -->
-                    <article class="pass pass--alaska reveal gsap-reveal">
+                    <article class="pass pass--alaska reveal gsap-reveal" aria-labelledby="pass-8-route">
                         <div class="pass-main">
                             <div class="pass-head">
-                                <span class="pass-logoband"><img class="pass-logo pass-logo--white" src="/assets/airlines/alaska-c.png" alt="Alaska Airlines"></span>
+                                <span class="pass-logoband"><img class="pass-logo pass-logo--white" src="/assets/airlines/alaska-c.png" alt="Alaska Airlines" width="2308" height="700"></span>
                                 <span class="pass-date"><span class="pass-k">Date</span>Jul 2026</span>
                             </div>
-                            <div class="pass-cities"><span>San Jose</span><span>Detroit</span></div>
+                            <div class="pass-cities" id="pass-8-route"><span>San Jose</span><span class="visually-hidden">to</span><span>Detroit</span></div>
                             <div class="pass-route">
                                 <span class="pass-code">SJC</span>
                                 <svg class="pass-plane" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12h16m0 0l-4-4m4 4l-4 4M20 6v12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -353,13 +366,13 @@ const spanLabel = `${MONTH_ABBR[firstM - 1]} ${firstY} – ${MONTH_ABBR[lastM - 
                     </article>
 
                     <!-- 09 San Diego (May 2026) -->
-                    <article class="pass pass--frontier reveal gsap-reveal">
+                    <article class="pass pass--frontier reveal gsap-reveal" aria-labelledby="pass-9-route">
                         <div class="pass-main">
                             <div class="pass-head">
-                                <span class="pass-logoband"><img class="pass-logo pass-logo--white" src="/assets/airlines/frontier-c.png" alt="Frontier Airlines"></span>
+                                <span class="pass-logoband"><img class="pass-logo pass-logo--white" src="/assets/airlines/frontier-c.png" alt="Frontier Airlines" width="3785" height="513"></span>
                                 <span class="pass-date"><span class="pass-k">Date</span>May 2026</span>
                             </div>
-                            <div class="pass-cities"><span>San Jose</span><span>San Diego</span></div>
+                            <div class="pass-cities" id="pass-9-route"><span>San Jose</span><span class="visually-hidden">to</span><span>San Diego</span></div>
                             <div class="pass-route">
                                 <span class="pass-code">SJC</span>
                                 <svg class="pass-plane" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12h16m0 0l-4-4m4 4l-4 4M20 6v12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -377,13 +390,13 @@ const spanLabel = `${MONTH_ABBR[firstM - 1]} ${firstY} – ${MONTH_ABBR[lastM - 
                     </article>
 
                     <!-- 10 San Diego (Dec 2025) -->
-                    <article class="pass pass--alaska reveal gsap-reveal">
+                    <article class="pass pass--alaska reveal gsap-reveal" aria-labelledby="pass-10-route">
                         <div class="pass-main">
                             <div class="pass-head">
-                                <span class="pass-logoband"><img class="pass-logo pass-logo--white" src="/assets/airlines/alaska-c.png" alt="Alaska Airlines"></span>
+                                <span class="pass-logoband"><img class="pass-logo pass-logo--white" src="/assets/airlines/alaska-c.png" alt="Alaska Airlines" width="2308" height="700"></span>
                                 <span class="pass-date"><span class="pass-k">Date</span>Dec 2025</span>
                             </div>
-                            <div class="pass-cities"><span>San Jose</span><span>San Diego</span></div>
+                            <div class="pass-cities" id="pass-10-route"><span>San Jose</span><span class="visually-hidden">to</span><span>San Diego</span></div>
                             <div class="pass-route">
                                 <span class="pass-code">SJC</span>
                                 <svg class="pass-plane" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12h16m0 0l-4-4m4 4l-4 4M20 6v12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -401,13 +414,13 @@ const spanLabel = `${MONTH_ABBR[firstM - 1]} ${firstY} – ${MONTH_ABBR[lastM - 
                     </article>
 
                     <!-- 11 Tahoe (road trip) -->
-                    <article class="pass pass--roadtrip reveal gsap-reveal">
+                    <article class="pass pass--roadtrip reveal gsap-reveal" aria-labelledby="pass-11-route">
                         <div class="pass-main">
                             <div class="pass-head">
                                 <span class="pass-airline">Road Trip</span>
                                 <span class="pass-date"><span class="pass-k">Date</span>Jul 2026</span>
                             </div>
-                            <div class="pass-cities"><span>Sunnyvale</span><span>Lake Tahoe</span></div>
+                            <div class="pass-cities" id="pass-11-route"><span>Sunnyvale</span><span class="visually-hidden">to</span><span>Lake Tahoe</span></div>
                             <div class="pass-route">
                                 <span class="pass-code pass-code--sm">BAY</span>
                                 <svg class="pass-plane" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 13l2-5a2 2 0 0 1 1.9-1.3h10.2A2 2 0 0 1 21 8l2 5m-20 0h20m-20 0v4h2m16-4v4h-2m-12 0h8M6.5 15.5h.01M17.5 15.5h.01" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>

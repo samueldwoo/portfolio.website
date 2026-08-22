@@ -1,0 +1,128 @@
+
+========================================================================================
+/
+========================================================================================
+-- layout.css @media blocks that PARSED --
+  @media (max-width: 759.98px)  -> 1 rule(s) survived
+       .pass-wall { grid-template-columns: minmax(0px, 1fr); }
+  @media (prefers-reduced-motion: reduce)  -> 4 rule(s) survived
+       .band-inner[data-rail]::before { opacity: 1 !important; }
+       .band-inner[data-rail]::after { opacity: 0.85 !important; }
+       .section-head::after { opacity: 0.8 !important; }
+       .band--plate::after { opacity: 0.55 !important; }
+  @media (prefers-reduced-motion: reduce)  -> 1 rule(s) survived
+       .pass-wall > .pass { transition: none; }
+-- rules after the malformed blocks --
+     OK  band--dark .pass box-shadow
+     OK  pass-wall nth-child(1)
+     OK  prefers-contrast block
+-- headings --
+   h1 SamuelWoo
+   h2 Interests
+   h3 Sports & Staying Active
+   h3 Food & Restaurants
+   h3 Investing & Markets
+   h3 Random Favorites
+   h2 Projects
+   h4 Ka-ching — Finance Dashboard  <<< SKIPPED h3
+   h4 This Website
+   h4 See all projects
+   h2 Work
+   h3 What I Do
+   h3 Skills & Tools
+   h3 Experience
+   h4 Software Development Engineer II
+   h4 Software Development Engineer Intern
+   h4 ECE Department Tutor
+   h2 Connect
+   h3 Find Me Online
+   h3 Or Send a Message
+   h1 count = 1
+-- unnamed section/article/form/nav/aside: 7 --
+   <article> .interest-block interest-block--lead reveal
+   <article> .interest-block reveal
+   <article> .interest-block reveal
+   <article> .exp-item reveal
+   <article> .exp-item reveal
+   <article> .exp-item reveal
+   <form> .
+-- form fields --
+   #name      type=text      label=True autocomplete=None
+   #email     type=email     label=True autocomplete=None
+   #message   type=textarea  label=True autocomplete=None
+   #cmdk-input type=text      label=False autocomplete='off'
+-- links with accessible name > 90 chars: 3 --
+    295 chars  href=projects.html#cs-finance-title  '01Runs 100% locallyMulti-format parsingC'
+    113 chars  href=projects.html#cs-site-title  '02This WebsiteHTML/CSS/JSHand-written, n'
+    141 chars  href=projects.html  '→See all projectsFull case studies + wha'
+
+========================================================================================
+/projects/
+========================================================================================
+-- headings --
+   h1 Things I'm building
+   h2 Ka-ching — Personal Finance Dashboard
+   h3 Why I built it
+   h3 How it works
+   h3 The part I'm proud of
+   h3 What I'd do next
+   h2 This Website
+   h3 Why I built it
+   h3 How it's built
+   h3 The details I cared about
+   h3 What I'd do next
+   h2 Still cooking
+   h3 Restaurant Dating App
+   h3 Navigation Orchestrator UI
+   h3 IMU Activity Classification
+   h1 count = 1
+-- unnamed section/article/form/nav/aside: 3 --
+   <article> .card project-card reveal spotlight motion-
+   <article> .card project-card reveal spotlight motion-
+   <article> .card project-card reveal spotlight motion-
+-- form fields --
+   #cmdk-input type=text      label=False autocomplete='off'
+
+========================================================================================
+/travel/
+========================================================================================
+-- headings --
+   h1 Where I've been
+   h1 count = 1
+-- images: 10, missing alt attr: 0, missing width/height attr: 10 --
+   zipair-t-c.png         alt='Zip Air'                natural=305x72 attr=NonexNone
+   korean-c.png           alt='Korean Air'             natural=1996x234 attr=NonexNone
+   aeromexico-c.png       alt='Aeroméxico'             natural=3770x606 attr=NonexNone
+   hawaiian-t-c.png       alt='Hawaiian Airlines'      natural=968x268 attr=NonexNone
+   jetblue-c.png          alt='JetBlue'                natural=1249x410 attr=NonexNone
+   aircanada-t-c.png      alt='Air Canada'             natural=2164x283 attr=NonexNone
+   alaska-c.png           alt='Alaska Airlines'        natural=2308x700 attr=NonexNone
+   alaska-c.png           alt='Alaska Airlines'        natural=2308x700 attr=NonexNone
+   frontier-c.png         alt='Frontier Airlines'      natural=3785x513 attr=NonexNone
+   alaska-c.png           alt='Alaska Airlines'        natural=2308x700 attr=NonexNone
+-- unnamed section/article/form/nav/aside: 11 --
+   <article> .pass pass--zipair reveal gsap-reveal motio
+   <article> .pass pass--korean reveal gsap-reveal motio
+   <article> .pass pass--aeromexico reveal gsap-reveal m
+   <article> .pass pass--hawaiian reveal gsap-reveal mot
+   <article> .pass pass--jetblue reveal gsap-reveal moti
+   <article> .pass pass--aircanada reveal gsap-reveal mo
+   <article> .pass pass--alaska reveal gsap-reveal motio
+   <article> .pass pass--alaska reveal gsap-reveal motio
+   <article> .pass pass--frontier reveal gsap-reveal mot
+   <article> .pass pass--alaska reveal gsap-reveal motio
+   <article> .pass pass--roadtrip reveal gsap-reveal mot
+-- form fields --
+   #cmdk-input type=text      label=False autocomplete='off'
+-- AX tree: computed names for trip-cadence listitems --
+   'Sep 2025: 2 trips'
+   'Oct 2025: 1 trip'
+   'Nov 2025: 0 trips'
+   'Dec 2025: 1 trip'
+   'Jan 2026: 0 trips'
+   'Feb 2026: 0 trips'
+   'Mar 2026: 0 trips'
+   'Apr 2026: 1 trip'
+   'May 2026: 2 trips'
+   'Jun 2026: 1 trip'
+   'Jul 2026: 3 trips'

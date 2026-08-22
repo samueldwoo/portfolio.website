@@ -1,0 +1,15 @@
+
+================================================================================================
+CONTRAST @ 1440px  (reduced-motion, finished state, real pixels)
+================================================================================================
+
+--- /  (135 text styles, page 1440x7570) ---
+  no failures
+
+--- /projects/  (77 text styles, page 1440x4619) ---
+  no failures
+
+--- /travel/  (170 text styles, page 1440x2088) ---
+  no failures
+
+TOTAL FAILURES: 0

@@ -1,0 +1,8 @@
+
+===== CLAIM CHECK [AFTER] =====
+CLAIM 1  @390 pass wall: passes=11 rows=11 widest-row=1 doc-overflow=0 grid-column=['auto'] heights=[207, 205, 202, 208, 209, 206, 204]
+CLAIM 2  reduced-motion, after full scroll, bento tiles:
+           .project-feature       opacity=1.000  transform=none  is .reveal
+           .bento-plate           opacity=1.000  transform=none  is .reveal
+           .project-card--tall    opacity=1.000  transform=none  is .reveal
+           .project-card--wide    opacity=1.000  transform=none  is .reveal

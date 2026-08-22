@@ -466,9 +466,13 @@
         column in fact IMPROVED the case blocks, which used to sit at 50
         characters — under the comfortable band, not over it. Scaling the display
         type up would not improve any measure.
-        (The site's genuine outlier, `.exp-item p` at 91 characters, is
-        font-relative and reads identically at 1512 and 3840 — see the `ch` note
-        under --card-measure. Not introduced or worsened here.)
+        (The site's genuine outlier used to be `.exp-item p`, which realized 89
+        characters at 1024 and above. It was font-relative and read identically
+        at 1512 and 3840, so it was not introduced or worsened by the fluid
+        column — but 89 is over the ~85 ceiling, so the a11y/layout pass
+        tightened its cap from 68ch to 60ch in styles.css. Measured after: 80
+        characters. `.prose p` had the same defect at 66ch/88 characters and is
+        now 60ch/80. See the `ch` note under --card-measure.)
      3. THE ONE THING THAT DID MOVE is the title's ink as a fraction of its
         column. Measured on #projects, "Projects" being 245px of ink:
              viewport   before   after
@@ -630,13 +634,16 @@
 
        NOTE, because `ch` flatters itself: `ch` is the advance of "0", which in
        Inter is wider than the average lowercase glyph, so a `Nch` cap holds
-       about 1.34*N real characters. The site's existing 68ch caps
-       (`.exp-item p`) therefore already run 91 characters per line, and have
-       since before this change, at every width from 1024 up. That is a
-       pre-existing measure worth revisiting, but it is font-relative: it reads
-       identically at 1512 and at 3840 and is not something the fluid column
-       introduced or worsened. Left alone deliberately — tightening it would
-       rewrap the work band at 1512. */
+       about 1.34*N real characters. That is why the two 60-68ch caps in the
+       work band used to overrun: `.exp-item p` at 68ch realized 89 real
+       characters per line at every width from 1024 up, and `.prose p` at 66ch
+       realized 88, both over the ~85 ceiling. Font-relative, so neither was
+       introduced or worsened by the fluid column — this note previously
+       recorded `.exp-item p` as a known outlier left alone because tightening
+       it rewraps the work band at 1512. The a11y/layout pass took that trade:
+       both are now capped at 60ch, the same value `.case-block p` and
+       --card-measure use, and both measure 80 real characters. The work band
+       does rewrap at 1512 as predicted; that was the accepted cost. */
     --card-measure: 60ch;
 }
 
@@ -1151,6 +1158,20 @@
     .pass-wall { grid-template-columns: repeat(12, minmax(0, 1fr)); }
     .pass-wall > .pass { grid-column: span 6; }
 }
+/* MALFORMED-RULE FIX #1. This block used to end `.pass-wall > .pass,` with a
+   dangling comma and no declaration block. Per CSS Syntax, the `}` that follows
+   is consumed as the parse error that discards that qualified rule — which also
+   CLOSED this @media block. Verified in the CSSOM of the built output: the block
+   parsed with exactly 1 surviving rule (`.pass-wall`), the `.pass-wall > .pass`
+   rule was gone entirely, and the rules after it (`.band--dark .pass`, the
+   `:nth-child` tilt ladder, the `prefers-contrast` block) survived as top-level
+   rules rather than being swallowed.
+   NOTHING WAS ACTUALLY STRANDED: no ungated rule sets `grid-column` on a pass,
+   and both spans above are media-gated to >=760px, so auto-placement was already
+   giving one pass per row here. Measured at 390px before and after: 11 passes,
+   11 rows, widest row 1, zero document overflow — identical. So the declaration
+   below restates the live behaviour and makes the intent explicit; it is
+   deliberately a no-op today and a guard against a future ungated span. */
 @media (max-width: 759.98px) {
     .pass-wall { grid-template-columns: minmax(0, 1fr); }
     /* `auto`, not a span: the template is one column here, and the span rules in
@@ -1250,9 +1271,23 @@
     .band-inner[data-rail]::after  { opacity: .85 !important; }
     .section-head::after           { opacity: .8 !important; }
     .band--plate::after            { opacity: .55 !important; }
-    /* The four bento tiles are .reveal children; styles.css already forces
-       .reveal to its finished state here, and these restate it for the two
-       tiles that are NOT .reveal-managed. */
+    /* MALFORMED-RULE FIX #2, and the comment above it was untrue.
+       It claimed to protect "the two tiles that are NOT .reveal-managed".
+       There are no such tiles: audited in index.astro, ALL FOUR bento tiles
+       (.project-feature, .project-card--tall, .bento-plate, .project-card--wide)
+       carry `.reveal`, and it listed three selectors, not two.
+       The selector list also ended in a dangling comma, so — exactly as in fix
+       #1 — the whole rule was discarded. Verified in the CSSOM of the built
+       output: this block parsed with 4 surviving rules, and these tiles had no
+       rule of their own at all.
+       NOTHING WAS STRANDED, because styles.css's
+       `.reveal { opacity: 1 !important; transform: none !important }` in its own
+       reduced-motion block already covers all four. Measured with
+       --force-prefers-reduced-motion after a full scroll, before and after this
+       fix: all four tiles at opacity 1.000. So this is now what it always
+       claimed to be — a belt-and-braces restatement, covering all four tiles,
+       that cannot itself strand anything. */
+    .project-feature,
     .bento-plate,
     .project-card--tall,
     .project-card--wide {
