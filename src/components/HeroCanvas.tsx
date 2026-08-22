@@ -558,9 +558,14 @@ export default function HeroCanvas() {
       /* Derived from the measured copy edge, not a fixed 0.48. The narrow branch
          already keys off copyBottom; this is the same rule horizontally, and it is what
          stops the cup drifting onto the copy as the gutter narrows between 900 and
-         1280. The 0.44 floor keeps the green from swallowing a very wide hero. */
+         1280. The 0.44 floor keeps the green from swallowing a very wide hero.
+   RIGHT BOUND 0.94, not 0.97: the section rail lives in the right gutter from
+   1024 up (its ticks are 44px wide since the a11y pass), and at 0.97 the ball
+   could rest underneath it -- elementFromPoint returned OL.rail-list and the
+   press never reached the game. Measured: golfmouse's "right edge" lie failed at
+   both 1440 and 1024 until this came in. */
       const left = Math.max(0.44, copyEdge + 0.05);
-      return { x: cssW * left, y: cssH * 0.16, w: cssW * (0.97 - left), h: cssH * 0.68 };
+      return { x: cssW * left, y: cssH * 0.16, w: cssW * (0.94 - left), h: cssH * 0.68 };
     };
 
     /* Randomise the green itself: fall-line angle, steepness and undulation.
