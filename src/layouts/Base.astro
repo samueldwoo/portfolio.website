@@ -53,16 +53,26 @@ const { title, description, page, skipTarget } = Astro.props;
 // so script.js's scroll-spy can claim them. From the sub-pages they point back
 // at index.html and there is nothing to spy on.
 const isHome = page === 'home';
-const brandHref = isHome ? '#home' : 'index.html#home';
-const href = (hash: string) => (isHome ? `#${hash}` : `index.html#${hash}`);
+/* ROOT-ABSOLUTE, not relative, and this is a bug fix rather than a preference.
+   These used to be `index.html#home`. That was correct while pages emitted as
+   flat files at the root (`/projects.html`), because a relative `index.html`
+   resolved to `/index.html`. Adding the Vercel adapter forced
+   `build.format: 'directory'`, so the page now lives at `/projects/`, and the
+   SAME relative href resolves to `/projects/index.html` — which is the projects
+   page itself. Every cross-page nav link, the brand and the footer silently
+   pointed at the page you were already on, with a dead anchor.
+   The `/index.html` -> `/` redirect never fired, because the browser never
+   requested `/index.html`. A leading slash is what makes these absolute. */
+const brandHref = isHome ? '#home' : '/#home';
+const href = (hash: string) => (isHome ? `#${hash}` : `/#${hash}`);
 const spy = (hash: string) => (isHome ? { 'data-nav': hash } : {});
 
 // Cross-page destinations, shared by the drawer and (via the DOM) harvested
 // into the command palette so there is exactly one list to keep correct.
 const pageLinks = [
   { key: 'home', label: 'Home', href: brandHref },
-  { key: 'projects', label: 'Projects', href: 'projects.html' },
-  { key: 'travel', label: 'Travel', href: 'travel.html' },
+  { key: 'projects', label: 'Projects', href: '/projects' },
+  { key: 'travel', label: 'Travel', href: '/travel' },
 ];
 ---
 
@@ -80,6 +90,27 @@ const pageLinks = [
          (because the drawer needs showModal() to open at all), and that
          fallback must not flash before script.js runs at the end of body. -->
     <script is:inline>document.documentElement.classList.add('nav-js');</script>
+
+    <!-- Animation capability flag, set BEFORE first paint for the same reason
+         nav-js is: `html.js-anim .reveal` carries the invisible from-state, so
+         setting it late would paint the finished page and then hide it.
+
+         The timer is the safety net. `.reveal` used to be opacity:0
+         unconditionally, which meant a script.js that never loaded left the page
+         blank — see the note in styles.css and the 404 incident recorded below.
+         script.js adds `anim-live` as soon as it runs (whether it goes on to
+         animate or to reveal everything immediately), so if that has not
+         happened by the deadline the from-state is withdrawn and the content
+         simply appears. Failure degrades to "no animation", never to "no page". -->
+    <script is:inline>
+      (function () {
+        var d = document.documentElement;
+        d.classList.add('js-anim');
+        setTimeout(function () {
+          if (!d.classList.contains('anim-live')) d.classList.remove('js-anim');
+        }, 3000);
+      })();
+    </script>
 
     <!-- Inline SVG favicon: sage "S" monogram on a light canvas -->
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23eceee6'/%3E%3Ctext x='16' y='23' font-family='Verdana,Geneva,sans-serif' font-size='20' font-weight='700' text-anchor='middle' fill='%235f7a4f'%3ES%3C/text%3E%3C/svg%3E">
@@ -163,18 +194,18 @@ const pageLinks = [
                     is why the old build dropped its own active state as soon as
                     you scrolled past the first band. */}
                 {page === 'projects' ? (
-                    <a href="projects.html" class="nav-link is-active" data-nav="projects" data-nav-page aria-current="page">Projects</a>
+                    <a href="/projects" class="nav-link is-active" data-nav="projects" data-nav-page aria-current="page">Projects</a>
                 ) : (
                     /* On the home page this ALSO spies on the #projects band. The
                        old build left the bar with no active link at all while you
                        read that section, because the only Projects link pointed at
                        the sub-page. It still navigates to projects.html. */
-                    <a href="projects.html" class="nav-link" {...spy('projects')}>Projects</a>
+                    <a href="/projects" class="nav-link" {...spy('projects')}>Projects</a>
                 )}
                 {page === 'travel' ? (
-                    <a href="travel.html" class="nav-link is-active" data-nav="travel" data-nav-page aria-current="page">Travel</a>
+                    <a href="/travel" class="nav-link is-active" data-nav="travel" data-nav-page aria-current="page">Travel</a>
                 ) : (
-                    <a href="travel.html" class="nav-link">Travel</a>
+                    <a href="/travel" class="nav-link">Travel</a>
                 )}
                 <a href={href('work')} class="nav-link" {...spy('work')}>Work</a>
                 <a href={href('connect')} class="nav-cta" {...spy('connect')}>Connect</a>

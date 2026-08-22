@@ -1,0 +1,457 @@
+/* ============================================================
+   us.css — the private wing. Two acts, one hard cut.
+
+   ACT I  (.crude)  a page that looks abandoned in 1999
+   ACT II (.studio) a black industrial room under blue light
+
+   Loaded ONLY by /stronger/**. It deliberately does not touch
+   styles.css, css/layout.css, css/nav.css, css/scroll.css or
+   css/motion.css, and none of those are loaded here — the wing
+   is a different world and shares no cascade with the portfolio.
+
+   Paths are ABSOLUTE (/css/us.css) everywhere they appear,
+   because these pages live at /stronger/... rather than at the
+   root like index.html, so a relative href would resolve to
+   /stronger/css/us.css and 404.
+   ============================================================ */
+
+/* ---------- ACT II tokens ----------------------------------
+   Sourced from solidcore's studio palette: an industrial black
+   room lit by signature blue. Machines, walls and ceiling are
+   matte black / dark grey / raw concrete; the rooms are kept
+   dark and lit with bright blue accent lighting.
+
+   THE ONE RULE: the photos are the only warm thing in here.
+   Everything architectural is black, concrete and blue. Nothing
+   is tinted, graded or blue-washed except the room around the
+   memories. Do not add a filter to a photo. Ever.
+   ---------------------------------------------------------- */
+:root {
+    --void:      #000000;   /* the room itself */
+    --machine:   #15161a;   /* matte-black reformer bodies, dark metallics */
+    --machine-2: #1e2025;   /* one step up: raised surfaces, cards */
+
+    /* Raw industrial concrete ramp */
+    --concrete-1: #2a2c31;
+    /* Raised from #4a4c52. It is used as the ONLY visible boundary on real
+       controls (the memory index buttons, the reaction chips, the reveal button,
+       the dj inputs), and at #4a4c52 that boundary measured 2.45:1 on --void —
+       under the 3:1 that WCAG 1.4.11 requires for a UI component. Now 4.00:1 on
+       void, 3.44:1 on --machine. --concrete-1 is DECORATION and must never be
+       used as a control border; it measures 1.50:1. */
+    --concrete-2: #6a6c72;
+    /* Raised from #6e7075, which was the single worst token in the wing: ~14
+       distinct small-text roles used it, and it topped out at 4.24:1 on pure
+       black — it could never pass AA at any body size, and only 3.65:1 on
+       --machine. Now 5.76:1 on void and 4.96:1 on --machine, so every one of
+       those roles clears AA at once. Verified by computing the ratios, not by
+       eye. */
+    --concrete-3: #84868b;
+    --concrete-4: #9a9ca1;  /* also: gray side handlebars */
+    --concrete-5: #b9bcc2;
+
+    --chalk:     #ffffff;   /* crisp white: the wordmark, primary type */
+    --chalk-dim: #d7d9dd;
+
+    /* Signature blue. -brand for marks and controls, -light for the
+       LED wash, -glow for the hottest core of a light source. */
+    --blue-brand: #1e3ae0;
+    --blue-light: #3e7bff;
+    --blue-glow:  #7fb2ff;
+
+    --cable: #000000;       /* "black cables" */
+
+    /* Type. Space Grotesk + DM Mono are already fetched by the
+       public site, so reusing them costs nothing on a warm cache. */
+    --us-display: "Space Grotesk", system-ui, -apple-system, sans-serif;
+    --us-mono:    "DM Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+/* ============================================================
+   ACT I — THE CRUDE GATE
+
+   Everything here is ugly ON PURPOSE. What it is NOT is broken:
+   contrast stays >= 4.5:1, every control is keyboard reachable,
+   focus is visible, inputs are 16px so iOS does not zoom, and
+   targets are >= 44px. "Looks like 1999" must not mean "cannot
+   be used by a person on a phone".
+   ============================================================ */
+.crude {
+    margin: 0;
+    padding: 18px 14px 60px;
+    background: #ffffff;
+    /* The default-serif stack IS the joke. Do not add a webfont. */
+    font-family: "Times New Roman", Times, serif;
+    font-size: 17px;
+    line-height: 1.45;
+    color: #000000;
+    /* Kill the smooth-scroll and any inherited niceness. */
+    scroll-behavior: auto;
+}
+
+.crude-wrap {
+    max-width: 640px;
+    margin: 0 auto;
+}
+
+/* Deliberately centered, deliberately underlined, deliberately loud. */
+.crude h1 {
+    font-size: 26px;
+    font-weight: 700;
+    text-align: center;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    margin: 6px 0 2px;
+}
+
+.crude-sub {
+    text-align: center;
+    font-size: 15px;
+    margin: 0 0 14px;
+}
+
+.crude hr {
+    border: 0;
+    border-top: 1px solid #808080;
+    margin: 14px 0;
+}
+
+.crude a {
+    color: #0000ee;             /* 8.6:1 on white */
+    text-decoration: underline;
+}
+.crude a:visited { color: #551a8b; }
+
+/* The fake system log. Monospace, small, grey — but not so grey it
+   fails contrast: #595959 is 7:1 on white. */
+.crude-log {
+    font-family: var(--us-mono);
+    font-size: 12.5px;
+    line-height: 1.7;
+    color: #595959;
+    background: #f2f2f2;
+    border: 1px solid #c0c0c0;
+    padding: 8px 10px;
+    margin: 0 0 16px;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.crude-log b { color: #000; font-weight: 700; }
+
+/* A real <table border="1">, because of course it is. */
+.crude-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0 0 18px;
+    font-size: 14px;
+}
+.crude-table th,
+.crude-table td {
+    border: 1px solid #000000;
+    padding: 6px 8px;
+    text-align: left;
+}
+.crude-table th {
+    background: #c0c0c0;
+    font-weight: 700;
+}
+.crude-table td.is-done { background: #dfffdf; }
+.crude-table td.is-now  { background: #ffffcc; font-weight: 700; }
+
+/* The question block */
+.crude-q {
+    margin: 0 0 6px;
+    font-size: 19px;
+    font-weight: 700;
+}
+.crude-count {
+    font-family: var(--us-mono);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #595959;
+    margin: 0 0 10px;
+}
+
+.crude-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: stretch;
+    margin: 0 0 12px;
+}
+
+/* Win98 inset field. 16px minimum: anything smaller and iOS Safari
+   zooms the viewport on focus, which is a genuine usability bug and
+   not part of the bit. */
+.crude-input {
+    flex: 1 1 220px;
+    min-height: 44px;
+    padding: 8px 10px;
+    font-family: var(--us-mono);
+    font-size: 16px;
+    color: #000;
+    background: #ffffff;
+    border: 2px inset #808080;
+    border-radius: 0;
+}
+.crude-input:focus {
+    outline: 3px solid #0000ee;
+    outline-offset: 1px;
+}
+
+/* Beveled grey button, the way they used to be. */
+.crude-submit {
+    min-height: 44px;
+    padding: 8px 20px;
+    font-family: "Times New Roman", Times, serif;
+    font-size: 16px;
+    font-weight: 700;
+    color: #000;
+    background: #c0c0c0;
+    border: 2px outset #e8e8e8;
+    border-radius: 0;
+    cursor: pointer;
+}
+.crude-submit:active { border-style: inset; }
+.crude-submit:focus-visible {
+    outline: 3px solid #0000ee;
+    outline-offset: 1px;
+}
+.crude-submit[disabled] { color: #6a6a6a; cursor: progress; }
+
+/* Feedback. Colour is never the only signal — each of these also
+   carries a text prefix in the markup ("WRONG.", "HINT:", "OK."). */
+.crude-msg {
+    font-family: var(--us-mono);
+    font-size: 14px;
+    padding: 8px 10px;
+    margin: 0 0 12px;
+    border: 1px solid;
+}
+.crude-msg[data-kind="bad"]  { color: #a30000; border-color: #a30000; background: #fff0f0; }
+.crude-msg[data-kind="hint"] { color: #6a4a00; border-color: #6a4a00; background: #fffbe6; }
+.crude-msg[data-kind="good"] { color: #005c1f; border-color: #005c1f; background: #f0fff4; }
+.crude-msg[hidden] { display: none; }
+
+/* The blinking cursor. Steps, not a fade — a smooth blink is a
+   modern affectation. */
+.crude-caret {
+    display: inline-block;
+    width: 0.6em;
+    background: #000;
+    animation: crude-blink 1s steps(1) infinite;
+}
+@keyframes crude-blink { 0%, 50% { opacity: 1; } 50.01%, 100% { opacity: 0; } }
+
+.crude-foot {
+    margin-top: 26px;
+    font-size: 12.5px;
+    color: #595959;
+    text-align: center;
+}
+.crude-counter {
+    display: inline-block;
+    font-family: var(--us-mono);
+    font-size: 13px;
+    color: #00ff33;
+    background: #000;
+    border: 1px solid #808080;
+    padding: 1px 6px;
+    letter-spacing: 0.14em;
+}
+
+.crude-noscript {
+    border: 2px solid #a30000;
+    background: #fff0f0;
+    color: #a30000;
+    padding: 10px 12px;
+    margin: 0 0 16px;
+    font-family: var(--us-mono);
+    font-size: 14px;
+}
+
+/* The one concession to the reveal: when the gate is passed, the
+   whole crude document goes to black before the redirect. Phase 3
+   replaces this with a GSAP Flip into the studio. */
+.crude.is-opening {
+    background: #000;
+    transition: background 420ms cubic-bezier(0.7, 0, 0.3, 1);
+}
+.crude.is-opening .crude-wrap {
+    opacity: 0;
+    transition: opacity 300ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .crude-caret { animation: none; opacity: 1; }
+    .crude.is-opening,
+    .crude.is-opening .crude-wrap { transition: none; }
+}
+
+/* ============================================================
+   ACT II — THE STUDIO (Phase 1: the stub hub)
+   ============================================================ */
+.studio {
+    margin: 0;
+    min-height: 100vh;
+    min-height: 100dvh;
+    padding: clamp(28px, 6vw, 72px) clamp(18px, 5vw, 48px) 64px;
+    background: var(--void);
+    color: var(--chalk-dim);
+    font-family: var(--us-display);
+    /* The blue is LIGHT in this room, so it arrives as a soft pool from
+       above rather than a flat tint. Two offset radials read as two
+       fixtures, which is what keeps it from looking like a gradient. */
+    background-image:
+        radial-gradient(120% 62% at 22% -12%, rgba(62, 123, 255, 0.20), transparent 62%),
+        radial-gradient(90% 52% at 88% 6%, rgba(30, 58, 224, 0.14), transparent 66%);
+    background-repeat: no-repeat;
+}
+
+.studio-wrap {
+    max-width: 980px;
+    margin: 0 auto;
+}
+
+/* Lowercase and bracketed, mirroring [solidcore]'s own lockup. */
+.us-mark {
+    font-family: var(--us-display);
+    font-weight: 700;
+    font-size: clamp(2.6rem, 9vw, 4.4rem);
+    letter-spacing: -0.035em;
+    line-height: 1;
+    color: var(--chalk);
+    margin: 0;
+}
+.us-mark-bracket { color: var(--blue-light); }
+
+.studio-kicker {
+    font-family: var(--us-mono);
+    font-size: 0.74rem;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--concrete-4);
+    margin: 0 0 14px;
+}
+
+.studio-lede {
+    font-size: clamp(1.05rem, 2.2vw, 1.3rem);
+    line-height: 1.6;
+    color: var(--chalk-dim);
+    max-width: 46ch;
+    margin: 20px 0 0;
+}
+
+/* Concrete hairline. */
+.studio-rule {
+    border: 0;
+    border-top: 1px solid var(--concrete-1);
+    margin: clamp(30px, 5vw, 54px) 0;
+}
+
+/* Room cards. Matte machine bodies on a black floor. */
+.room-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 14px;
+}
+
+.room {
+    display: block;
+    position: relative;
+    padding: 22px 20px 20px;
+    background: var(--machine);
+    border: 1px solid var(--concrete-1);
+    border-radius: 2px;          /* almost none: this is machined, not soft */
+    color: var(--chalk-dim);
+    text-decoration: none;
+    min-height: 128px;
+    transition: border-color 200ms ease, background 200ms ease, transform 200ms ease;
+}
+.room:hover,
+.room:focus-visible {
+    background: var(--machine-2);
+    border-color: var(--blue-light);
+    transform: translateY(-2px);
+}
+.room:focus-visible {
+    outline: 2px solid var(--blue-light);
+    outline-offset: 2px;
+}
+
+.room-n {
+    font-family: var(--us-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.16em;
+    color: var(--blue-light);
+    text-transform: uppercase;
+}
+.room-title {
+    font-size: 1.28rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--chalk);
+    margin: 10px 0 6px;
+}
+.room-note {
+    font-size: 0.92rem;
+    line-height: 1.5;
+    color: var(--concrete-4);
+    margin: 0;
+}
+
+/* A room that is not built yet. Says so, rather than 404ing. */
+/* No blanket opacity. `opacity: .55` on this card dragged its prose to
+   1.97:1 (.room-soon), 2.28:1 (.room-n) and 2.87:1 (.room-note) — all far
+   under AA. The disabled-control exemption in 1.4.3 does not apply: this is a
+   <div> of text, not an inactive UI component. "Not built yet" is carried by
+   the SOON badge and a muted-but-passing border instead. */
+.room[aria-disabled="true"] {
+    pointer-events: none;
+    border-style: dashed;
+    border-color: var(--concrete-2);
+}
+.room-soon {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    font-family: var(--us-mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--concrete-3);
+    border: 1px solid var(--concrete-2);
+    padding: 2px 6px;
+}
+
+.studio-foot {
+    margin-top: clamp(34px, 6vw, 60px);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 22px;
+    align-items: baseline;
+    justify-content: space-between;
+    font-family: var(--us-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--concrete-3);
+}
+.studio-foot a { color: var(--concrete-4); }
+.studio-foot a:hover { color: var(--blue-light); }
+
+/* Their real tagline, and it happens to be literally true. */
+.studio-tag {
+    font-family: var(--us-display);
+    font-size: clamp(1.5rem, 5vw, 2.4rem);
+    font-weight: 500;
+    letter-spacing: -0.03em;
+    color: var(--chalk);
+    text-transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .room { transition: none; }
+    .room:hover, .room:focus-visible { transform: none; }
+}

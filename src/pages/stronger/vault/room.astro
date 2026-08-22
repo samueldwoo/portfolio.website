@@ -1,0 +1,235 @@
+---
+/**
+ * /stronger/vault/room — Act II, the studio. PHASE 3.
+ *
+ * ---------------------------------------------------------------------------
+ * WHAT THIS PAGE IS
+ *
+ * A black reformer studio under blue light, with a carriage that carries her
+ * down a rail past every photograph of us. The room itself is
+ * src/components/StudioRoom.tsx; this file's whole job is to prove she is
+ * allowed to see it, hand the island a manifest, and ship a version of the room
+ * that works when the island cannot.
+ *
+ * WHAT SHIPS IN THE HTML, AND WHAT DOES NOT
+ *
+ * Captions, month labels and the hidden notes ship in the initial HTML. That is
+ * deliberate: this response is only ever produced after a signed session cookie
+ * has been verified twice (middleware, then again below), and the notes have to
+ * be here for the reveal to be instant and for the static grid to be readable
+ * with zero script. What does NOT ship is a single photographic byte, or the R2
+ * object keys, or anything that would work for a caller without the cookie —
+ * every <img> points at /api/us/photo/[id], which re-authorises from scratch.
+ *
+ * THE STATIC GRID IS THE PAGE. THE 3D ROOM IS THE UPGRADE.
+ *
+ * `.room-fallback` below is rendered on the server and is VISIBLE BY DEFAULT.
+ * StudioRoom.tsx hides it only after the WebGL context, the scene and the HUD
+ * all exist. So no JavaScript, no WebGL, a thrown exception during hydration,
+ * or `prefers-reduced-motion` all leave a complete, keyboard-operable,
+ * screen-reader-legible gallery in place — with the notes reachable through a
+ * plain <details>, in one activation, with no timed hold anywhere.
+ *
+ * That ordering is the reason this page has no loading state and cannot show a
+ * black screen: the pessimistic version is what the server sends.
+ * ---------------------------------------------------------------------------
+ */
+import { HER_NAME, SESSION_SECRET, hasR2 } from '../../../lib/us/config';
+import { readCookie, verify } from '../../../lib/us/session';
+import { CHAPTERS, clientManifest } from '../../../lib/us/photos';
+import StudioRoom from '../../../components/StudioRoom.tsx';
+
+export const prerender = false;
+
+/**
+ * Defence in depth, exactly as in vault/index.astro.
+ *
+ * src/middleware.ts has already verified this cookie or the render never
+ * happened. Re-checking is what makes a future routing mistake there degrade to
+ * "this page refuses" rather than to "the album is public" — and this is the
+ * page with the most to lose from that mistake.
+ */
+const secret = SESSION_SECRET();
+const session = secret ? verify(secret, 'session', readCookie(Astro.cookies, 'session', Astro.url)) : null;
+if (!session) return Astro.redirect('/stronger', 302);
+
+const her = HER_NAME();
+const memories = clientManifest();
+const lines = CHAPTERS.map((c) => ({ line: c.line, label: c.label, blurb: c.blurb }));
+
+/** Chapters, with their memories, for the static grid. Empty chapters are dropped. */
+const chapters = CHAPTERS.map((c) => ({
+    chapter: c,
+    items: memories.filter((m) => m.chapter === c.id),
+})).filter((g) => g.items.length > 0);
+
+/**
+ * Only ever surfaced in development. In production an unconfigured bucket shows
+ * her labelled placeholder cards and says nothing about why — a private page is
+ * not the place to explain my infrastructure.
+ */
+const showPlaceholderNotice = import.meta.env.DEV && !hasR2();
+---
+
+<!DOCTYPE html>
+<html lang="en" class="studio-room-html">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="dark">
+    <meta name="robots" content="noindex, nofollow, noarchive">
+    <meta name="referrer" content="no-referrer">
+    <title>[us] — the studio</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <!-- ABSOLUTE paths. This page is at /stronger/vault/room, so "css/us.css"
+         would resolve to /stronger/vault/css/us.css and 404. -->
+    <link rel="stylesheet" href="/css/us.css">
+    <link rel="stylesheet" href="/css/us-studio.css">
+    <!--
+      The photographic room, preloaded.
+
+      StudioRoom.tsx's ART DIRECTION block chooses this file (BACKDROP_IMAGE), and
+      it is the ROOM — without it the first frame is a black rectangle with
+      thirteen lit panels floating in it, which reads as broken rather than as
+      loading. Preloading it means it is usually decoded before the island has
+      finished evaluating three.js.
+
+      Hardcoded here rather than derived, because <head> is emitted before any
+      island runs and Astro cannot see into the component's constants. If Sam
+      changes BACKDROP_IMAGE, change this href too — the page still works either
+      way, it just loses the head start.
+    -->
+    <link rel="preload" as="image" href="/assets/us/studio-backdrop.webp" type="image/webp" fetchpriority="high">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23000'/%3E%3Ctext x='16' y='23' font-family='monospace' font-size='20' font-weight='700' text-anchor='middle' fill='%233e7bff'%3E%5B%5D%3C/text%3E%3C/svg%3E">
+</head>
+<body class="studio-room">
+
+<!--
+  THE ROOM.
+
+  client:load, not client:visible: the stage IS the top of the page on every
+  viewport, so client:visible's IntersectionObserver would fire immediately
+  anyway and we would have paid for the observer to learn nothing. Same call as
+  index.astro makes for the hero.
+
+  The island renders on the server too, so the canvas and the whole HUD are in
+  this HTML — which is why us-studio.css keeps `.room-stage` display:none until
+  the component has proven WebGL works.
+-->
+<StudioRoom client:load memories={memories} lines={lines} />
+
+<noscript>
+    <div class="room-noscript">
+        <b>The three.js room needs JavaScript.</b> It is not doing anything clever with it —
+        a rail, a carriage and a mirrored floor — but it cannot be drawn without it.
+        Every photograph and every note is below, in full, and always will be.
+    </div>
+</noscript>
+
+{showPlaceholderNotice && (
+    <div class="room-noscript">
+        <b>Dev only:</b> R2 is not configured, so every panel is a generated placeholder card.
+        Set <code>R2_ACCOUNT_ID</code>, <code>R2_ACCESS_KEY_ID</code>,
+        <code>R2_SECRET_ACCESS_KEY</code> and <code>R2_BUCKET</code> to serve real photographs.
+        The room is fully interactive either way.
+    </div>
+)}
+
+<!--
+  THE STATIC GRID.
+
+  Visible until the island says otherwise. `data-room-fallback` is the hook the
+  component looks for — deliberately a data attribute rather than an id, so it
+  reads as a contract between the two files rather than as a coincidence.
+-->
+<main class="room-fallback" data-room-fallback>
+
+    <p class="room-fallback-head">[us] &middot; the studio &middot; every memory, plainly</p>
+    <p class="room-fallback-note">
+        This is the same room without the room, {her} — one card per month since we met,
+        every caption, and every note already open to you. Nothing here is behind a
+        gesture, a hold or a scroll.
+    </p>
+
+    {chapters.map((group) => (
+        <section>
+            <h2 class="room-fallback-chapter">
+                line 0{group.chapter.line} &middot; {group.chapter.label} &middot; {group.chapter.blurb}
+            </h2>
+            <ol class="room-grid">
+                {group.items.map((m) => (
+                    <li class="room-card">
+                        {/*
+                          src is the API route, never an R2 URL: the endpoint
+                          re-verifies the cookie and only then hands over a
+                          short-lived presigned redirect (or, unconfigured, a
+                          generated placeholder card).
+
+                          `loading="lazy"` because thirteen photographs below the
+                          fold is not a first-paint cost worth paying, and
+                          aspect-ratio from the manifest hint reserves the box so
+                          the grid does not reflow as they land.
+
+                          alt is the caption. It is not decorative — it is the
+                          only description of the photograph that exists.
+                        */}
+                        <img
+                            src={m.src}
+                            alt={m.caption}
+                            loading="lazy"
+                            decoding="async"
+                            style={`aspect-ratio: ${m.aspect}`}
+                        />
+                        <div class="room-card-body">
+                            <p class="room-card-month">{m.hidden ? 'still one more' : m.month}</p>
+                            <p class="room-card-caption">{m.caption}</p>
+                            <details class="room-card-note">
+                                <summary>the note</summary>
+                                <p>{m.note}</p>
+                            </details>
+                        </div>
+                    </li>
+                ))}
+            </ol>
+        </section>
+    ))}
+
+    <div class="room-fallback-foot">
+        <span>Stronger for it.</span>
+        <span>
+            <a href="/stronger/vault">back to the vault</a>
+            &nbsp;&middot;&nbsp;
+            <a href="/api/us/out">sign out</a>
+        </span>
+    </div>
+</main>
+
+<!--
+  GSAP, vendored, at the END of the body.
+
+  PLAN.md §4.3 names `scrub: 1` specifically, and the one-second lag between the
+  scrollbar and the carriage IS the machine's spring resistance. StudioRoom.tsx
+  detects `window.gsap` and `window.ScrollTrigger` and falls back to a complete
+  hand-rolled damped scrub if either is absent, so these two tags are an
+  upgrade and not a dependency.
+
+  They are at the end of the body so they do not block first paint, and the
+  component does NOT assume they have run by the time it hydrates. It cannot:
+  an <astro-island> with client:load hydrates from its own connectedCallback
+  while the parser is still working, and the component module is modulepreloaded,
+  so on a warm cache it can evaluate before the parser reaches these two tags.
+  A one-shot `if (window.gsap)` would lose that race silently — the room would
+  take the damped path, look almost right, and nobody would ever discover that
+  the `scrub: 1` the plan specifies was never running. So StudioRoom.tsx starts
+  on the damped scrub and upgrades in place when these fire (see waitForGsap).
+
+  Absolute paths: Base.astro can say src="gsap.min.js" because it renders at the
+  root. This page is three segments deep and a relative src would 404.
+-->
+<script is:inline src="/gsap.min.js"></script>
+<script is:inline src="/ScrollTrigger.min.js"></script>
+
+</body>
+</html>

@@ -10,14 +10,31 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "astro": "astro"
+    "astro": "astro",
+    "gate:hash": "node scripts/gate-hash.mjs",
+    "env:push": "node scripts/env-push.mjs",
+    "typecheck": "astro check",
+    "photos:prep": "node scripts/photos-prep.mjs",
+    "photos:push": "node scripts/photos-prep.mjs --push"
   },
   "dependencies": {
     "@astrojs/react": "^6.0.4",
+    "@astrojs/vercel": "^11.0.7",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "astro": "^7.2.4",
+    "aws4fetch": "^1.0.20",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "three": "^0.185.1"
+  },
+  "overrides": {
+    "path-to-regexp": "^6.3.0"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.10",
+    "@types/node": "^26.2.0",
+    "@types/three": "^0.185.4",
+    "typescript": "^6.0.3"
   }
 }

@@ -1153,7 +1153,15 @@
 }
 @media (max-width: 759.98px) {
     .pass-wall { grid-template-columns: minmax(0, 1fr); }
-    .pass-wall > .pass,
+    /* `auto`, not a span: the template is one column here, and the span rules in
+       the two wider breakpoints must not be able to reach this width and ask the
+       grid for implicit columns it would then have to overflow to satisfy.
+       This rule was previously `.pass-wall > .pass,` with a trailing comma and
+       no body — an invalid selector list, which browsers recover from by
+       skipping to the next `}`. That `}` was this media query's closer, so the
+       block stayed open and absorbed the `.band--dark .pass` hairline-ring rules
+       below, scoping them to mobile only. Verified with lightningcss. */
+    .pass-wall > .pass { grid-column: auto; }
 }
 
 /* On the dark plate the darkest passes (Zipair near-black, the navies) sit
@@ -1247,7 +1255,10 @@
        tiles that are NOT .reveal-managed. */
     .bento-plate,
     .project-card--tall,
-    .project-card--wide,
+    .project-card--wide {
+        opacity: 1 !important;
+        transform: none !important;
+    }
 }
 
 /* High-contrast preference: texture is the first thing to go — every layer

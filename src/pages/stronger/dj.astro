@@ -1,0 +1,481 @@
+---
+/**
+ * /stronger/dj — my side. Paste a link, write a note, post it.
+ *
+ * ---------------------------------------------------------------------------
+ * THIS PAGE GUARDS ITSELF, AND THAT IS THE WHOLE DESIGN
+ *
+ * src/middleware.ts deliberately does NOT list this path as needing the admin
+ * token, and the comment there explains why: this is the admin LOGIN page, and a
+ * login page guarded by the credential it exists to collect is a locked door with
+ * the key inside. So the guard lives here instead, as a single branch:
+ *
+ *   no valid `admin` cookie  ->  render ONLY a passcode form. Nothing else.
+ *   valid `admin` cookie     ->  render the posting UI.
+ *
+ * That is safe because this page holds no secrets of its own. The passcode is
+ * verified by /api/us/admin against a keyed digest, and /api/us/song's POST
+ * independently demands the admin token before it writes anything. The worst case
+ * for a bug in the branch below is that a stranger sees an empty passcode box.
+ *
+ * ---------------------------------------------------------------------------
+ * IT IS BUILT FOR ONE DEVICE: A PHONE, IN THE MORNING, ONE-HANDED
+ *
+ * Everything follows from that. Two visible fields in the common case. A real
+ * <form method="post"> that works with JavaScript switched off, because the
+ * offline-ish moment on a train is exactly when I will want to post. Inputs at
+ * 16px so iOS does not zoom the viewport on focus. Targets past 44px. The
+ * enhancement script exists for one reason that actually matters: if the post
+ * fails, a native form submit has already navigated away and taken the note I
+ * just typed with it, and retyping a paragraph on a phone is the difference
+ * between doing this every day and not.
+ * ---------------------------------------------------------------------------
+ */
+import { ADMIN_PASSCODE_DIGEST, ANSWER_PEPPER, SESSION_SECRET } from '../../lib/us/config';
+import { readCookie, verify } from '../../lib/us/session';
+import { getSong, storeTier, wingDate, wingDateLabel, type SongRecord } from '../../lib/us/kv';
+
+export const prerender = false;
+
+const secret = SESSION_SECRET();
+const admin = secret ? verify(secret, 'admin', readCookie(Astro.cookies, 'admin', Astro.url)) : null;
+
+/**
+ * Whether an admin login can even be evaluated. Checked here as well as in the
+ * endpoint so the page can say "not configured" instead of rendering a form that
+ * is guaranteed to reject a correct passcode.
+ */
+const configured = Boolean(secret && ANSWER_PEPPER() && ADMIN_PASSCODE_DIGEST());
+
+/* Query-string state, set by the 303 redirects in /api/us/admin and
+   /api/us/song. These are the no-JavaScript path's only way to report an
+   outcome, so every code an endpoint can emit needs a sentence here. An
+   unrecognised code still produces a message rather than an empty banner. */
+const errorCode = Astro.url.searchParams.get('e') ?? '';
+const postedDate = Astro.url.searchParams.get('posted') ?? '';
+const retryAfter = Astro.url.searchParams.get('s') ?? '';
+
+const ERRORS: Record<string, string> = {
+  'bad-passcode': 'no. that passcode is not it.',
+  rate: `too many tries. wait ${retryAfter || '600'} seconds.`,
+  unconfigured: 'this is not configured on the server yet. missing env vars.',
+  unauthorized: 'your admin session expired. passcode again.',
+  'bad-request': 'the server could not read that submission.',
+  'bad-url': 'that is not a spotify TRACK link. copy the link from the song itself.',
+  'bad-date': 'that date is not a real date.',
+  'future-date': 'that date is in the future. she would never see it.',
+  store: 'the store refused the write. NOTHING WAS SAVED.',
+};
+const errorText = errorCode ? (ERRORS[errorCode] ?? 'something went wrong.') : '';
+
+const today = wingDate();
+const tier = storeTier();
+
+/**
+ * What is currently filed under the day I am looking at.
+ *
+ * Read from the store rather than echoed back from the redirect, so the preview
+ * is the actual persisted record. A preview built from the form I just submitted
+ * would happily show me a song that never saved, which is the one thing this page
+ * exists to rule out.
+ */
+let current: SongRecord | null = null;
+let storeUnreachable = false;
+if (admin) {
+  try {
+    current = await getSong(postedDate || today);
+  } catch (err) {
+    console.error('[us] dj page could not read the store:', err);
+    storeUnreachable = true;
+  }
+}
+
+/* `||` rather than `??`: postedDate is '' when the parameter is absent, and ''
+   is a perfectly good string that ?? would happily keep. */
+const previewDate = current?.date || postedDate || today;
+---
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="dark">
+    <!-- Belt and braces: the middleware also sends X-Robots-Tag, which covers
+         the redirects and JSON responses that cannot carry a meta tag. -->
+    <meta name="robots" content="noindex, nofollow, noarchive">
+    <meta name="referrer" content="no-referrer">
+    <title>dj</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <!-- Absolute paths: this page is at /stronger/dj, so "css/us.css" would
+         resolve to /stronger/css/us.css and 404. us.css first — it owns every
+         token us-song.css then uses. -->
+    <link rel="stylesheet" href="/css/us.css">
+    <link rel="stylesheet" href="/css/us-song.css">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23000'/%3E%3Ctext x='16' y='23' font-family='monospace' font-size='20' font-weight='700' text-anchor='middle' fill='%233e7bff'%3E%5B%5D%3C/text%3E%3C/svg%3E">
+</head>
+<body class="studio">
+<div class="studio-wrap dj-wrap">
+
+    <p class="studio-kicker">line 01 &middot; the booth</p>
+
+    <h1 class="us-mark">
+        <span class="us-mark-bracket" aria-hidden="true">[</span>dj<span
+              class="us-mark-bracket" aria-hidden="true">]</span>
+    </h1>
+
+    {/* role="status" so the outcome of a no-JavaScript form POST is announced
+        when the page loads, not just seen. Every notice carries a word as well
+        as a colour. */}
+    {errorText && (
+        <p class="notice" data-kind="bad" role="status">no &mdash; {errorText}</p>
+    )}
+
+    {postedDate && !errorText && (
+        <p class="notice" data-kind="ok" role="status">
+            saved &mdash; posted for {wingDateLabel(postedDate, { withYear: true })}.
+        </p>
+    )}
+
+    {/* Not a dev-only diagnostic. A non-durable store is a fact about whether
+        the thing I just posted still exists tomorrow, and I want to be told. */}
+    {admin && tier === 'memory' && (
+        <p class="notice" data-kind="warn">
+            heads up &mdash; the store is IN-PROCESS MEMORY. Nothing posted here
+            survives a server restart, and a second serverless instance cannot see
+            it. Set the <code>R2_*</code> variables (or Upstash) before this counts.
+        </p>
+    )}
+
+    {admin && storeUnreachable && (
+        <p class="notice" data-kind="bad" role="status">
+            no &mdash; could not read the store, so the preview below is missing.
+            Posting may also fail.
+        </p>
+    )}
+
+    {!configured && (
+        <p class="notice" data-kind="bad">
+            no &mdash; not configured. Run <code>npm run gate:hash</code> and give it
+            an admin passcode, then restart the dev server.
+        </p>
+    )}
+
+    {!admin ? (
+        /* ---------------------------------------------------------------
+           LOCKED. One field, and nothing else on the page — no preview, no
+           archive, no hint about what is behind it. There is no JavaScript in
+           this branch at all: a native form POST to /api/us/admin gets a 303
+           back here with the cookie set, which is fewer moving parts than any
+           fetch and works on a phone with a dead connection to everything
+           except my own origin.
+           --------------------------------------------------------------- */
+        <>
+            <p class="studio-lede">
+                Booth's locked. Passcode.
+            </p>
+
+            <form class="dj-form dj-lock" method="post" action="/api/us/admin">
+                <div class="dj-field">
+                    <label class="dj-label" for="passcode">Admin passcode</label>
+                    <input
+                        class="dj-input"
+                        id="passcode"
+                        name="passcode"
+                        type="password"
+                        autocomplete="current-password"
+                        autocapitalize="none"
+                        autocorrect="off"
+                        spellcheck="false"
+                        required
+                        disabled={!configured}
+                    >
+                    <p class="dj-hint">
+                        Compared exactly as typed &mdash; case and punctuation count.
+                    </p>
+                </div>
+                <button class="dj-submit" type="submit" disabled={!configured}>unlock</button>
+            </form>
+        </>
+    ) : (
+        /* ---------------------------------------------------------------
+           UNLOCKED. The posting form, then a preview of what is actually in
+           the store for the day being looked at.
+           --------------------------------------------------------------- */
+        <>
+            <p class="studio-lede">
+                What could you not stop playing this morning?
+            </p>
+
+            <hr class="studio-rule">
+
+            <form class="dj-form" id="post-form" method="post" action="/api/us/song">
+                <div class="dj-field">
+                    <label class="dj-label" for="url">Spotify link</label>
+                    {/* type="text" with inputmode="url", NOT type="url": the
+                        native URL validator rejects `spotify:track:...`, which
+                        the endpoint accepts, so type="url" would block a valid
+                        paste before it ever reached the server. */}
+                    <input
+                        class="dj-input"
+                        id="url"
+                        name="url"
+                        type="text"
+                        inputmode="url"
+                        autocomplete="off"
+                        autocapitalize="none"
+                        autocorrect="off"
+                        spellcheck="false"
+                        placeholder="open.spotify.com/track/..."
+                        aria-describedby="url-hint"
+                        required
+                    >
+                    <p class="dj-hint" id="url-hint">
+                        Share &rarr; Copy link, from the SONG. Album and playlist links
+                        are rejected.
+                    </p>
+                </div>
+
+                <div class="dj-field">
+                    <label class="dj-label" for="note">
+                        The note <span class="dj-opt">&mdash; the actual point</span>
+                    </label>
+                    <textarea
+                        class="dj-textarea"
+                        id="note"
+                        name="note"
+                        rows="5"
+                        maxlength="600"
+                        placeholder="why this one, today."
+                    ></textarea>
+                </div>
+
+                <div class="dj-field">
+                    <label class="dj-label" for="artist">
+                        Artist <span class="dj-opt">&mdash; optional</span>
+                    </label>
+                    <input
+                        class="dj-input"
+                        id="artist"
+                        name="artist"
+                        type="text"
+                        maxlength="120"
+                        autocapitalize="words"
+                        aria-describedby="artist-hint"
+                    >
+                    <p class="dj-hint" id="artist-hint">
+                        Spotify's credential-free metadata endpoint returns the title and
+                        the art but not the artist. Leave it blank and her card just omits
+                        the line.
+                    </p>
+                </div>
+
+                <div class="dj-field">
+                    <label class="dj-label" for="date">
+                        Day <span class="dj-opt">&mdash; optional, for backfilling</span>
+                    </label>
+                    <input
+                        class="dj-input"
+                        id="date"
+                        name="date"
+                        type="date"
+                        max={today}
+                        aria-describedby="date-hint"
+                    >
+                    <p class="dj-hint" id="date-hint">
+                        Blank means today ({wingDateLabel(today)}). The future is rejected
+                        &mdash; she would never see it.
+                    </p>
+                </div>
+
+                <button class="dj-submit" id="post-submit" type="submit">post it</button>
+
+                {/* The enhancement script's channel. Empty and aria-live, so a
+                    result is announced without moving focus. hidden until there
+                    is something to say. */}
+                <p class="notice" id="post-status" role="status" aria-live="polite" hidden></p>
+            </form>
+
+            <hr class="studio-rule">
+
+            <p class="song-eyebrow">
+                in the store for {wingDateLabel(previewDate, { withYear: true })}
+            </p>
+
+            {current ? (
+                /* Deliberately NOT the full card she sees: no player, no
+                   reaction buttons. What I need to confirm is that the right
+                   art, the right title and the right note landed on the right
+                   day — three facts, not a re-render of her page. */
+                <div class="song">
+                    <span class="song-frame">
+                        {current.art ? (
+                            <img
+                                class="song-art"
+                                src={current.art}
+                                alt=""
+                                width="320"
+                                height="320"
+                                loading="lazy"
+                                decoding="async"
+                                referrerpolicy="no-referrer"
+                            >
+                        ) : (
+                            <span class="song-art--empty" aria-hidden="true">[ ]</span>
+                        )}
+                    </span>
+                    <div class="song-body">
+                        <p class="song-day">{wingDateLabel(current.date, { withYear: true })}</p>
+                        {current.title ? (
+                            <h2 class="song-title">{current.title}</h2>
+                        ) : (
+                            <h2 class="song-title song-title--unknown">
+                                (Spotify gave us no title &mdash; her embed will still name it)
+                            </h2>
+                        )}
+                        {current.artist && <p class="song-artist">{current.artist}</p>}
+                        {current.note ? (
+                            <p class="song-note">{current.note}</p>
+                        ) : (
+                            <p class="song-note song-note--empty">No note. Just the song.</p>
+                        )}
+                        <p class="song-links">
+                            <a
+                                href={`https://open.spotify.com/track/${current.id}`}
+                                target="_blank"
+                                rel="noreferrer noopener"
+                            >open in spotify</a>
+                        </p>
+                    </div>
+                </div>
+            ) : (
+                <p class="archive-empty">
+                    {storeUnreachable
+                        ? 'Unknown — the store did not answer.'
+                        : 'Nothing yet. Her page will say so, honestly, rather than showing yesterday.'}
+                </p>
+            )}
+
+            <div class="dj-foot">
+                {/* Reaching her page needs a SESSION token, not this admin one —
+                    today.astro re-checks for `session` specifically, exactly like
+                    the vault hub does. So this link only works once I have also
+                    been through the gate. That is the correct trade: it keeps one
+                    rule ("the vault is hers") instead of two. */}
+                <a href="/stronger/vault/today">her page &rarr; (needs the gate too)</a>
+                <a href="/api/us/out">sign out of everything</a>
+            </div>
+    <script is:inline>
+    /* --------------------------------------------------------------------------
+       Posting, enhanced. Inline and un-bundled to match the gate page: it is a
+       handful of lines and a module graph would be the only modern thing here.
+
+       It lives INSIDE the unlocked branch, so it is never sent to a visitor who
+       has not passed the passcode. That is not about secrecy of the code — there
+       is nothing secret in it — but about not handing an unauthenticated stranger
+       a list of my endpoint names. The wing's stated property is that an
+       unauthorized caller cannot even tell which endpoints exist (middleware.ts
+       is default-deny for exactly that reason), and shipping this script to the
+       locked page would have quietly undone it for the price of 2KB nobody runs.
+
+       The getElementById bail-out below is kept anyway, as the belt to that
+       braces: if this ever gets hoisted out of the branch, it does nothing rather
+       than throwing on a form that is not there.
+
+       The form ALREADY WORKS without this — method="post" action="/api/us/song",
+       303 back to this page. Everything below buys exactly one thing: when a post
+       fails, the note I just typed is still in the textarea. A native submit has
+       navigated away by then and the text is gone, and retyping a paragraph on a
+       phone is the difference between doing this daily and not.
+
+       On success it hands control back to the server (?posted=<date>) rather than
+       patching the preview from the response, so what I look at afterwards is what
+       is actually in the store — not what I hoped I sent.
+       -------------------------------------------------------------------------- */
+    (function () {
+        var form = document.getElementById('post-form');
+        var submit = document.getElementById('post-submit');
+        var status = document.getElementById('post-status');
+        if (!form || !submit || !status) return;
+
+        var MESSAGES = {
+            'bad-url': 'not a spotify TRACK link. copy the link from the song itself.',
+            'bad-date': 'that date is not a real date.',
+            'future-date': 'that date is in the future. she would never see it.',
+            'bad-request': 'the server could not read that.',
+            unauthorized: 'admin session expired. reload and enter the passcode again.',
+            unconfigured: 'not configured on the server.',
+            store: 'the store refused the write. NOTHING WAS SAVED.',
+            rate: 'too many posts too fast. wait a bit.'
+        };
+
+        function say(kind, text) {
+            // The word is part of the message, so this never depends on colour.
+            status.dataset.kind = kind;
+            status.textContent = (kind === 'bad' ? 'no — ' : 'saved — ') + text;
+            status.hidden = false;
+        }
+
+        form.addEventListener('submit', async function (event) {
+            event.preventDefault();
+
+            var body = {
+                url: form.elements.url.value.trim(),
+                note: form.elements.note.value,
+                artist: form.elements.artist.value.trim(),
+                date: form.elements.date.value
+            };
+            if (!body.url) { say('bad', 'paste a link first.'); form.elements.url.focus(); return; }
+
+            submit.disabled = true;
+            submit.textContent = 'posting';
+
+            var res, data;
+            try {
+                res = await fetch('/api/us/song', {
+                    method: 'POST',
+                    // JSON in, JSON out. The endpoint keys its response shape off
+                    // this header, so a form POST still gets its redirect.
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify(body)
+                });
+                data = await res.json();
+            } catch (err) {
+                say('bad', 'the server did not answer. nothing was saved. try again.');
+                return;
+            } finally {
+                submit.disabled = false;
+                submit.textContent = 'post it';
+            }
+
+            if (!res.ok || !data || data.ok !== true) {
+                var code = (data && data.error) || 'no';
+                say('bad', MESSAGES[code] || 'something went wrong. nothing was saved.');
+                return;
+            }
+
+            if (data.degraded) {
+                // Said out loud rather than left as a half-empty card I would
+                // otherwise assume was a bug in my own code.
+                say('ok', 'posted, but Spotify would not give us a title or art. Her embed still names it.');
+            } else {
+                say('ok', 'posted.');
+            }
+
+            // Let the server re-render the preview from the store. The short pause
+            // is so the status line above is actually readable first.
+            setTimeout(function () {
+                window.location.assign('/stronger/dj?posted=' + encodeURIComponent(data.date));
+            }, 650);
+        });
+    })();
+    </script>
+        </>
+    )}
+</div>
+
+</body>
+</html>

@@ -46,8 +46,11 @@ yarn-error.log*
 *.tmp
 *.temp
 
-# PDF files (your resume)
+# PDF files. NOTE: `*.pdf` meant the résumé was never committed, so the
+# "Download Résumé" link on the live site 404s. Anything dropped in public/ IS
+# meant to ship, so that directory is excluded from the rule.
 *.pdf
+!public/*.pdf
 
 # Old backup files
 *-old.*
@@ -57,3 +60,31 @@ yarn-error.log*
 HANDOFF.md
 PERSONAL_SITE_DESIGN_HANDOFF.md
 HANDOFF-ASTRO.md
+PLAN.md
+
+# Secrets. The repo is PUBLIC — nothing in here may ever be committed.
+# Real values live on this machine and in the Vercel project's env vars.
+.env
+.env.*
+!.env.example
+.vercel
+.env*.local
+
+# Art-direction reference images (6MB of AI-generated studio renders). Kept
+# locally for iteration; the site only needs the derived, web-optimised
+# public/assets/us/studio-backdrop.webp, which IS committed.
+solidcore/
+
+# Private photos. The repo is PUBLIC — these must NEVER be committed.
+# photos/in  = originals you drop in from your phone (full EXIF, incl. GPS)
+# photos/out = optimised, EXIF-stripped derivatives that get pushed to R2
+photos/
+
+# Playwright MCP scratch output (screenshots, console logs) from verification runs.
+.playwright-mcp/
+
+__pycache__/
+# Verification screenshots dropped in the repo root by Playwright runs.
+*-1440.png
+gate-act*.jpeg
+studio-room*.jpeg

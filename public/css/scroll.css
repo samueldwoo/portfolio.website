@@ -201,6 +201,7 @@ html.gsap-on .hero-fg .hero-fg-line { stroke-width: calc(1.1px * var(--contour))
    ========================================================================== */
 
 
+/* ==========================================================================
    4. Reduced motion — the safety net
    --------------------------------------------------------------------------
    Belt-and-braces only: gsap-motion.js returns before it adds `html.gsap-on`

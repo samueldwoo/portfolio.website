@@ -21,7 +21,11 @@
     --mut:   #5f6459;   /* darkened from #6b7263 for AA headroom (~5.6:1 on --bg), esp. sub-11px footer */
 
     /* Accent — sage / olive */
-    --sage:      #5f7a4f;   /* links, kickers, active nav, index nums (>=4.5:1 on --bg / white) */
+    /* Darkened from #5f7a4f. The old comment claimed ">=4.5:1 on --bg / white";
+       measured, it was 4.41:1 on --bg and only 4.09:1 on --bg2 — so the claim
+       was wrong on both. #59724a clears 4.5:1 on ALL four surfaces it is used
+       over: --bg 4.92, --bg2 4.56, --panel 5.34, --panel2 4.73. Same hue. */
+    --sage:      #59724a;   /* links, kickers, active nav, index nums */
     --sage-hi:   #7a9862;   /* hover / large decorative only */
     --olive:     #8a9a5b;
     --sage-soft: #e6ebdc;   /* chip / soft fills */
@@ -2167,14 +2171,29 @@ html.motion-on .nav-link.is-active::after { transform: scaleX(0); }
 /* ============================================================
    Reveal-on-scroll
    ============================================================ */
+/* THE BARE `.reveal` IS THE FINISHED STATE. This is deliberate and it is a bug
+   fix: it used to carry `opacity: 0` unconditionally, so visibility arrived only
+   from `.is-visible`, which only script.js can add. If script.js did not run —
+   404, parse error, blocked — nearly every block on all three pages stayed
+   invisible forever, and there is no <noscript> anywhere to catch it. The header
+   of Base.astro records a build that shipped with exactly that 404.
+
+   The from-state now lives behind `html.js-anim` (below), which is set inline in
+   <head> BEFORE first paint, so there is no flash of finished-then-hidden. That
+   head script also removes the class again if script.js has not announced itself
+   within a few seconds, so a missing script degrades to "content visible, no
+   animation" rather than "blank page". Never put opacity:0 back on this rule. */
 .reveal {
-    opacity: 0;
-    transform: translateY(22px);
     transition: opacity .6s ease-out, transform .6s cubic-bezier(.2,.7,.2,1);
     transition-delay: var(--reveal-delay, 0ms);
+}
+html.js-anim .reveal {
+    opacity: 0;
+    transform: translateY(22px);
     will-change: opacity, transform;
 }
 .reveal.is-visible { opacity: 1; transform: none; }
+html.js-anim .reveal.is-visible { opacity: 1; transform: none; }
 
 .reveal-clip { transform: translateY(0); }
 .reveal-clip.is-visible {

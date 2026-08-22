@@ -1,0 +1,119 @@
+---
+/**
+ * /stronger/vault — Act II, the hub. PHASE 1 STUB.
+ *
+ * Reaching this page at all is the Phase 1 acceptance test: src/middleware.ts
+ * has already verified a signed, unexpired `session` cookie, or this render
+ * never happened and she was bounced to the gate instead.
+ *
+ * The re-check below is not redundant defense theatre — it is what makes a
+ * routing mistake in the middleware degrade to "empty page" instead of
+ * "everything is public". If NEEDS_SESSION ever stops matching this path, this
+ * page still refuses to render.
+ *
+ * The rooms are stubs on purpose. Phase 2 fills in `today`, Phase 3 builds
+ * `room`. A disabled card that says SOON is a better artifact than a live link
+ * to a 404.
+ */
+import { HER_NAME, SESSION_SECRET } from '../../../lib/us/config';
+import { readCookie, verify } from '../../../lib/us/session';
+
+export const prerender = false;
+
+const secret = SESSION_SECRET();
+const session = secret ? verify(secret, 'session', readCookie(Astro.cookies, 'session', Astro.url)) : null;
+if (!session) return Astro.redirect('/stronger', 302);
+
+const her = HER_NAME();
+
+const rooms = [
+  {
+    n: 'line 01',
+    title: 'song of the day',
+    note: 'whatever I could not stop playing this morning, and why.',
+    href: '/stronger/vault/today',
+    ready: true,
+  },
+  {
+    n: 'line 02',
+    title: 'the studio',
+    note: 'a dark room, a carriage on a rail, and every photo I have of us on it.',
+    href: '/stronger/vault/room',
+    ready: true,
+  },
+  {
+    n: 'line 03',
+    title: 'monthly focus',
+    note: 'one memory per month since we met. a calendar, but the good kind.',
+    href: '/stronger/vault/calendar',
+    ready: false,
+  },
+];
+---
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="dark">
+    <meta name="robots" content="noindex, nofollow, noarchive">
+    <meta name="referrer" content="no-referrer">
+    <title>[us]</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/us.css">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23000'/%3E%3Ctext x='16' y='23' font-family='monospace' font-size='20' font-weight='700' text-anchor='middle' fill='%233e7bff'%3E%5B%5D%3C/text%3E%3C/svg%3E">
+</head>
+<body class="studio">
+<div class="studio-wrap">
+
+    <p class="studio-kicker">verified &middot; welcome in</p>
+
+    <h1 class="us-mark">
+        <span class="us-mark-bracket" aria-hidden="true">[</span>us<span
+              class="us-mark-bracket" aria-hidden="true">]</span>
+    </h1>
+
+    <p class="studio-lede">
+        You got in, {her}. Obviously you got in.
+        <br>
+        This is the part of the site nobody else has the address to.
+    </p>
+
+    <hr class="studio-rule">
+
+    <p class="studio-kicker">the room, by carriage line</p>
+
+    <div class="room-grid">
+        {rooms.map((room) => (
+            room.ready ? (
+                <a class="room" href={room.href}>
+                    <span class="room-n">{room.n}</span>
+                    <h2 class="room-title">{room.title}</h2>
+                    <p class="room-note">{room.note}</p>
+                </a>
+            ) : (
+                /* A <div> rather than an <a aria-disabled>: a disabled link is
+                   still a link to a keyboard and to most screen readers, and
+                   aria-disabled does not stop activation. No href, no problem. */
+                <div class="room" aria-disabled="true">
+                    <span class="room-soon">soon</span>
+                    <span class="room-n">{room.n}</span>
+                    <h2 class="room-title">{room.title}</h2>
+                    <p class="room-note">{room.note}</p>
+                </div>
+            )
+        ))}
+    </div>
+
+    <hr class="studio-rule">
+
+    <div class="studio-foot">
+        <span class="studio-tag">Stronger for it.</span>
+        <a href="/api/us/out">sign out</a>
+    </div>
+</div>
+</body>
+</html>

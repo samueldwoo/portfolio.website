@@ -13,7 +13,7 @@
  *
  * The right-hand cell genuinely differed between pages, so it's a prop:
  *   index.html      -> "Built with plain HTML, CSS & JS" (plain text)
- *   projects/travel -> "Back home ↗" link to index.html#home
+ *   projects/travel -> "Back home ↗" link to /#home (root-absolute: see Base.astro)
  *
  * The year is hardcoded to 2026 exactly as before; script.js overwrites
  * #year with the live year at runtime.
@@ -30,6 +30,6 @@ const { right } = Astro.props;
     {right === 'built' ? (
         <span>Built with plain HTML, CSS &amp; JS</span>
     ) : (
-        <span><a href="index.html#home" class="foot-link">Back home ↗</a></span>
+        <span><a href="/#home" class="foot-link">Back home ↗</a></span>
     )}
 </footer>

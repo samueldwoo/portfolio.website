@@ -34,7 +34,13 @@
     var hasAnime = typeof window.anime === "function";
     var animate = hasAnime && !reduceMotion;
 
-    if (animate) document.documentElement.classList.add("js-anim");
+    /* "I am running." The inline head script sets html.js-anim before paint and
+       withdraws it after 3s unless it sees this class, so that a script.js which
+       never loads cannot strand every .reveal at opacity 0. Set unconditionally,
+       BEFORE the animate branch: reaching this line means the reveal logic below
+       will run, either as the IntersectionObserver path or as showAll(). */
+    document.documentElement.classList.add("anim-live");
+    if (!animate) document.documentElement.classList.remove("js-anim");
 
     /* ---------- Footer year ---------- */
     var yearEl = document.getElementById("year");
@@ -560,7 +566,14 @@
         // Cross-page section links that live in the bar (sub-pages only).
         navLinks.forEach(function (a) {
             var href = a.getAttribute("href") || "";
-            if (href.indexOf("index.html#") !== 0) return;
+            // "/#" and not "index.html#": these cross-page hrefs became
+            // root-absolute when build.format switched to 'directory' (see the
+            // note in Base.astro). A relative "index.html#work" resolved to
+            // /projects/index.html#work once pages moved into directories, i.e.
+            // the page you were already on. On the home page these links are
+            // bare "#hash" and correctly do not match — this block is
+            // sub-pages only.
+            if (href.indexOf("/#") !== 0) return;
             out.push({ group: "Site", label: textOf(a), meta: "Home page", glyph: "→", href: href });
         });
         slice(document.querySelectorAll("#nav-drawer .drawer-foot a")).forEach(function (a) {

@@ -1,0 +1,862 @@
+/* ============================================================
+   us-studio.css — Act II, the three.js room.
+
+   Loaded ONLY by /stronger/vault/room, on top of /css/us.css,
+   which is where every token used below is defined (--void,
+   --machine, --concrete-*, --chalk, --blue-*, --us-display,
+   --us-mono). This file adds no tokens and overrides none: the
+   wing has one palette and it lives in us.css.
+
+   Paths are ABSOLUTE (/css/us-studio.css) because this page is
+   at /stronger/vault/room — a relative href would resolve to
+   /stronger/vault/css/... and 404. Same reason as us.css.
+
+   ----------------------------------------------------------
+   THE ONE RULE, RESTATED FOR CSS
+
+   The photographs are the only warm thing in the room. There
+   is deliberately NO filter, NO mix-blend-mode, NO opacity and
+   NO gradient overlay anywhere in this file that can land on
+   top of a photograph. The blue haze below is anchored ABOVE
+   the top edge of the viewport and is fully transparent by 40%
+   of the height, and the focused panel is composed into the
+   lower-centre — so the two never meet. There is no CSS
+   vignette either, even though one would look good: darkness
+   in this room belongs to the three.js fog, which is pure
+   black and which the focused panel sits in front of. A CSS
+   vignette would dim the corners of a photograph, and that is
+   a grade.
+   ============================================================ */
+
+/* ---------- the document ------------------------------------ */
+
+.studio-room {
+    margin: 0;
+    background: var(--void);
+    color: var(--chalk-dim);
+    font-family: var(--us-display);
+    /* The carriage IS the scroll. A horizontal overflow would let a
+       phone pan the whole stage sideways and lose the sticky frame. */
+    overflow-x: hidden;
+}
+
+/* No smooth-scroll on the root: scrollToPanel() opts in per call with
+   scrollTo({behavior}), which is the only place it is wanted, and a
+   global smooth scroll makes every drag of the scrollbar feel laggy on
+   top of the carriage's own 1s scrub. */
+.studio-room-html {
+    scroll-behavior: auto;
+    background: var(--void);
+}
+
+/* ---------- the stage --------------------------------------- */
+
+/* HIDDEN BY DEFAULT, and that is the important part.
+   Astro server-renders this island, so the stage and the whole HUD ship in
+   the initial HTML with data-webgl="pending". If it were visible by default,
+   a visitor with JS off or WebGL unavailable would get a full-screen black
+   rectangle sitting above the static grid, with a canvas that never paints.
+   The component flips this to "yes" only once the renderer, the scene and
+   the HUD all exist — so every failure mode lands on the grid instead.
+
+   Height is then written by StudioRoom.tsx in PIXELS, from
+   window.innerHeight x screens. Not set here, and not in vh: on iOS the URL
+   bar collapsing changes vh mid-scroll, which would move the scroll span
+   under her thumb and make the carriage jump. See layout(). */
+.room-stage {
+    display: none;
+}
+
+.room-stage[data-webgl='yes'] {
+    display: block;
+    position: relative;
+    min-height: 100vh;
+}
+
+.room-sticky {
+    position: sticky;
+    top: 0;
+    /* svh, not vh or dvh. `vh` on iOS is the LARGE viewport, so the
+       bottom of the HUD would start life underneath the browser chrome;
+       `dvh` changes as that chrome collapses, which re-lays-out the
+       sticky frame during a scroll. `svh` is the small viewport: always
+       fully visible, and constant. vh first as the fallback for engines
+       without the new units. */
+    height: 100vh;
+    height: 100svh;
+    overflow: hidden;
+    background: var(--void);
+}
+
+/* ---------- the photographic backdrop ----------------------- */
+
+/* BACKDROP === 'image'. The room itself, as a photograph.
+
+   A DOM layer rather than a textured quad in three.js, and every part of
+   that is deliberate:
+     - `background-size: cover` makes correct framing at every aspect
+       ratio the browser's problem, not ours. It crops, and it never
+       stretches, which is the requirement.
+     - the dolly is a `transform`, so it is composited and costs nothing
+       per frame; the canvas above it is untouched.
+     - it holds no GPU texture, on a device already carrying up to five
+       full-resolution photographs.
+
+   Every value here is written by StudioRoom.tsx from the ART DIRECTION
+   block, so this rule has no art direction of its own to drift out of
+   sync — hence the custom properties rather than literals.
+
+   IT IS THE ROOM, SO IT STAYS COLD. No filter, no blend mode, nothing
+   that could warm it up. The photographs above it are the only warm
+   thing on screen and this must not compete. */
+.room-backdrop {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background-color: var(--void);
+    background-image: var(--backdrop-url, none);
+    background-size: cover;
+    background-position: var(--backdrop-focus-x, 62%) var(--backdrop-focus-y, 46%);
+    background-repeat: no-repeat;
+    transform: scale(var(--backdrop-zoom, 1));
+    transform-origin: 50% var(--backdrop-origin-y, 44%);
+    /* Promote once, so the per-frame zoom never triggers a repaint. */
+    will-change: transform;
+    backface-visibility: hidden;
+}
+
+/* The 32x18 stand-in is upscaled ~50x, so smoothing it is the difference
+   between "loading" and "broken". Dropped the moment the real file
+   decodes, because a real photograph must never be blurred. */
+.room-backdrop:not([data-loaded='true']) {
+    filter: blur(18px);
+    transform: scale(calc(var(--backdrop-zoom, 1) * 1.06));
+}
+
+/* ---------- OUR sign, on their wall ------------------------- */
+
+/* Laid exactly over the photograph's own illuminated sign, so the room
+   is branded as ours rather than as theirs. Positioned in PIXELS from
+   StudioRoom.tsx, which reproduces the `cover` crop geometry — a child
+   of this layer is positioned against the DIV, while the sign's
+   coordinates are fractions of the IMAGE, and under `cover` those two
+   differ by a different amount at every aspect ratio.
+
+   A child of .room-backdrop on purpose: it inherits the dolly zoom, so
+   the sign travels with the room instead of floating over it. */
+.room-wordmark {
+    position: absolute;
+    left: var(--sign-left, 50%);
+    top: var(--sign-top, 26%);
+    width: var(--sign-w, 12%);
+    height: var(--sign-h, 5%);
+    display: grid;
+    place-items: center;
+    pointer-events: none;
+}
+
+/* The plate that covers their text. Filled with the wall colour sampled
+   from the photograph itself (#060b2b), and feathered outward with a
+   large soft shadow of the SAME colour so there is no rectangle edge to
+   notice — a hard-edged patch on a photograph reads instantly as a
+   patch. */
+.room-wordmark-plate {
+    position: absolute;
+    inset: 0;
+    background: var(--sign-plate, #060b2b);
+    box-shadow: 0 0 22px 16px var(--sign-plate, #060b2b);
+    border-radius: 2px;
+}
+
+/* Ours. An illuminated box in a dark room, so it glows — that bloom is
+   what makes it sit IN the photograph rather than on top of it. */
+.room-wordmark-text {
+    position: relative;
+    font-family: var(--us-display);
+    font-weight: 700;
+    font-size: var(--sign-size, 1rem);
+    line-height: 1;
+    letter-spacing: -0.03em;
+    color: var(--chalk);
+    text-shadow:
+        0 0 calc(var(--sign-size, 1rem) * 0.22) rgba(255, 255, 255, var(--sign-glow, 0.75)),
+        0 0 calc(var(--sign-size, 1rem) * 0.9) rgba(126, 170, 255, calc(var(--sign-glow, 0.75) * 0.8));
+}
+
+/* ---------- edge scrims ------------------------------------- */
+
+/* Between the backdrop (0) and the canvas (2). That z-index is the
+   whole point: above the canvas these would darken the corner of any
+   photograph that drifted into them, and a memory is never dimmed. A
+   left-wall panel measurably reaches from 3% to 42% across the frame,
+   so the overlap is real, not theoretical.
+
+   They do two jobs: they put near-black behind the chapter rail so it
+   stays legible over a lit photograph, and they remove the other
+   studio's signage — their left-wall vinyl and their right-wall
+   `[solidcore]` both sit inside the outer ~14% of the image, which
+   BACKDROP_FOCUS_X alone cannot bury at every aspect ratio because
+   `cover` crops a different number of pixels at each one. */
+.room-scrim {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    background:
+        linear-gradient(
+            to right,
+            rgba(2, 3, 8, var(--scrim-strength, 0.97)) 0%,
+            rgba(2, 3, 8, calc(var(--scrim-strength, 0.97) * 0.72)) calc(var(--scrim-left, 30%) * 0.45),
+            transparent var(--scrim-left, 30%)
+        ),
+        linear-gradient(
+            to left,
+            rgba(2, 3, 8, var(--scrim-strength, 0.97)) 0%,
+            rgba(2, 3, 8, calc(var(--scrim-strength, 0.97) * 0.7)) calc(var(--scrim-right, 16%) * 0.45),
+            transparent var(--scrim-right, 16%)
+        );
+}
+
+/* THE BLUE LED WASH, in CSS.
+   Two offset pools read as two fixtures rather than as a gradient — same
+   trick as `.studio` in us.css. Both are anchored above the top edge and
+   both are transparent well before mid-height, which is what keeps them
+   off the photographs. `screen` so they add light instead of tinting
+   what is underneath.
+
+   `--haze` is set by StudioRoom.tsx from HAZE_STRENGTH, and is turned
+   well down in image mode: the photograph already carries the LED bloom
+   and doubling it goes muddy. */
+.room-sticky::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    pointer-events: none;
+    opacity: var(--haze, 1);
+    background:
+        radial-gradient(58% 38% at 13% -8%, rgba(62, 123, 255, 0.20), transparent 70%),
+        radial-gradient(50% 32% at 89% -4%, rgba(30, 58, 224, 0.16), transparent 72%);
+    mix-blend-mode: screen;
+}
+
+.room-canvas {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: block;
+    width: 100%;
+    height: 100%;
+    /* A long press on a photo would otherwise raise iOS's image callout
+       and select the surrounding text. touch-action is left alone here
+       and toggled to `none` by the component only for the duration of a
+       hold — scrolling is how the carriage moves, so it cannot be
+       disabled outright. */
+    -webkit-touch-callout: none;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+/* ---------- HUD shell -------------------------------------- */
+
+/* EXPLICIT AREAS, and not `grid-template-rows` with per-child `grid-row`.
+   That is what this was first, and it was quietly broken: assigning three
+   children to `grid-row: 2` makes auto-placement invent a second and third
+   implicit COLUMN for them, after which the top bar occupies only the first
+   of three columns and "exit" lands near the middle of the screen instead
+   of at the right edge. Named areas make the intended geometry the actual
+   geometry, and two items may deliberately share the `mid` cell because
+   `place-self` puts one at its top-left and the other at its bottom-centre. */
+.room-hud {
+    position: absolute;
+    inset: 0;
+    /* Above the backdrop (0), the scrim (1), the canvas (2) and the haze (3). */
+    z-index: 4;
+    /* The room is behind this layer and must stay pressable. Only the
+       real controls opt back in. */
+    pointer-events: none;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+        "top   top"
+        "mid   mid"
+        "plate index";
+    padding: clamp(14px, 3vw, 26px);
+    gap: 12px;
+}
+
+.room-hud a,
+.room-hud button {
+    pointer-events: auto;
+}
+
+/* ---------- top bar ---------------------------------------- */
+
+.room-top {
+    grid-area: top;
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    font-family: var(--us-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--concrete-4);
+}
+
+.room-mark {
+    font-family: var(--us-display);
+    font-size: 1.15rem;
+    font-weight: 700;
+    letter-spacing: -0.035em;
+    text-transform: none;
+    color: var(--chalk);
+}
+.room-mark-bracket { color: var(--blue-light); }
+
+.room-where { flex: 1 1 auto; }
+
+.room-exit {
+    color: var(--concrete-4);
+    text-decoration: none;
+    border-bottom: 1px solid var(--concrete-2);
+    /* 44px of pressable height without 44px of visual weight. */
+    padding: 12px 4px;
+    margin: -12px 0;
+}
+.room-exit:hover,
+.room-exit:focus-visible { color: var(--blue-light); border-bottom-color: var(--blue-light); }
+
+/* ---------- carriage lines 1-4 ----------------------------- */
+
+/* The real machine's numbered rail positions, used as the progress
+   indicator. Vertical on a wide screen (it is a rail); collapsed to
+   numbers only on a phone, where there is no room for four labels and
+   the caption plate matters more. */
+.room-lines {
+    grid-area: mid;
+    /* Top-left of the middle cell. Shares that cell with the hint, which sits
+       at its bottom-centre — deliberate, and they cannot collide. */
+    place-self: start start;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    font-family: var(--us-mono);
+}
+
+.room-line {
+    display: grid;
+    grid-template-columns: auto auto;
+    align-items: baseline;
+    gap: 0 10px;
+    /* Colour is never the only signal: the active line also gains a lit
+       left border and its blurb becomes visible. */
+    color: var(--concrete-3);
+    border-left: 2px solid var(--concrete-1);
+    padding-left: 10px;
+    transition: color 260ms ease, border-color 260ms ease;
+}
+
+.room-line-n {
+    font-size: 0.72rem;
+    letter-spacing: 0.14em;
+}
+.room-line-label {
+    font-size: 0.72rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+.room-line-blurb {
+    grid-column: 1 / -1;
+    font-family: var(--us-display);
+    font-size: 0.78rem;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--concrete-3);
+    max-width: 20ch;
+    opacity: 0;
+    transition: opacity 260ms ease;
+}
+
+.room-line[data-active='true'] {
+    color: var(--chalk);
+    border-left-color: var(--blue-light);
+}
+.room-line[data-active='true'] .room-line-n { color: var(--blue-light); }
+.room-line[data-active='true'] .room-line-blurb { opacity: 1; color: var(--concrete-4); }
+
+/* ---------- the caption plate ------------------------------ */
+
+.room-plate {
+    grid-area: plate;
+    place-self: end start;
+    max-width: min(46ch, 100%);
+    display: grid;
+    gap: 8px;
+}
+
+.room-month {
+    margin: 0;
+    font-family: var(--us-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--blue-light);
+}
+
+.room-caption {
+    margin: 0;
+    font-size: clamp(1.15rem, 3.2vw, 1.75rem);
+    font-weight: 500;
+    line-height: 1.25;
+    letter-spacing: -0.025em;
+    color: var(--chalk);
+    /* The type sits over a black room, but a panel can drift behind it.
+       A text-shadow is not a filter on the photo — it is ink on the
+       glass in front of it — and it is what keeps the caption legible
+       without a scrim that WOULD dim the photograph. */
+    text-shadow: 0 1px 18px rgba(0, 0, 0, 0.9);
+}
+
+/* ---------- TIME UNDER TENSION ---------------------------- */
+
+.room-tension {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 4px 12px;
+    margin-top: 4px;
+    font-family: var(--us-mono);
+    font-size: 0.64rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--concrete-4);
+}
+
+.room-tension-label { grid-column: 1; }
+.room-tension-state {
+    grid-column: 2;
+    color: var(--blue-light);
+    /* Reserve the width of "max tension" so the label arriving does not
+       shove the meter sideways at the exact moment she is watching it. */
+    min-width: 11ch;
+    text-align: right;
+}
+
+.room-tension-track {
+    grid-column: 1 / -1;
+    position: relative;
+    display: block;
+    height: 3px;
+    background: var(--concrete-1);
+    overflow: hidden;
+}
+
+/* scaleX off a unitless custom property, NOT a width in percent.
+   `width` on a 60fps meter is a layout write every frame; a transform is
+   composited. --fill is written by StudioRoom.tsx as a bare 0..1. */
+.room-tension-fill {
+    position: absolute;
+    inset: 0;
+    transform: scaleX(var(--fill, 0));
+    transform-origin: left center;
+    /* WASH -> GLOW as the meter fills, which is the palette's own rule:
+       --blue-light is ambient light, --blue-glow is the hot core of a
+       source. No transition: this is driven per frame. */
+    background: var(--blue-light);
+    box-shadow: 0 0 10px rgba(62, 123, 255, 0.55);
+}
+
+.room-tension[data-max='true'] .room-tension-fill {
+    background: var(--blue-glow);
+    box-shadow: 0 0 26px rgba(127, 178, 255, 0.9);
+}
+.room-tension[data-max='true'] .room-tension-state { color: var(--blue-glow); }
+
+/* Under reduced motion the meter never animates, so presenting it as a
+   thing to watch would be a lie. The reveal button carries the whole
+   interaction instead. */
+.room-tension[data-reduced='true'] { display: none; }
+
+/* The non-timed route to the note. This button is why the hold is
+   allowed to exist: hold-to-reveal as the only path fails WCAG. */
+.room-reveal {
+    justify-self: start;
+    min-height: 44px;
+    padding: 10px 18px;
+    font-family: var(--us-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--chalk);
+    background: var(--machine);
+    border: 1px solid var(--concrete-2);
+    border-radius: 2px;
+    cursor: pointer;
+    transition: border-color 180ms ease, background 180ms ease;
+}
+.room-reveal:hover { background: var(--machine-2); border-color: var(--blue-light); }
+.room-reveal:focus-visible {
+    outline: 2px solid var(--blue-light);
+    outline-offset: 2px;
+}
+
+.room-note {
+    margin: 0;
+    padding: 14px 16px;
+    background: rgba(21, 22, 26, 0.92);
+    border: 1px solid var(--concrete-1);
+    border-left: 2px solid var(--blue-glow);
+    border-radius: 2px;
+    pointer-events: auto;
+}
+.room-note-text {
+    margin: 0;
+    font-size: 0.98rem;
+    line-height: 1.55;
+    color: var(--chalk);
+}
+
+/* ---------- the memory index (and the keyboard route) ------ */
+
+/* Every memory is a real <button> in DOM order, so Tab walks the year.
+   This is the keyboard equivalent of press-and-hold: focus one, hold
+   Enter or Space, watch the meter. It doubles as the monthly-focus
+   calendar. */
+.room-index {
+    grid-area: index;
+    place-self: end end;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
+    max-width: 44ch;
+    pointer-events: auto;
+}
+
+.room-index-item { display: block; }
+
+.room-index-btn {
+    display: grid;
+    gap: 2px;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 6px 8px;
+    font-family: var(--us-mono);
+    color: var(--concrete-4);
+    background: rgba(10, 11, 14, 0.72);
+    border: 1px solid var(--concrete-1);
+    border-radius: 2px;
+    cursor: pointer;
+    /* Holding Enter on this must not also scroll or select. */
+    user-select: none;
+    -webkit-user-select: none;
+    transition: border-color 160ms ease, color 160ms ease, background 160ms ease;
+}
+.room-index-n {
+    font-size: 0.66rem;
+    letter-spacing: 0.1em;
+}
+.room-index-month {
+    font-size: 0.56rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--concrete-3);
+}
+
+.room-index-btn:hover { border-color: var(--concrete-3); color: var(--chalk-dim); }
+.room-index-btn:focus-visible {
+    outline: 2px solid var(--blue-light);
+    outline-offset: 2px;
+}
+.room-index-btn[aria-current='true'] {
+    color: var(--chalk);
+    border-color: var(--blue-light);
+    background: rgba(30, 58, 224, 0.22);
+}
+.room-index-btn[aria-current='true'] .room-index-month { color: var(--blue-glow); }
+
+/* "still one more" — present in the tab order from the start, because
+   hiding a control from the keyboard to preserve a surprise is just
+   hiding content. It simply looks like the machine's extra notch. */
+.room-index-btn[data-hidden='true'] {
+    border-style: dashed;
+    border-color: var(--concrete-2);
+}
+
+/* ---------- hints ----------------------------------------- */
+
+.room-hint,
+.room-more {
+    grid-area: mid;
+    place-self: end center;
+    margin: 0;
+    font-family: var(--us-mono);
+    font-size: 0.66rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--concrete-4);
+}
+.room-hint[hidden],
+.room-more[hidden] { display: none; }
+
+.room-more {
+    color: var(--blue-glow);
+    text-shadow: 0 0 18px rgba(127, 178, 255, 0.6);
+}
+
+/* Off-screen, NOT display:none — a hidden live region does not announce. */
+.room-live {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* ---------- narrow viewports ------------------------------ */
+
+@media (max-width: 760px) {
+    /* Four labelled rail positions do not fit next to a caption on a
+       phone, and the caption is the content. Numbers only. */
+    .room-lines {
+        flex-direction: row;
+        place-self: start start;
+        gap: 6px;
+    }
+    .room-line-label,
+    .room-line-blurb { display: none; }
+    .room-line {
+        border-left: 0;
+        border-bottom: 2px solid var(--concrete-1);
+        padding: 0 6px 5px;
+    }
+    .room-line[data-active='true'] { border-bottom-color: var(--blue-light); }
+
+    .room-index {
+        place-self: end stretch;
+        justify-content: flex-start;
+        max-width: none;
+        /* One swipeable row rather than four wrapped ones, so the plate
+           keeps the space it needs. */
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        overscroll-behavior-x: contain;
+        scrollbar-width: none;
+        padding-bottom: 2px;
+    }
+    .room-index::-webkit-scrollbar { display: none; }
+    .room-index-item { flex: 0 0 auto; }
+
+    /* One column on a phone: the plate needs the full width for the caption,
+       and the index becomes its own swipeable row beneath it. */
+    .room-hud {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: auto minmax(0, 1fr) auto auto;
+        grid-template-areas: "top" "mid" "plate" "index";
+        gap: 10px;
+    }
+}
+
+/* ============================================================
+   THE STATIC FALLBACK
+
+   Rendered by room.astro on the server and visible by DEFAULT.
+   StudioRoom.tsx hides it only after the renderer, the scene and
+   the HUD all exist — so no WebGL, no JS, a thrown exception in
+   the island, or reduced motion all leave this in place. The 3D
+   room is the enhancement; this is the page.
+   ============================================================ */
+
+.room-fallback {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: clamp(26px, 6vw, 64px) clamp(16px, 5vw, 40px) 80px;
+}
+.room-fallback[hidden] { display: none; }
+
+.room-fallback-head {
+    margin: 0 0 6px;
+    font-family: var(--us-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--concrete-4);
+}
+
+.room-fallback-note {
+    margin: 0 0 30px;
+    max-width: 52ch;
+    font-size: 0.95rem;
+    line-height: 1.6;
+    color: var(--concrete-4);
+}
+
+.room-fallback-chapter {
+    margin: 34px 0 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--concrete-1);
+    font-family: var(--us-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--blue-light);
+}
+
+.room-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 16px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.room-card {
+    background: var(--machine);
+    border: 1px solid var(--concrete-1);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+/* No filter, no opacity, no blend mode. The photograph is the only warm
+   thing on this page too.
+
+   `object-fit: contain` is load-bearing and not a default worth
+   inheriting. room.astro sets an inline `aspect-ratio` from the
+   manifest's aspect HINT so the grid reserves its boxes and does not
+   reflow as thirteen lazy images land. But a hint can be wrong — that
+   is why it is a hint — and with the default `object-fit: fill` a wrong
+   hint would STRETCH a photograph to match it. `cover` would crop one
+   instead. `contain` letterboxes against the matte-black card, which is
+   the only one of the three that leaves the image untouched. */
+.room-card img {
+    display: block;
+    width: 100%;
+    height: auto;
+    object-fit: contain;
+    background: var(--machine);
+}
+
+.room-card-body { padding: 12px 14px 14px; }
+
+.room-card-month {
+    margin: 0 0 4px;
+    font-family: var(--us-mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--blue-light);
+}
+.room-card-caption {
+    margin: 0;
+    font-size: 1rem;
+    line-height: 1.35;
+    color: var(--chalk);
+}
+
+/* <details> rather than JS: the note is reachable with zero script, in
+   one activation, with no timing. That is the accessible floor the
+   hold-to-reveal is built on top of. */
+.room-card-note {
+    margin-top: 10px;
+    font-size: 0.9rem;
+    color: var(--concrete-4);
+}
+.room-card-note > summary {
+    cursor: pointer;
+    font-family: var(--us-mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--concrete-4);
+    /* 44px target without 44px of type. */
+    padding: 12px 0;
+    margin: -12px 0 0;
+}
+.room-card-note > summary:focus-visible {
+    outline: 2px solid var(--blue-light);
+    outline-offset: 2px;
+}
+.room-card-note > p {
+    margin: 8px 0 0;
+    line-height: 1.55;
+    color: var(--chalk-dim);
+    border-left: 2px solid var(--blue-glow);
+    padding-left: 10px;
+}
+
+.room-fallback-foot {
+    margin-top: 44px;
+    padding-top: 18px;
+    border-top: 1px solid var(--concrete-1);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 22px;
+    align-items: baseline;
+    justify-content: space-between;
+    font-family: var(--us-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--concrete-3);
+}
+.room-fallback-foot a { color: var(--concrete-4); }
+.room-fallback-foot a:hover { color: var(--blue-light); }
+
+/* The <noscript> banner. Same crude honesty as the gate: say what is
+   missing, then hand over the content anyway. */
+.room-noscript {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 14px 16px;
+    background: var(--machine);
+    border: 1px solid var(--blue-brand);
+    border-left: 3px solid var(--blue-light);
+    font-family: var(--us-mono);
+    font-size: 0.8rem;
+    line-height: 1.6;
+    color: var(--chalk-dim);
+}
+
+/* ============================================================
+   REDUCED MOTION
+
+   The component parks the carriage at max extension and renders a
+   single still frame with no rAF loop. Here: the stage shrinks to
+   one screen (there is nothing to scroll through), and the static
+   grid STAYS VISIBLE below it, because nothing in this room may
+   be reachable only by moving.
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+    .room-stage[data-webgl='yes'] {
+        /* !important because the component writes an inline pixel height, and
+           an inline style beats a stylesheet rule on specificity alone. */
+        height: 62svh !important;
+        min-height: 380px;
+    }
+    .room-sticky {
+        position: relative;
+        height: 62svh;
+        min-height: 380px;
+    }
+    .room-line,
+    .room-line-blurb,
+    .room-reveal,
+    .room-index-btn { transition: none; }
+    /* The index still selects and reveals; it just does not scroll
+       anywhere, because there is nowhere to scroll. */
+    .room-hint { display: none; }
+}

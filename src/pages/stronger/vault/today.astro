@@ -1,0 +1,539 @@
+---
+/**
+ * /stronger/vault/today — line 01. Her page.
+ *
+ * ---------------------------------------------------------------------------
+ * THE SESSION IS RE-VERIFIED HERE, AND THAT IS NOT THEATRE
+ *
+ * src/middleware.ts has already checked a signed, unexpired token for anything
+ * under /stronger/vault, or this render never happened. The check below is what
+ * makes a routing mistake up there degrade to "she gets sent to the gate" instead
+ * of "the internet gets her songs". If NEEDS_SESSION ever stops matching this
+ * path, this page still refuses to render. Copied verbatim from the vault hub so
+ * there is one pattern to audit rather than two.
+ *
+ * `session` specifically, NOT `session ?? admin`. My admin token cannot open this
+ * page, which is a deliberate and slightly inconvenient choice: the vault is hers,
+ * that is one rule, and one rule is worth more than the convenience of previewing
+ * her page without answering the questions. /stronger/dj renders its own preview
+ * of the card for exactly this reason.
+ *
+ * ---------------------------------------------------------------------------
+ * IT READS THE STORE DIRECTLY, NOT ITS OWN API
+ *
+ * This page is server-rendered, so calling /api/us/song from here would mean the
+ * server making an HTTP request to itself, forwarding her cookie, and paying a
+ * round trip to reach a module it can just import. /api/us/song exists for the
+ * client (see the rollover probe at the bottom); the page uses the store.
+ *
+ * ---------------------------------------------------------------------------
+ * IT WORKS WITH JAVASCRIPT OFF
+ *
+ * Every reaction is a real <form method="post"> that 303s back here and
+ * re-renders from the store. The script at the bottom upgrades those to fetches
+ * so the page does not jump, and that is ALL it does. A press-and-hold or a
+ * click-handler-on-a-div would have made the only path to reacting a scripted
+ * one; this way the enhancement is genuinely optional.
+ *
+ * ---------------------------------------------------------------------------
+ * THE ONE RULE
+ *
+ * The album art is the only warm, saturated thing on this page. No filter, no
+ * tint, no blend mode, no overlay — not on the art, and not on Spotify's embed
+ * either. The blue is light in the room around them. See the header of
+ * public/css/us-song.css.
+ * ---------------------------------------------------------------------------
+ */
+import { HER_NAME, SESSION_SECRET } from '../../../lib/us/config';
+import { readCookie, verify } from '../../../lib/us/session';
+import {
+  REACTIONS,
+  WING_TZ,
+  getReactions,
+  getSongs,
+  storeTier,
+  wingDate,
+  wingDateLabel,
+  type SongRecord,
+} from '../../../lib/us/kv';
+
+export const prerender = false;
+
+const secret = SESSION_SECRET();
+const session = secret ? verify(secret, 'session', readCookie(Astro.cookies, 'session', Astro.url)) : null;
+if (!session) return Astro.redirect('/stronger', 302);
+
+const her = HER_NAME();
+const today = wingDate();
+
+/** How far back the archive goes. Matches ARCHIVE_LIMIT in /api/us/song. */
+const ARCHIVE_LIMIT = 60;
+
+/**
+ * Everything, in one read, then split.
+ *
+ * `today` is whatever is filed under today's date — never "the most recent
+ * song". Promoting yesterday's card to today would be a small lie that makes the
+ * whole feature untrustworthy: she would have no way to tell a morning I posted
+ * from a morning I forgot, and the honest empty state is a better artifact than a
+ * quietly stale one.
+ */
+let songs: SongRecord[] = [];
+let reactions: Record<string, string[]> = {};
+let storeUnreachable = false;
+try {
+  songs = await getSongs(ARCHIVE_LIMIT);
+  reactions = await getReactions(songs.map((s) => s.date));
+} catch (err) {
+  console.error('[us] today page could not read the store:', err);
+  storeUnreachable = true;
+}
+
+const current = songs.find((s) => s.date === today) ?? null;
+const archive = songs.filter((s) => s.date !== today);
+const currentReactions = new Set(reactions[today] ?? []);
+
+/* Outcomes from the no-JavaScript reaction path, which arrives back here as a
+   303 with ?e=<code>. Written in her language, not in HTTP: she does not need to
+   know what a 502 is, only that it was not her fault and it is worth another tap. */
+const errorCode = Astro.url.searchParams.get('e') ?? '';
+const ERRORS: Record<string, string> = {
+  store: "that didn't save — not your fault. try tapping it again?",
+  rate: 'okay, easy on the buttons. give it a minute.',
+  unauthorized: 'your session ran out. answer the questions again and you are back in.',
+  unconfigured: 'something is unplugged on my end. not your fault.',
+};
+const errorText = errorCode ? (ERRORS[errorCode] ?? "that didn't go through. try again?") : '';
+
+/** e.g. `7:42 am`. Only shown when we actually recorded a time. */
+function postedAtLabel(ms: number): string {
+  if (!ms) return '';
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: WING_TZ,
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+    .format(new Date(ms))
+    .toLowerCase();
+}
+
+/** Reaction glyphs for an archive row, plus the words for a screen reader. */
+function reactionGlyphs(date: string): { glyphs: string; words: string } {
+  const chosen = REACTIONS.filter((r) => (reactions[date] ?? []).includes(r.key));
+  return {
+    glyphs: chosen.map((r) => r.emoji).join(' '),
+    words: chosen.map((r) => r.label).join(', '),
+  };
+}
+---
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="dark">
+    <!-- Belt and braces: the middleware also sends X-Robots-Tag, which covers
+         the redirects and JSON responses that cannot carry a meta tag. -->
+    <meta name="robots" content="noindex, nofollow, noarchive">
+    <meta name="referrer" content="no-referrer">
+    <title>[us]</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <!-- Absolute paths: this page is at /stronger/vault/today, so a relative
+         href would resolve to /stronger/vault/css/... and 404. us.css first —
+         it owns every token us-song.css uses. -->
+    <link rel="stylesheet" href="/css/us.css">
+    <link rel="stylesheet" href="/css/us-song.css">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23000'/%3E%3Ctext x='16' y='23' font-family='monospace' font-size='20' font-weight='700' text-anchor='middle' fill='%233e7bff'%3E%5B%5D%3C/text%3E%3C/svg%3E">
+</head>
+<body class="studio">
+<div class="studio-wrap">
+
+    <p class="studio-kicker">line 01 &middot; song of the day</p>
+
+    <h1 class="us-mark">
+        <span class="us-mark-bracket" aria-hidden="true">[</span>today<span
+              class="us-mark-bracket" aria-hidden="true">]</span>
+    </h1>
+
+    {errorText && (
+        <p class="notice" data-kind="bad" role="status">hm &mdash; {errorText}</p>
+    )}
+
+    {storeUnreachable && (
+        <p class="notice" data-kind="bad" role="status">
+            hm &mdash; I cannot reach the shelf where these live. Nothing is lost,
+            it just is not answering right now. Try again in a minute.
+        </p>
+    )}
+
+    {/* Dev only. She should never be shown a sentence about serverless
+        instances; on my own page (/stronger/dj) the same warning is permanent,
+        because there it is actionable. */}
+    {import.meta.env.DEV && storeTier() === 'memory' && (
+        <p class="notice" data-kind="warn">
+            dev &mdash; in-process store. Non-durable, per-instance.
+        </p>
+    )}
+
+    {current ? (
+        <>
+            <div class="song">
+                <span class="song-frame">
+                    {current.art ? (
+                        /* alt="" on purpose: the title and artist are right
+                           there as real text, so alt text would make a screen
+                           reader say the same thing twice. This is a decorative
+                           duplicate of adjacent content, which is exactly the
+                           case empty alt exists for.
+
+                           referrerpolicy="no-referrer" matches the wing's
+                           Referrer-Policy header — Spotify's CDN has no business
+                           learning the URL she is reading this on. */
+                        <img
+                            class="song-art"
+                            src={current.art}
+                            alt=""
+                            width="320"
+                            height="320"
+                            decoding="async"
+                            referrerpolicy="no-referrer"
+                        >
+                    ) : (
+                        <span class="song-art--empty" aria-hidden="true">[ ]</span>
+                    )}
+                </span>
+
+                <div class="song-body">
+                    <p class="song-day">
+                        {wingDateLabel(current.date)}
+                        {postedAtLabel(current.postedAt) && (
+                            <> &middot; posted {postedAtLabel(current.postedAt)}</>
+                        )}
+                    </p>
+
+                    {current.title ? (
+                        <h2 class="song-title">{current.title}</h2>
+                    ) : (
+                        /* Spotify's metadata call failed. The embed below still
+                           knows what the track is, so this says so plainly
+                           rather than rendering an empty heading. */
+                        <h2 class="song-title song-title--unknown">a song I could not name</h2>
+                    )}
+
+                    {current.artist && <p class="song-artist">{current.artist}</p>}
+
+                    {current.note ? (
+                        <p class="song-note">{current.note}</p>
+                    ) : (
+                        <p class="song-note song-note--empty">No note today. Just the song.</p>
+                    )}
+
+                    {/* The official embed. `current.id` has been through
+                        /^[A-Za-z0-9]{22}$/ twice — once when it was pasted, once
+                        when it was read back out of the store — before it gets
+                        near this src, which is the only reason interpolating it
+                        here is safe.
+
+                        `allow` deliberately omits autoplay: music starting by
+                        itself on a page she opened in bed is hostile, and the
+                        play button is right there.
+
+                        No `frameborder` attribute: it is deprecated HTML and
+                        `astro check` flags it. The border is removed in
+                        us-song.css instead (`.song-player iframe { border: 0 }`),
+                        which is where presentation belongs anyway. */}
+                    <div class="song-player">
+                        <iframe
+                            src={`https://open.spotify.com/embed/track/${current.id}`}
+                            title={current.title ? `Spotify player: ${current.title}` : 'Spotify player'}
+                            width="100%"
+                            height="152"
+                            loading="lazy"
+                            allow="encrypted-media; clipboard-write; fullscreen; picture-in-picture"
+                            referrerpolicy="no-referrer"
+                        ></iframe>
+                    </div>
+
+                    <p class="song-links">
+                        <a
+                            href={`https://open.spotify.com/track/${current.id}`}
+                            target="_blank"
+                            rel="noreferrer noopener"
+                        >open in spotify &nearr;</a>
+                    </p>
+                </div>
+            </div>
+
+            {/* --------------------------------------------------------------
+                REACTIONS
+
+                Five sibling forms, one button each. Not one form with five
+                buttons: which button submitted a multi-button form depends on
+                name/value pairs that a keyboard Enter resolves differently
+                across engines, and that is not a thing worth being clever about.
+
+                The hidden `on` field carries the OPPOSITE of the current state,
+                so a submit is always a toggle and the server is told the desired
+                end state rather than an action. That is what makes the endpoint
+                idempotent: a double-tap, a retry and a resubmitted form all land
+                on the same value.
+                -------------------------------------------------------------- */}
+            <fieldset class="react-bar">
+                <legend class="react-legend">did you hear it?</legend>
+                <div class="react-row">
+                    {REACTIONS.map((r) => {
+                        const chosen = currentReactions.has(r.key);
+                        return (
+                            <form class="react-form" method="post" action="/api/us/react">
+                                <input type="hidden" name="date" value={current.date}>
+                                <input type="hidden" name="reaction" value={r.key}>
+                                <input type="hidden" name="on" value={chosen ? '0' : '1'}>
+                                <button class="react" type="submit" aria-pressed={chosen ? 'true' : 'false'}>
+                                    <span class="react-emoji" aria-hidden="true">{r.emoji}</span>
+                                    <span class="react-label">{r.label}</span>
+                                </button>
+                            </form>
+                        );
+                    })}
+                </div>
+            </fieldset>
+
+            {/* Where the script announces the result of a tap. Visually hidden
+                because the button's own pressed state is the visible feedback;
+                this exists so that state change is also SPOKEN. */}
+            <p class="sr-only" id="react-status" role="status" aria-live="polite"></p>
+        </>
+    ) : (
+        <div class="song-blank">
+            <p>
+                <strong>Nothing yet today.</strong>
+                {storeUnreachable
+                    ? 'Or there is, and I cannot see it from here. Either way, check back.'
+                    : `Which means I have not picked one yet, ${her}. Not that there isn't one. Check back later.`}
+            </p>
+        </div>
+    )}
+
+    <hr class="studio-rule">
+
+    <p class="song-eyebrow">every morning before this one</p>
+
+    {archive.length > 0 ? (
+        <ul class="archive">
+            {archive.map((s) => {
+                const { glyphs, words } = reactionGlyphs(s.date);
+                const label = [
+                    wingDateLabel(s.date, { withYear: true }),
+                    s.title || 'a song I could not name',
+                    words ? `you said: ${words}` : '',
+                    'opens in Spotify',
+                ]
+                    .filter(Boolean)
+                    .join('. ');
+                return (
+                    <li>
+                        <a
+                            class="archive-item"
+                            href={`https://open.spotify.com/track/${s.id}`}
+                            target="_blank"
+                            rel="noreferrer noopener"
+                            aria-label={label}
+                        >
+                            {s.art ? (
+                                <img
+                                    class="archive-thumb"
+                                    src={s.art}
+                                    alt=""
+                                    width="56"
+                                    height="56"
+                                    loading="lazy"
+                                    decoding="async"
+                                    referrerpolicy="no-referrer"
+                                >
+                            ) : (
+                                <span class="archive-thumb--empty" aria-hidden="true">[ ]</span>
+                            )}
+                            <span class="archive-body">
+                                <span class="archive-day">{wingDateLabel(s.date, { withYear: true })}</span>
+                                <span class="archive-title">{s.title || 'a song I could not name'}</span>
+                                {s.note && <span class="archive-note">{s.note}</span>}
+                                {/* aria-hidden: the same information is already
+                                    in the row's aria-label, as words. */}
+                                {glyphs && <span class="archive-reacts" aria-hidden="true">{glyphs}</span>}
+                            </span>
+                        </a>
+                    </li>
+                );
+            })}
+        </ul>
+    ) : (
+        <p class="archive-empty">
+            {storeUnreachable
+                ? 'The shelf is not answering. Nothing is lost.'
+                : 'Nothing here yet. This is day one.'}
+        </p>
+    )}
+
+    <hr class="studio-rule">
+
+    <div class="studio-foot">
+        <span class="studio-tag">Stronger for it.</span>
+        <a href="/stronger/vault">&larr; back to the room</a>
+    </div>
+</div>
+
+<script is:inline define:vars={{ renderedDate: today, wingTz: WING_TZ }}>
+/* --------------------------------------------------------------------------
+   Two jobs, and deliberately no more.
+
+   Rendered unconditionally rather than wrapped in a template expression: a
+   <script> inside `{...}` asks the Astro compiler to read JavaScript braces as
+   template braces, and the failure mode is a build error in a file that reads
+   as correct. Each block below bails out on its own if its markup is absent.
+
+   1. REACTIONS WITHOUT A PAGE JUMP. The forms already work without this — 303,
+      re-render, done. This only removes the navigation.
+
+   2. THE DAY ROLLOVER. Her phone will keep this tab alive for a week. Without
+      this, coming back to it on Tuesday shows Monday's song with no hint that it
+      is stale.
+   -------------------------------------------------------------------------- */
+(function () {
+    var status = document.getElementById('react-status');
+
+    /* ---- 1. reactions ------------------------------------------------- */
+    var forms = Array.prototype.slice.call(document.querySelectorAll('.react-form'));
+
+    /**
+     * One request at a time, globally.
+     *
+     * Not politeness — correctness. On the R2 storage tier every reaction is a
+     * read-modify-write of one JSON object, so two overlapping taps can have the
+     * second read land before the first write and silently discard it.
+     * Serializing here does not fix that race (only the store could) but it
+     * removes the one way this UI could reliably cause it: an impatient thumb.
+     */
+    var busy = false;
+
+    /** Repaint ALL five buttons from the server's answer, not from what we
+     *  assumed would happen. One source of truth, even for optimism. */
+    function paint(list) {
+        var on = {};
+        for (var i = 0; i < list.length; i++) on[list[i]] = true;
+        forms.forEach(function (form) {
+            var key = form.elements.reaction.value;
+            var button = form.querySelector('.react');
+            var isOn = !!on[key];
+            button.setAttribute('aria-pressed', isOn ? 'true' : 'false');
+            // The hidden field always carries the OPPOSITE, so the no-JS path
+            // stays correct if she reloads after tapping.
+            form.elements.on.value = isOn ? '0' : '1';
+        });
+    }
+
+    function say(text) {
+        if (status) status.textContent = text;
+    }
+
+    forms.forEach(function (form) {
+        form.addEventListener('submit', async function (event) {
+            event.preventDefault();
+            if (busy) return;
+
+            var button = form.querySelector('.react');
+            var key = form.elements.reaction.value;
+            var label = (form.querySelector('.react-label') || {}).textContent || key;
+            var want = form.elements.on.value === '1';
+
+            busy = true;
+            button.dataset.busy = '';
+
+            var res, data;
+            try {
+                res = await fetch('/api/us/react', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({
+                        date: form.elements.date.value,
+                        reaction: key,
+                        on: want
+                    })
+                });
+                data = await res.json();
+            } catch (err) {
+                say('that did not save. try again?');
+                return;
+            } finally {
+                busy = false;
+                delete button.dataset.busy;
+            }
+
+            if (!res.ok || !data || data.ok !== true) {
+                say('that did not save. not your fault.');
+                return;
+            }
+
+            paint(data.reactions || []);
+            say(label + (want ? ': yes' : ': taken back'));
+        });
+    });
+
+    /* ---- 2. the day rollover ------------------------------------------ */
+
+    /** The same calendar rule the server used, so the two cannot disagree. */
+    function clientWingDate() {
+        try {
+            return new Intl.DateTimeFormat('en-CA', {
+                timeZone: wingTz,
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit'
+            }).format(new Date());
+        } catch (err) {
+            // An engine without that timezone would report a wrong date, and a
+            // wrong date here means a spurious reload loop. Better to do nothing.
+            return renderedDate;
+        }
+    }
+
+    var checking = false;
+
+    async function checkForNewDay() {
+        if (document.hidden || checking) return;
+        if (clientWingDate() === renderedDate) return;
+
+        /* The day has changed. Ask the server what is on the shelf now — and
+           note that we RELOAD rather than patch the card in place. Patching
+           would mean a second renderer in JavaScript (art vs placeholder,
+           title vs the unnamed fallback, the embed, the reaction states) that
+           can disagree with the Astro one, and a card that disagrees with the
+           server is worse than a flash of white. The probe is only here so a
+           day with nothing posted yet does not reload her page for nothing. */
+        checking = true;
+        try {
+            var res = await fetch('/api/us/song', {
+                headers: { Accept: 'application/json' },
+                credentials: 'same-origin'
+            });
+            if (!res.ok) return;
+            var data = await res.json();
+            if (data && data.ok && data.today && data.today.date !== renderedDate) {
+                window.location.reload();
+            }
+        } catch (err) {
+            /* Offline, or the store is down. Leave her page exactly as it is. */
+        } finally {
+            checking = false;
+        }
+    }
+
+    document.addEventListener('visibilitychange', checkForNewDay);
+    window.addEventListener('focus', checkForNewDay);
+})();
+</script>
+</body>
+</html>

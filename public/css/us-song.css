@@ -1,0 +1,738 @@
+/* ============================================================
+   us-song.css — Act II, line 01: song of the day.
+
+   Loaded ONLY by /stronger/vault/today and /stronger/dj, and
+   always AFTER /css/us.css, which owns every token used here
+   (--void, --machine, --concrete-*, --chalk, --blue-*,
+   --us-display, --us-mono). This file defines no tokens of its
+   own: a second source of truth for the palette is how the
+   private wing ends up with two slightly different blues.
+
+   Paths are ABSOLUTE (/css/us-song.css) wherever it is linked,
+   because these pages live at /stronger/... rather than at the
+   root, so a relative href would resolve to
+   /stronger/vault/css/us-song.css and 404. That has already
+   bitten this repo once; see the note at the top of us.css.
+
+   ------------------------------------------------------------
+   THE ONE RULE, RESTATED BECAUSE THIS IS THE FILE THAT WOULD
+   BREAK IT
+
+   The album art is the only warm, saturated thing on the
+   screen. Everything architectural is black, concrete and blue.
+   There is not a single `filter`, `mix-blend-mode`, `opacity`
+   or overlay on .song-art or .archive-thumb anywhere below, and
+   there must never be one. The blue is LIGHT in this room — it
+   arrives as rim, wash and glow AROUND objects. The moment it
+   is painted ON the art, the room stops being a room and
+   becomes a colour scheme, and the whole thesis of the wing
+   (a cold blue box, warm things inside it) is gone.
+
+   The Spotify embed is treated the same way. It is Spotify's
+   own chrome, green and all, and it is framed rather than
+   restyled. Trying to blue-wash a third-party iframe is both
+   impossible and the wrong instinct.
+   ============================================================ */
+
+/* ============================================================
+   SHARED PIECES
+
+   Both pages render the same card: hers to read, mine to check
+   what I just posted. One implementation, so a change to the
+   card cannot make the preview lie.
+   ============================================================ */
+
+/* Section label. Mono, uppercase, letterspaced — the same
+   vocabulary as .studio-kicker in us.css, reused rather than
+   redefined where possible. */
+.song-eyebrow {
+    font-family: var(--us-mono);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--concrete-4);
+    margin: 0 0 12px;
+}
+
+/* ---------- the card --------------------------------------- */
+
+.song {
+    position: relative;
+    display: grid;
+    /* Art column sized in ch-free absolute terms so it stays
+       square and predictable next to fluid text. */
+    grid-template-columns: minmax(0, 168px) minmax(0, 1fr);
+    gap: clamp(16px, 3vw, 26px);
+    align-items: start;
+    padding: clamp(16px, 3vw, 24px);
+    background: var(--machine);
+    border: 1px solid var(--concrete-1);
+    border-radius: 2px;
+    /* The rim light. A 1px inset highlight along the top edge is
+       what a fixture overhead actually does to a matte black
+       surface, and it costs nothing. Not a border: a border on
+       one side would shift the box. */
+    box-shadow: inset 0 1px 0 rgba(62, 123, 255, 0.28);
+}
+
+/* One column on a phone. The art leads, because the art is the
+   thing that has colour in it. */
+@media (max-width: 620px) {
+    .song {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+/* The wash behind the art: a soft pool of blue on the wall the
+   record is leaning against. Sits BEHIND (z-index 0 vs the
+   art's 1) and is clipped to the frame, so it never touches the
+   image itself. */
+.song-frame {
+    position: relative;
+    display: block;
+    /* Own stacking context so the wash cannot escape upwards. */
+    isolation: isolate;
+}
+
+.song-frame::before {
+    content: "";
+    position: absolute;
+    inset: -14px -14px 6px -14px;
+    background: radial-gradient(70% 60% at 50% 0%, rgba(62, 123, 255, 0.22), transparent 70%);
+    z-index: 0;
+    pointer-events: none;
+}
+
+/* NO FILTER. NO OPACITY. NO BLEND MODE. See the header. */
+.song-art {
+    position: relative;
+    z-index: 1;
+    display: block;
+    width: 100%;
+    max-width: 320px;
+    aspect-ratio: 1 / 1;
+    object-fit: cover;
+    background: var(--void);
+    border: 1px solid var(--concrete-2);
+    border-radius: 2px;
+}
+
+/* When Spotify gave us no art. A concrete plate with the
+   bracketed wordmark in it, so the layout does not collapse and
+   the card still looks deliberate. */
+.song-art--empty {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    place-items: center;
+    width: 100%;
+    max-width: 320px;
+    aspect-ratio: 1 / 1;
+    background: var(--concrete-1);
+    border: 1px solid var(--concrete-2);
+    border-radius: 2px;
+    font-family: var(--us-display);
+    font-size: 2rem;
+    font-weight: 700;
+    letter-spacing: -0.04em;
+    color: var(--concrete-3);
+}
+
+.song-body {
+    min-width: 0; /* lets long titles wrap instead of blowing out the grid */
+}
+
+.song-day {
+    font-family: var(--us-mono);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--blue-light);
+    margin: 0 0 8px;
+}
+
+.song-title {
+    font-family: var(--us-display);
+    font-size: clamp(1.4rem, 4.4vw, 2rem);
+    font-weight: 600;
+    letter-spacing: -0.03em;
+    line-height: 1.15;
+    color: var(--chalk);
+    margin: 0;
+    /* Long track names ("... - 2011 Remaster") must wrap, not
+       overflow into the art column. */
+    overflow-wrap: anywhere;
+}
+
+.song-artist {
+    font-family: var(--us-display);
+    font-size: 1rem;
+    font-weight: 400;
+    color: var(--concrete-5);
+    margin: 6px 0 0;
+}
+
+/* An unnamed track: the embed below still knows what it is, so
+   this says so rather than showing a blank line. */
+.song-title--unknown {
+    color: var(--concrete-4);
+    font-style: italic;
+}
+
+/* ---------- the note ---------------------------------------
+   The actual point of the whole feature, so it is typeset like
+   prose rather than like metadata: display face, generous
+   measure, and a blue hairline down the left that reads as a
+   strip of light rather than as a decorative accent bar. */
+.song-note {
+    position: relative;
+    margin: clamp(16px, 3vw, 22px) 0 0;
+    padding: 2px 0 2px 16px;
+    border-left: 1px solid var(--blue-light);
+    font-family: var(--us-display);
+    font-size: clamp(1rem, 2.4vw, 1.15rem);
+    line-height: 1.6;
+    color: var(--chalk-dim);
+    max-width: 52ch;
+    /* Newlines I typed on my phone are meaningful. */
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.song-note--empty {
+    border-left-color: var(--concrete-2);
+    color: var(--concrete-3);
+    font-style: italic;
+    white-space: normal;
+}
+
+/* ---------- the player -------------------------------------
+   Spotify's own iframe in a machined frame. 152px is Spotify's
+   compact height; the tall variant wastes a third of a phone
+   screen on a track list of one.
+
+   loading="lazy" is set in the markup, not here — the archive
+   deliberately renders no iframes at all, because sixty
+   embedded players is a page that never finishes loading. */
+.song-player {
+    margin: clamp(18px, 3.5vw, 26px) 0 0;
+    background: var(--void);
+    border: 1px solid var(--concrete-1);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.song-player iframe {
+    display: block;
+    width: 100%;
+    height: 152px;
+    border: 0;
+}
+
+/* Fallback when there is no embed to show, and the "open in
+   Spotify" escape hatch under the player. */
+.song-links {
+    margin: 12px 0 0;
+    font-family: var(--us-mono);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.13em;
+}
+
+.song-links a {
+    color: var(--concrete-4);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+.song-links a:hover { color: var(--blue-light); }
+.song-links a:focus-visible {
+    outline: 2px solid var(--blue-light);
+    outline-offset: 3px;
+}
+
+/* ---------- nothing posted yet ------------------------------ */
+.song-blank {
+    padding: clamp(26px, 6vw, 44px) clamp(18px, 4vw, 28px);
+    background: var(--machine);
+    border: 1px dashed var(--concrete-2);
+    border-radius: 2px;
+    text-align: left;
+}
+
+.song-blank p {
+    margin: 0;
+    font-size: 1.05rem;
+    line-height: 1.6;
+    color: var(--concrete-4);
+    max-width: 44ch;
+}
+
+.song-blank strong {
+    display: block;
+    font-family: var(--us-display);
+    font-size: clamp(1.3rem, 4vw, 1.7rem);
+    font-weight: 600;
+    letter-spacing: -0.03em;
+    color: var(--chalk);
+    margin: 0 0 10px;
+}
+
+/* ============================================================
+   REACTIONS
+
+   Five sibling <form>s, each one button. Not one form with five
+   buttons, because then which button was pressed depends on
+   `formaction` or on a name/value pair that a keyboard Enter
+   press resolves differently — and not <div>s with click
+   handlers, because those are not buttons.
+
+   Every one of them works with JavaScript disabled: submit,
+   303, page re-renders from the store. The script on the page
+   upgrades that to a fetch so the page does not jump.
+   ============================================================ */
+
+/* The <fieldset> stays display:block and the flex row is an
+   inner <div>. A <legend> inside a `display:flex` fieldset is
+   rendered inconsistently across engines — sometimes as a flex
+   item, sometimes outside the formatting context entirely — and
+   the fix for that is to not put it in one. */
+.react-bar {
+    margin: clamp(18px, 3.5vw, 26px) 0 0;
+    padding: 0;
+    border: 0;
+    /* min-inline-size: fieldset defaults to min-content, which
+       stops its contents from shrinking on a narrow phone. */
+    min-inline-size: 0;
+}
+
+.react-legend {
+    font-family: var(--us-mono);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--concrete-4);
+    padding: 0;
+    margin: 0 0 12px;
+}
+
+.react-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.react-form {
+    /* flex-basis 88px wraps to 3+2 on a 375px phone rather than
+       squeezing five targets below the 44px floor. */
+    flex: 1 1 88px;
+    margin: 0;
+    display: flex;
+}
+
+.react {
+    flex: 1 1 auto;
+    /* Anchor for the pressed-state corner notch below. */
+    position: relative;
+    /* 56px, comfortably past the 44px minimum, because this is
+       tapped one-handed. */
+    min-height: 56px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 8px 6px;
+    background: var(--machine);
+    border: 1px solid var(--concrete-2);
+    border-radius: 2px;
+    color: var(--concrete-4);
+    font-family: var(--us-mono);
+    cursor: pointer;
+    transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
+}
+
+.react-emoji {
+    font-size: 1.35rem;
+    line-height: 1;
+    /* Emoji are colour by nature and that is fine — they are not
+       the photograph, and the alternative (a monochrome glyph
+       set) would be a worse joke. */
+}
+
+.react-label {
+    font-size: 0.58rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    text-align: center;
+    line-height: 1.2;
+}
+
+.react:hover {
+    border-color: var(--concrete-4);
+    background: var(--machine-2);
+    color: var(--chalk-dim);
+}
+
+.react:focus-visible {
+    outline: 2px solid var(--blue-light);
+    outline-offset: 2px;
+}
+
+/* Chosen. THREE signals, never colour alone: the border goes to
+   blue light, the label brightens to chalk, and a filled corner
+   marker appears. aria-pressed on the button carries it for
+   assistive tech, and [aria-pressed="true"] is what this rule
+   keys off — so the visual state and the announced state cannot
+   drift apart. */
+.react[aria-pressed="true"] {
+    border-color: var(--blue-light);
+    background: var(--machine-2);
+    color: var(--chalk);
+    box-shadow: inset 0 0 0 1px rgba(62, 123, 255, 0.35),
+                0 0 18px -6px rgba(62, 123, 255, 0.55);
+}
+
+.react[aria-pressed="true"] .react-label {
+    color: var(--blue-glow);
+}
+
+/* The non-colour signal: a small corner notch, present only
+   when pressed. */
+.react[aria-pressed="true"]::after {
+    content: "";
+    position: absolute;
+    inset: auto 4px 4px auto;
+    width: 5px;
+    height: 5px;
+    background: var(--blue-glow);
+}
+
+/* In flight. The label is swapped by the script too, so this is
+   not the only cue. */
+.react[data-busy] {
+    cursor: progress;
+    border-color: var(--blue-brand);
+}
+
+/* Screen-reader-only live region for the reaction result. Not
+   `display:none` — that is not announced. */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* ============================================================
+   THE ARCHIVE
+
+   A list, not a grid. Sixty mornings read as a column of days,
+   and a column can carry a date without the date becoming
+   decoration. NO iframes here — see .song-player.
+   ============================================================ */
+
+.archive {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.archive-item {
+    display: grid;
+    grid-template-columns: 56px minmax(0, 1fr);
+    gap: 14px;
+    align-items: center;
+    padding: 12px 14px;
+    /* Hairline rules between rows rather than a box per row: this
+       is a ledger of days, and boxes would make each one shout. */
+    border-bottom: 1px solid var(--concrete-1);
+    text-decoration: none;
+    color: inherit;
+    /* 56 + 12 + 12 padding keeps the whole row past 44px tall. */
+    min-height: 56px;
+    transition: background 160ms ease;
+}
+
+.archive-item:first-child {
+    border-top: 1px solid var(--concrete-1);
+}
+
+a.archive-item:hover {
+    background: var(--machine);
+}
+
+a.archive-item:focus-visible {
+    outline: 2px solid var(--blue-light);
+    outline-offset: -2px;
+}
+
+/* Same rule as the hero art: warm, unfiltered, untouched. */
+.archive-thumb {
+    width: 56px;
+    height: 56px;
+    object-fit: cover;
+    display: block;
+    background: var(--void);
+    border: 1px solid var(--concrete-1);
+    border-radius: 2px;
+}
+
+.archive-thumb--empty {
+    display: grid;
+    place-items: center;
+    width: 56px;
+    height: 56px;
+    background: var(--concrete-1);
+    border: 1px solid var(--concrete-2);
+    border-radius: 2px;
+    font-family: var(--us-mono);
+    font-size: 0.7rem;
+    color: var(--concrete-3);
+}
+
+.archive-body {
+    min-width: 0;
+}
+
+.archive-day {
+    font-family: var(--us-mono);
+    font-size: 0.64rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--concrete-3);
+    margin: 0;
+}
+
+.archive-title {
+    font-family: var(--us-display);
+    font-size: 1rem;
+    font-weight: 500;
+    letter-spacing: -0.015em;
+    color: var(--chalk);
+    margin: 3px 0 0;
+    /* One line, clipped. A long remaster suffix must not push the
+       row height around. */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.archive-note {
+    font-size: 0.84rem;
+    line-height: 1.4;
+    color: var(--concrete-4);
+    margin: 4px 0 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Her reactions on an old day, as small glyphs. Decorative
+   duplicates of the aria-label on the wrapper. */
+.archive-reacts {
+    margin: 5px 0 0;
+    font-size: 0.85rem;
+    letter-spacing: 0.12em;
+}
+
+.archive-empty {
+    font-size: 0.95rem;
+    color: var(--concrete-3);
+    margin: 0;
+}
+
+/* ============================================================
+   NOTICES
+
+   Status messages on both pages. data-kind carries the colour;
+   the markup ALWAYS carries a word too ("saved", "no", "heads
+   up"), so nothing here is understood by hue alone.
+   ============================================================ */
+
+.notice {
+    font-family: var(--us-mono);
+    font-size: 0.8rem;
+    line-height: 1.5;
+    padding: 10px 12px;
+    margin: 0 0 18px;
+    border: 1px solid var(--concrete-2);
+    border-left-width: 3px;
+    border-radius: 2px;
+    background: var(--machine);
+    color: var(--chalk-dim);
+}
+
+.notice[data-kind="ok"]   { border-left-color: var(--blue-light); }
+.notice[data-kind="bad"]  { border-left-color: #ff6b6b; color: #ffd8d8; }
+.notice[data-kind="warn"] { border-left-color: var(--concrete-5); }
+.notice[hidden]           { display: none; }
+
+.notice a {
+    color: var(--blue-glow);
+    text-underline-offset: 3px;
+}
+
+/* ============================================================
+   /stronger/dj — MY SIDE
+
+   Phone-first and unapologetically utilitarian. This page is
+   opened one-handed, half awake, on a train. Every input is
+   16px+ (anything smaller and iOS Safari zooms the viewport on
+   focus, which then has to be pinched back out — a genuine bug,
+   not a style choice), every control clears 44px, and the labels
+   are real <label for> elements rather than placeholders.
+   ============================================================ */
+
+.dj-wrap {
+    max-width: 640px;
+    margin: 0 auto;
+}
+
+.dj-form {
+    display: grid;
+    gap: 18px;
+    margin: 0;
+}
+
+.dj-field {
+    display: grid;
+    gap: 7px;
+}
+
+.dj-label {
+    font-family: var(--us-mono);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--concrete-5);
+}
+
+/* Optional fields say so in the label, in a dimmer weight. */
+.dj-opt {
+    color: var(--concrete-3);
+    letter-spacing: 0.1em;
+}
+
+.dj-hint {
+    font-family: var(--us-mono);
+    font-size: 0.68rem;
+    line-height: 1.5;
+    color: var(--concrete-3);
+    margin: 0;
+}
+
+.dj-input,
+.dj-textarea {
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 48px;
+    padding: 12px 14px;
+    background: var(--void);
+    border: 1px solid var(--concrete-2);
+    border-radius: 2px;
+    color: var(--chalk);
+    font-family: var(--us-mono);
+    /* 16px floor. Do not reduce. */
+    font-size: 16px;
+    line-height: 1.45;
+}
+
+.dj-textarea {
+    min-height: 132px;
+    font-family: var(--us-display);
+    resize: vertical;
+}
+
+.dj-input::placeholder,
+.dj-textarea::placeholder {
+    color: var(--concrete-3);
+}
+
+.dj-input:focus-visible,
+.dj-textarea:focus-visible {
+    outline: 2px solid var(--blue-light);
+    outline-offset: 1px;
+    border-color: var(--blue-light);
+}
+
+/* The one blue-brand control in the wing: this is the CTA, and
+   brand blue is what marks and controls are for. */
+.dj-submit {
+    min-height: 52px;
+    padding: 14px 22px;
+    background: var(--blue-brand);
+    border: 1px solid var(--blue-light);
+    border-radius: 2px;
+    color: var(--chalk);
+    font-family: var(--us-mono);
+    font-size: 0.86rem;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    cursor: pointer;
+    transition: background 160ms ease, box-shadow 160ms ease;
+}
+
+.dj-submit:hover {
+    background: #2848f0;
+    box-shadow: 0 0 24px -8px rgba(62, 123, 255, 0.8);
+}
+
+.dj-submit:focus-visible {
+    outline: 2px solid var(--blue-glow);
+    outline-offset: 3px;
+}
+
+.dj-submit[disabled] {
+    background: var(--concrete-1);
+    border-color: var(--concrete-2);
+    color: var(--concrete-4);
+    cursor: progress;
+    box-shadow: none;
+}
+
+/* The passcode gate on the same page. Deliberately narrow: it
+   is one field and a button, and a full-width form implies
+   there is more to fill in. */
+.dj-lock {
+    max-width: 420px;
+}
+
+.dj-foot {
+    margin-top: clamp(30px, 6vw, 52px);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 20px;
+    font-family: var(--us-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--concrete-3);
+}
+
+.dj-foot a { color: var(--concrete-4); }
+.dj-foot a:hover { color: var(--blue-light); }
+.dj-foot a:focus-visible {
+    outline: 2px solid var(--blue-light);
+    outline-offset: 3px;
+}
+
+/* ============================================================
+   MOTION
+
+   Everything above animates only colour, shadow and background —
+   no transforms, no movement. Honoured anyway: a user who asked
+   for less motion is also telling you they want less change, and
+   a 160ms colour fade is a change.
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+    .react,
+    .archive-item,
+    .dj-submit {
+        transition: none;
+    }
+}

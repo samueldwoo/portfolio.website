@@ -1,0 +1,321 @@
+---
+/**
+ * /stronger — the front door. Act I.
+ *
+ * ---------------------------------------------------------------------------
+ * WHAT THIS PAGE IS
+ *
+ * A deliberately crude "access terminal" that asks her three questions about me
+ * and, when she gets them, tears itself down and hands her the studio. The bad
+ * design is the joke and the payoff is the cut.
+ *
+ * WHAT IT IS NOT is a security boundary. Nothing on this page decides anything:
+ * the prompts are public, the answers are checked only by /api/us/gate against
+ * keyed digests, and the session cookie is set by that endpoint. Reading this
+ * file's source tells you the questions and nothing else — which is the design.
+ *
+ * It deliberately loads NONE of the portfolio's stylesheets or vendored motion
+ * libraries. Different world, no shared cascade, and no 400KB of GSAP to render
+ * a page whose entire aesthetic is "Times New Roman".
+ * ---------------------------------------------------------------------------
+ */
+import { publicQuestions, isConfigured, missingConfig, gateNeedsReview } from '../../lib/us/config';
+import { SESSION_SECRET } from '../../lib/us/config';
+import { readCookie, verify } from '../../lib/us/session';
+
+export const prerender = false;
+
+// Already through? Skip the bit entirely. Nobody wants the gag twice.
+const secret = SESSION_SECRET();
+const already = secret ? verify(secret, 'session', readCookie(Astro.cookies, 'session', Astro.url)) : null;
+
+/**
+ * `next` comes off the query string, which means it is attacker-controlled, so
+ * it is only honoured when it is a path inside this wing. Anything else — a full
+ * URL, a protocol-relative `//evil.com`, an unrelated absolute path — is
+ * discarded. Otherwise this is an open redirect wearing my domain's reputation.
+ */
+const rawNext = Astro.url.searchParams.get('next') ?? '';
+const safeNext = /^\/stronger(\/|$)/.test(rawNext) && !rawNext.startsWith('//')
+  ? rawNext
+  : '/stronger/vault';
+
+if (already) return Astro.redirect(safeNext, 302);
+
+const questions = publicQuestions();
+const ready = isConfigured();
+// Only ever rendered by `astro dev`. In production a misconfigured gate is a
+// blank wall, not a checklist of which secret I forgot to paste.
+const missing = import.meta.env.DEV ? missingConfig() : [];
+
+/**
+ * Unreviewed-answers warning, shown in DEV ONLY.
+ *
+ * Called unconditionally on purpose — it also emits the console.error that lands
+ * in Vercel's production logs, the only channel that reaches me once deployed.
+ * But the BANNER is dev-gated, because telling an unauthenticated visitor "the
+ * answers to these questions are probably guessable" would be helpfully
+ * completing the attack for them.
+ */
+const showPlaceholderWarning = import.meta.env.DEV && gateNeedsReview();
+---
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light">
+    <!-- Belt and braces: the middleware also sends X-Robots-Tag, which covers
+         the redirects and JSON responses that cannot carry a meta tag. -->
+    <meta name="robots" content="noindex, nofollow, noarchive">
+    <meta name="referrer" content="no-referrer">
+    <title>access terminal</title>
+    <!-- Absolute path: this page is at /stronger, so "css/us.css" would
+         resolve to /stronger/css/us.css and 404. -->
+    <link rel="stylesheet" href="/css/us.css">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23000'/%3E%3Ctext x='16' y='23' font-family='monospace' font-size='20' font-weight='700' text-anchor='middle' fill='%233e7bff'%3E%5B%5D%3C/text%3E%3C/svg%3E">
+</head>
+<body class="crude" id="crude">
+<div class="crude-wrap">
+
+    <h1>Samuel Woo &mdash; Personal Server</h1>
+    <p class="crude-sub"><i>(under construction)</i></p>
+
+    <hr>
+
+    <pre class="crude-log" aria-hidden="true">ACCESS TERMINAL v0.9b
+&gt; initializing ................ <b>ok</b>
+&gt; mounting /home/sam .......... <b>ok</b>
+&gt; locating visitor ............ <b>ok</b>
+&gt; checking credentials ........ <b>FAILED</b>
+&gt; reason: you are not on the list
+&gt; the list has one name on it
+&gt; awaiting verification<span class="crude-caret">&nbsp;</span></pre>
+
+    <noscript>
+        <p class="crude-noscript">
+            THIS TERMINAL REQUIRES JAVASCRIPT. Please enable it and reload.
+            (Sorry. I know. Very 1999 of me.)
+        </p>
+    </noscript>
+
+    {!ready && (
+        <p class="crude-noscript">
+            TERMINAL OFFLINE &mdash; not configured.
+            {missing.length > 0 && (
+                <>
+                    <br />Missing: {missing.join(', ')}.
+                    <br />Run <code>npm run gate:hash</code>, then restart the dev server.
+                </>
+            )}
+        </p>
+    )}
+
+    {showPlaceholderWarning && (
+        <p class="crude-noscript">
+            DEV WARNING &mdash; these answers have not been confirmed as private.
+            If they are still the setup answers, or anything derivable from the
+            public portfolio, this gate only <em>looks</em> locked.
+            <br />Run <code>npm run gate:hash</code>, then
+            <code>npm run env:push -- --apply</code>, then redeploy.
+            Once they are genuinely private, set <code>US_GATE_REVIEWED=1</code>.
+        </p>
+    )}
+
+    <hr>
+
+    <table class="crude-table">
+        <caption class="crude-count">verification status</caption>
+        <thead>
+            <tr>
+                <th scope="col">#</th>
+                <th scope="col">Question</th>
+                <th scope="col">Status</th>
+            </tr>
+        </thead>
+        <tbody id="status-body">
+            {questions.map((q, i) => (
+                <tr>
+                    <td>{i + 1}</td>
+                    <td>{q.prompt}</td>
+                    {/* data-status is what the client script rewrites. The text
+                        inside carries the state too, so this never depends on
+                        colour alone to be readable. */}
+                    <td data-status={i} class={i === 0 ? 'is-now' : ''}>
+                        {i === 0 ? 'ASKING' : 'LOCKED'}
+                    </td>
+                </tr>
+            ))}
+        </tbody>
+    </table>
+
+    <hr>
+
+    <div id="quiz" data-total={questions.length}>
+        <p class="crude-count" id="q-count">
+            Question <span id="q-n">1</span> of {questions.length}
+        </p>
+        <p class="crude-q" id="q-prompt">{questions[0]?.prompt ?? '(no questions configured)'}</p>
+
+        <!-- A real <form>: Enter-to-submit, the on-screen keyboard shows a Go
+             key, and the submit button is a real button. The script intercepts
+             submit; it does not replace the form's semantics. -->
+        <form class="crude-form" id="q-form" autocomplete="off" novalidate>
+            <label class="crude-count" for="q-input" style="flex: 1 0 100%; margin: 0;">
+                Your answer
+            </label>
+            <input
+                class="crude-input"
+                id="q-input"
+                name="answer"
+                type="text"
+                inputmode="text"
+                autocapitalize="none"
+                autocorrect="off"
+                spellcheck="false"
+                placeholder={questions[0]?.placeholder ?? ''}
+                aria-describedby="q-msg"
+                required
+                disabled={!ready}
+            >
+            <button class="crude-submit" id="q-submit" type="submit" disabled={!ready}>SUBMIT</button>
+        </form>
+
+        <!-- aria-live so a screen reader hears the verdict without the focus
+             having to move into it. -->
+        <p class="crude-msg" id="q-msg" role="status" aria-live="polite" hidden></p>
+
+        <p id="q-giveup" hidden>
+            <a href="mailto:samuel.dw.woo@gmail.com?subject=your%20stupid%20website%20won't%20let%20me%20in&body=it%20says%20i%20am%20not%20on%20the%20list.%20i%20am%20definitely%20on%20the%20list.">
+                email the administrator
+            </a>
+        </p>
+    </div>
+
+    <hr>
+
+    <p class="crude-foot">
+        Best viewed in Netscape Navigator 4.0 at 800&times;600.<br>
+        <span class="crude-counter" id="counter">0000001</span><br>
+        visitors since forever
+    </p>
+</div>
+
+<script is:inline define:vars={{ questions, ready }}>
+/* --------------------------------------------------------------------------
+   Act I client script. Inline and un-bundled on purpose: it is ~70 lines and
+   loading a module graph to run it would be the only modern thing about this
+   page.
+
+   It holds NO answers and makes NO decisions. Every submit goes to
+   /api/us/gate, and the server's reply is the only source of truth for what
+   happens next — including which question comes next, which is why `next`
+   is read off the response rather than tracked by incrementing a counter here.
+   -------------------------------------------------------------------------- */
+(function () {
+    if (!ready) return;
+
+    var form = document.getElementById('q-form');
+    var input = document.getElementById('q-input');
+    var submit = document.getElementById('q-submit');
+    var msg = document.getElementById('q-msg');
+    var prompt = document.getElementById('q-prompt');
+    var qn = document.getElementById('q-n');
+    var giveUp = document.getElementById('q-giveup');
+    var step = 0;
+
+    function say(kind, text) {
+        // The prefix means the message never relies on colour to be understood.
+        var prefix = kind === 'bad' ? 'WRONG. ' : kind === 'hint' ? 'HINT: ' : 'OK. ';
+        msg.dataset.kind = kind;
+        msg.textContent = prefix + text;
+        msg.hidden = false;
+    }
+
+    function setStatus(i, label, cls) {
+        var cell = document.querySelector('[data-status="' + i + '"]');
+        if (!cell) return;
+        cell.textContent = label;
+        cell.className = cls;
+    }
+
+    function goTo(i) {
+        step = i;
+        prompt.textContent = questions[i].prompt;
+        input.placeholder = questions[i].placeholder || '';
+        input.value = '';
+        qn.textContent = String(i + 1);
+        giveUp.hidden = true;
+        for (var j = 0; j < questions.length; j++) {
+            if (j === i) setStatus(j, 'ASKING', 'is-now');
+        }
+        input.focus();
+    }
+
+    form.addEventListener('submit', async function (event) {
+        event.preventDefault();
+        var answer = input.value.trim();
+        if (!answer) { say('bad', 'type something.'); input.focus(); return; }
+
+        submit.disabled = true;
+        submit.textContent = 'CHECKING';
+
+        var data;
+        try {
+            var res = await fetch('/api/us/gate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                // Cookies carry the signed progress token, so the request must
+                // be credentialed. Same-origin is the default, but being
+                // explicit here documents that the token is load-bearing.
+                credentials: 'same-origin',
+                body: JSON.stringify({ step: step, answer: answer })
+            });
+            data = await res.json();
+
+            if (res.status === 429) {
+                say('bad', 'too many tries. wait ' + (data.retryAfter || 60) + ' seconds.');
+                return;
+            }
+            if (res.status === 503) {
+                say('bad', 'the terminal is offline. not your fault.');
+                return;
+            }
+        } catch (err) {
+            say('bad', 'the server did not answer. try again.');
+            return;
+        } finally {
+            submit.disabled = false;
+            submit.textContent = 'SUBMIT';
+        }
+
+        if (!data || data.ok !== true) {
+            say(data && data.hint ? 'hint' : 'bad', (data && data.hint) || 'not that.');
+            if (data && data.giveUp) giveUp.hidden = false;
+            input.select();
+            return;
+        }
+
+        setStatus(step, 'VERIFIED', 'is-done');
+
+        if (data.done) {
+            say('good', 'you are on the list.');
+            input.disabled = true;
+            submit.disabled = true;
+            document.getElementById('crude').classList.add('is-opening');
+            var to = data.redirect || '/stronger/vault';
+            // Long enough to read the line and see the lights go out.
+            setTimeout(function () { window.location.assign(to); }, 700);
+            return;
+        }
+
+        msg.hidden = true;
+        goTo(typeof data.next === 'number' ? data.next : step + 1);
+    });
+
+    input.focus();
+})();
+</script>
+</body>
+</html>
