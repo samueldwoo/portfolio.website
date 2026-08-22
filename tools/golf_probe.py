@@ -66,8 +66,15 @@ function fbm(x, y) {
 function heightAt(x, y, cx, cy, span, tiltAng, tiltMag, seed) {
   const nx = (x - cx) / span, ny = (y - cy) / span;
   const plane = (nx * Math.cos(tiltAng) + ny * Math.sin(tiltAng)) * tiltMag;
-  const undul = fbm(nx * 1.25 + seed, ny * 1.25 - seed) * 0.42 +
-    fbm(nx * 2.9 - seed * 1.7, ny * 2.9 + seed * 1.3) * 0.16;
+  // !! MIRRORS HeroCanvas.tsx heightAt(). These two amplitudes and the octave
+  // frequencies MUST match the component exactly. This block is a reimplementation
+  // (the component does not expose heightAt), so it drifts silently the moment the
+  // field changes -- which happened: the amplitudes were raised 2.5x in the
+  // component and this copy still said 0.42/0.16, so golf_verify_port.py reported
+  // a 0.63 heightAt delta and read as a PORT MISMATCH when the port was fine and
+  // the PROBE was stale. If you change the field, change it here too.
+  const undul = fbm(nx * 1.25 + seed, ny * 1.25 - seed) * 1.05 +
+    fbm(nx * 2.9 - seed * 1.7, ny * 2.9 + seed * 1.3) * 0.40;
   return plane + undul;
 }
 const out = [];

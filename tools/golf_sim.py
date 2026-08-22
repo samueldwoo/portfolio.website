@@ -18,6 +18,7 @@ CUP_R = 13.0
 STOP_SPEED = 26.0
 FRICTION = 0.12
 SLOPE_ACCEL = 2400.0
+REST_SLOPE = 0.03   # mirrors HeroCanvas.tsx
 MAX_ROLL = 7.0
 MAX_SPEED = 900.0
 TAU = math.pi * 2
@@ -206,9 +207,9 @@ class Green:
         ny = (y - self.hmy) / self.span
         plane = (nx * math.cos(self.tilt_ang) + ny * math.sin(self.tilt_ang)) \
             * self.tilt_mag
-        undul = (fbm(nx * 1.25 + self.g_seed, ny * 1.25 - self.g_seed) * 0.42
+        undul = (fbm(nx * 1.25 + self.g_seed, ny * 1.25 - self.g_seed) * 1.05
                  + fbm(nx * 2.9 - self.g_seed * 1.7,
-                       ny * 2.9 + self.g_seed * 1.3) * 0.16) * self.undul_scale
+                       ny * 2.9 + self.g_seed * 1.3) * 0.40) * self.undul_scale
         return plane + undul
 
     def slope_at(self, x, y):
@@ -298,7 +299,7 @@ class Green:
                 rgy = 0.0
             if at_b and rgy > 0:
                 rgy = 0.0
-            holds = math.hypot(rgx, rgy) < SLOPE_ACCEL * 0.014
+            holds = math.hypot(rgx, rgy) < SLOPE_ACCEL * REST_SLOPE
 
             if speed < STOP_SPEED:
                 stalled += step_dt

@@ -67,9 +67,9 @@ class Field:
         nx = (x - self.hmx) / self.span
         ny = (y - self.hmy) / self.span
         plane = (nx * self.ca + ny * self.sa) * self.tm
-        undul = (fbm_np(nx * 1.25 + self.sd, ny * 1.25 - self.sd) * 0.42
+        undul = (fbm_np(nx * 1.25 + self.sd, ny * 1.25 - self.sd) * 1.05
                  + fbm_np(nx * 2.9 - self.sd * 1.7,
-                          ny * 2.9 + self.sd * 1.3) * 0.16) * self.us
+                          ny * 2.9 + self.sd * 1.3) * 0.40) * self.us
         return plane + undul
 
     def slope(self, x, y):
@@ -109,7 +109,7 @@ def sweep(g: S.Green, angles_deg, powers, dt, start=None):
     outcome = np.zeros(N, dtype=np.int8)     # 0 running, 1 sunk, 2 stop, 3 t/o
     live = np.arange(N)
 
-    hold_thr = S.SLOPE_ACCEL * 0.014
+    hold_thr = S.SLOPE_ACCEL * S.REST_SLOPE   # mirrors HeroCanvas REST_SLOPE
     keep = math.pow(g.friction, dt)
     max_frames = int(math.ceil(S.MAX_ROLL / dt)) + 4
 

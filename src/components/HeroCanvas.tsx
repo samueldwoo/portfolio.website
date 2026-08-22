@@ -127,6 +127,24 @@ const FRICTION = 0.12;
  * readable break without the ball behaving like it is on ice.
  */
 const SLOPE_ACCEL = 2400;
+/**
+ * How gentle the ground must be, as a fraction of SLOPE_ACCEL, for a slow ball to
+ * come to REST on it rather than keep trickling (see `holds` in stepBall).
+ *
+ * Raised 0.014 -> 0.030 when the undulation went up 2.5x. It has to move with the
+ * amplitude, and the reason is measurable: the mean |gradient| over a play box
+ * went 76.8 -> 130.7, so at the old threshold the share of the green flat enough
+ * to hold a ball FELL from 10.4% to 5.4%. With nowhere to rest, a putt could only
+ * stop by hitting a play-box wall or timing out on MAX_ROLL — which is exactly
+ * the reported "the ball always rolls to the edge of the screen".
+ *
+ * Measured restable area at x2.5 undulation:
+ *     0.014 ->  5.4%      0.030 -> 22.0%      0.050 -> 50.6%      0.080 -> 81.0%
+ * 0.030 is "the flattest fifth of the green" — hollows and shelves, which is
+ * where a ball should stop. 0.050+ starts parking it on visibly sloped ground,
+ * which is the inert-mid-slope look this file already fixed once.
+ */
+const REST_SLOPE = 0.03;
 /** Hard ceiling on how long one putt may roll (seconds). See the roll-time
  *  cap in step(): a ball on a constant fall line never drops below
  *  STOP_SPEED, so without this a putt can trickle for 11s+ and the player
@@ -148,9 +166,17 @@ type Phase = 'idle' | 'aiming' | 'rolling' | 'sunk';
  *   gravity wells — every putt from every start converged to the same point
  *   (measured: three starts ending within 5px of each other). A dominant plane
  *   gradient makes that impossible.
- * - The undulation is two octaves at a lower amplitude, which bends the line
- *   without ever reversing it. This is what makes different parts of the green
- *   play differently instead of everything draining one way.
+ * - The undulation is two octaves. Its amplitude used to be deliberately LOW so
+ *   it could bend the fall line without ever reversing it — no local minima, so
+ *   nothing could act as an attractor. That was over-cautious: it also meant the
+ *   green had no ridges or valleys at all, and read as a bare tilt.
+ *   Raised 2.5x on review. VALLEYS AND LOCAL MINIMA ARE NOW ACCEPTABLE — a ball
+ *   coming to rest in a hollow mid-green is real golf, and is preferable to the
+ *   old behaviour where the plane pushed almost every putt into a play-box wall.
+ *   The pathology to avoid was never "a local minimum exists"; it was ONE basin
+ *   deep enough to swallow every putt from every start (measured once at three
+ *   starts finishing within 5px). A dominant-enough plane plus a bounded
+ *   amplitude prevents that without flattening the green.
  *
  * `tiltAng`/`tiltMag`/`seed` are per-round, so each re-tee is a new green.
  */
@@ -167,9 +193,19 @@ function heightAt(
   const nx = (x - cx) / span;
   const ny = (y - cy) / span;
   const plane = (nx * Math.cos(tiltAng) + ny * Math.sin(tiltAng)) * tiltMag;
+  /* AMPLITUDES RAISED 2.5x (0.42/0.16 -> 1.05/0.40). Measured, not guessed.
+     At 0.42/0.16 the plane was 62-77% of all relief, which left 0-4 local peaks
+     across the whole play box and an arrow-direction spread as low as 22 deg. The
+     visible consequence: contours ran near-parallel, every arrow pointed the same
+     way, and the fall-line arrows never diverged across a ridge or converged into
+     a valley — there was no ridge and no valley to read.
+     The offline sweep (tools/golf_sweep.py, port verified bit-exact against this
+     file) says one-stroke solvability holds at 100% for x2.0, x2.5 and x3.0 with
+     the minimum aim tolerance steady at 4 deg; it breaks at x4.0. So x3 is the
+     edge and 2.5 is the value with margin. */
   const undul =
-    fbm(nx * 1.25 + seed, ny * 1.25 - seed) * 0.42 +
-    fbm(nx * 2.9 - seed * 1.7, ny * 2.9 + seed * 1.3) * 0.16;
+    fbm(nx * 1.25 + seed, ny * 1.25 - seed) * 1.05 +
+    fbm(nx * 2.9 - seed * 1.7, ny * 2.9 + seed * 1.3) * 0.4;
   return plane + undul;
 }
 
@@ -792,7 +828,7 @@ export default function HeroCanvas() {
       if (atT && rgy < 0) rgy = 0;
       if (atB && rgy > 0) rgy = 0;
       const slopeMag = Math.hypot(rgx, rgy);
-      const holds = slopeMag < SLOPE_ACCEL * 0.014;
+      const holds = slopeMag < SLOPE_ACCEL * REST_SLOPE;
 
       /* Stall backstop. The wall-support rule above is the real fix, but the
          game must not be able to soft-lock for ANY geometry we did not think
