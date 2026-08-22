@@ -6,13 +6,15 @@
  *
  * Five things belong together and are therefore all here:
  *
- *   1. THE INTERFACE — songs, replies, reactions. Read and write.
+ *   1. THE INTERFACE — both halves of a day, and her reactions. Read and write.
  *   2. THREE BACKENDS behind it, chosen from whatever credentials exist.
- *   3. THE KEY LAYOUT — the exact strings a song, a reply and a reaction live under.
+ *   3. THE KEY LAYOUT — the exact strings each half of a day lives under.
  *   4. THE CALENDAR — the day-string those keys are built from.
- *   5. THE DERIVATIONS — streak, totals, and which old morning to resurface. Pure
- *      functions over records that are already here, so the pages cannot each
- *      invent their own arithmetic and disagree about how long we have done this.
+ *   5. THE PAIR — the fold from two flat histories into one day with two slots.
+ *   6. THE DERIVATIONS — the shared streak, the totals, and which old day to
+ *      resurface. Pure functions over records that are already here, so the pages
+ *      cannot each invent their own arithmetic and disagree about how long we
+ *      have done this.
  *
  * They are one module because they are one decision. Every song is stored under
  * `<YYYY-MM-DD>`, so the rule that turns "now" into that date string is not a
@@ -27,21 +29,48 @@
  * A list that gets written into a database is a schema, not a UI constant.
  *
  * ---------------------------------------------------------------------------
- * A REPLY IS A SEPARATE RECORD, NOT A SONG
+ * A DAY IS A PAIR. THE TWO HALVES ARE STORED SEPARATELY ON PURPOSE.
  *
- * She can send one back. It is stored under its own key space (`us:reply:<date>`
- * / `doc.replies[date]`) and NEVER through putSong, and that separation is a
- * security boundary rather than a modelling preference. Her endpoint is
- * authenticated by the SESSION cookie; mine by the ADMIN cookie. If both sides
- * wrote into `songs`, then any bug that let a session reach putSong would let her
- * cookie — which lives for thirty days on a phone that goes to the gym — overwrite
- * the thing the whole feature exists to deliver. Two key spaces mean the worst
- * case for that bug is a wrong reply, not a forged song.
+ * Both of us post one song a day, and a day is read as a PAIR: two tracks, two
+ * notes, two players, equal weight. Neither half is a response to the other and
+ * neither waits for the other — see DayPair below, where an empty slot is the
+ * ORDINARY case rather than an error.
  *
- * ONE REPLY PER DAY, overwritable, exactly like a song. Re-sending replaces, so
- * "wrong link" is fixable from her phone. If a day ever needs to hold a thread
- * rather than a single answer, that is a new key space again, not a list crammed
- * into this one.
+ * The STORAGE is deliberately not one record, and the reason is authentication,
+ * not modelling taste. His half is written only by the endpoint that demands the
+ * ADMIN cookie (`us:song:<date>` / `doc.songs[date]`). Hers only by the endpoint
+ * that demands the SESSION cookie (`us:reply:<date>` / `doc.replies[date]`). If
+ * both halves shared one record, any bug that let one cookie reach the other's
+ * writer would let it forge the other person's half of the day — and her cookie
+ * lives for thirty days on a phone that goes to the gym. Two key spaces mean the
+ * worst case for such a bug is a wrong half, never a forged one.
+ *
+ * So: SYMMETRY IS PRESENTATION AND SHAPE. It is emphatically not one endpoint,
+ * one cookie or one key. Collapsing them would trade the only structural
+ * guarantee in the feature for a shorter file.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THE KEY IS STILL CALLED `reply` WHEN NOTHING IN THE UI SAYS "REPLY"
+ *
+ * It used to be a reply: I broadcast, she acknowledged. That framing is gone —
+ * the two halves are peers — but the key space is NOT renamed, and the divergence
+ * is a decision rather than an oversight.
+ *
+ * Those keys hold live data, in the real Upstash and in the real R2 document. A
+ * rename is a migration, and the failure mode of a half-applied migration here is
+ * the worst one available: a deploy that reads `us:pick:*` while everything ever
+ * written sits under `us:reply:*` shows her entire history as deleted, silently,
+ * with no error anywhere. No noun is worth that.
+ *
+ * Therefore: `reply` is a STORAGE fact. `hers` / `her half` is the PRODUCT fact.
+ * They are allowed to disagree precisely as long as this paragraph exists — which
+ * is why putReply/getReply keep their names too, so a reader who greps for the key
+ * lands on the same vocabulary the store uses. Do not "fix" the name without a
+ * migration, a backfill and a rollback plan.
+ *
+ * ONE SONG PER SIDE PER DAY, overwritable. Re-posting replaces, so "wrong link"
+ * is fixable from a phone. If a day ever needs a thread rather than one song each,
+ * that is a third key space, not a list crammed into either of these.
  *
  * Callers NEVER branch on the backend. That is the whole point of the Store
  * interface below: the pages and endpoints are written once, and which tier is
@@ -377,13 +406,13 @@ function parseAndOrder(raws: unknown[], limit: number): TrackRecord[] {
    each one has to be implemented three times and a ninth would have to justify
    itself three times over.
 
-   The reply trio mirrors the song trio exactly — same signatures, same ordering
-   guarantees, different key space. That symmetry is what lets the pages render one
-   card component for both halves of a day; an asymmetric reply API would have
-   leaked into an asymmetric UI.
+   The two shelves mirror each other exactly — same signatures, same ordering
+   guarantees, different key space. That symmetry is what lets the pages render ONE
+   card template twice, once per side; an asymmetric store API would have leaked
+   into an asymmetric UI, which is exactly the shape this feature just grew out of.
 
    Note what is NOT here: no composite "give me the whole day" read. It would have
-   to be written three times, and getExchange() at the bottom of this file composes
+   to be written three times, and getExchange() + buildPairs() further down compose
    the primitives instead — one place, one behaviour, and the parallelism is visible
    at the call site rather than buried in three backends.
    ========================================================================= */
@@ -396,11 +425,11 @@ export interface Store {
   getSong(date: string): Promise<SongRecord | null>;
   /** The `limit` most recent songs, newest first. */
   getSongs(limit: number): Promise<SongRecord[]>;
-  /** Write (or overwrite) one day's reply — HERS. Never a song. */
+  /** Write (or overwrite) HER half of one day. Never his. (`reply` = storage name.) */
   putReply(reply: ReplyRecord): Promise<void>;
-  /** One day's reply, or null when she has not answered that day. */
+  /** Her half of one day, or null when she has not posted that day. */
   getReply(date: string): Promise<ReplyRecord | null>;
-  /** The `limit` most recent replies, newest first. */
+  /** Her `limit` most recent songs, newest first. */
   getReplies(limit: number): Promise<ReplyRecord[]>;
   /** Set or clear one reaction for one day. */
   putReaction(date: string, key: string, on: boolean): Promise<void>;
@@ -955,48 +984,181 @@ export function getReactions(dates: string[]): Promise<Record<string, string[]>>
   return store().getReactions(valid);
 }
 
+/* ============================================================================
+   THE PAIR
+
+   The shape every page renders. A day is not "a song, plus maybe an answer" — it
+   is TWO SLOTS, either of which may be empty.
+
+   THE EMPTY SLOT IS THE COMMON CASE, NOT AN ERROR. For most of a year exactly one
+   of us will have posted by the time the other opens the page, so a half-filled
+   day is the normal reading of this feature and must be shaped, typed and worded
+   as such. Nothing here reports a missing half; `solo` states it as a fact, and
+   nothing in the type ranks one side above the other.
+
+   The fold lives here rather than in the pages for the same reason the calendar
+   does: two pages that each folded songs, replies and reactions into days would
+   eventually fold them differently, and the first symptom would be an archive
+   showing one side's songs while silently dropping the other's. There is one fold.
+   ========================================================================= */
+
 /**
- * Everything a page needs to render a stretch of days as a CONVERSATION.
+ * Which of the two of us. FIXED IDENTITIES, never viewer-relative.
+ *
+ * 'his' is whoever holds the admin passcode; 'hers' is whoever answered the three
+ * questions. Deliberately not 'mine'/'yours': the same DayPair is rendered on her
+ * page and on mine, and a side whose meaning flips with the reader is a side that
+ * will eventually be labelled backwards on one of them. The pages map these two
+ * words to their own second person ("me" / "you", "me" / "her") at render time.
+ */
+export type Side = 'his' | 'hers';
+
+export interface DayPair {
+  /** `YYYY-MM-DD` in WING_TZ. */
+  date: string;
+  /** His half, or null. Written only by the ADMIN-authenticated endpoint. */
+  his: SongRecord | null;
+  /** Her half, or null. Written only by the SESSION-authenticated endpoint. */
+  hers: ReplyRecord | null;
+  /**
+   * Reaction keys she gave to HIS song that day. Always an array, never
+   * undefined, so no caller writes `?? []`.
+   *
+   * STILL ONE-DIRECTIONAL, and the type says so by sitting beside `his` rather
+   * than inside a per-side record. /api/us/react accepts her session token and
+   * refuses the admin one on purpose — a tap I could write as her would mean
+   * nothing — so there is no such thing as a reaction from me, and pretending the
+   * field were symmetric would just leave one half permanently empty. Making it
+   * mutual is a second endpoint plus a third key space, not a rename.
+   */
+  reactions: string[];
+  /**
+   * Both of us posted. This is the definition the shared streak counts.
+   *
+   * There is deliberately NO `solo` counterpart. It existed for one revision, was
+   * serialized into every archive row of the API response, and was read by
+   * nothing: `!both && (his || hers)` is the same test, and a stored field that
+   * duplicates a derivable one is a field that can eventually disagree with it.
+   * "Exactly one of us posted" is the ORDINARY case and needs no flag to announce
+   * itself — the pages simply render the half that is there.
+   */
+  both: boolean;
+}
+
+/**
+ * Assemble one day from parts already in hand.
+ *
+ * Exported because /stronger/dj fetches a single day BY KEY rather than from the
+ * windowed list (so that backfilling a morning older than the window still shows a
+ * confirmation), and it must produce a pair identical to the ones buildPairs()
+ * emits. Two constructors for one shape is how the preview ends up disagreeing
+ * with the page it is previewing.
+ */
+export function pairFrom(
+  date: string,
+  his: SongRecord | null,
+  hers: ReplyRecord | null,
+  reactions: readonly string[] = [],
+): DayPair {
+  return {
+    date,
+    his: his ?? null,
+    hers: hers ?? null,
+    // Filtered, and dropped entirely when there is no song of his that day: a
+    // reaction is attached to his track, so keeping an orphan would render a
+    // receipt for something that is not on the page. Unknown keys are dropped
+    // rather than rendered — that is what makes retiring a reaction safe.
+    reactions: his ? reactions.filter(isReactionKey) : [],
+    both: Boolean(his && hers),
+  };
+}
+
+/** A day with nothing on it. For "today" before either of us has posted. */
+export function emptyPair(date: string): DayPair {
+  return pairFrom(date, null, null, []);
+}
+
+/**
+ * Fold two flat histories plus the reactions into days, newest first.
+ *
+ * PURE, and takes exactly what getExchange() returns, so it can be exercised
+ * without a store. Every date that appears on either side gets a row; a date with
+ * nothing on it cannot appear, because there is nothing to build it from.
+ *
+ * Both sides go through a Map before anything is counted, so a duplicated record
+ * — a caller that concatenated two reads, a tier that returned a date twice —
+ * produces one row rather than two. The totals and the shared streak are numbers
+ * two people read as facts about themselves; they do not get to be inflated by a
+ * retried read.
+ */
+export function buildPairs(input: {
+  songs: readonly SongRecord[];
+  replies: readonly ReplyRecord[];
+  reactions: Record<string, string[]>;
+}): DayPair[] {
+  const his = new Map<string, SongRecord>();
+  for (const s of input.songs) if (isWingDate(s.date)) his.set(s.date, s);
+
+  const hers = new Map<string, ReplyRecord>();
+  for (const r of input.replies) if (isWingDate(r.date)) hers.set(r.date, r);
+
+  return [...new Set([...his.keys(), ...hers.keys()])]
+    // Newest first. String comparison is correct for ISO dates.
+    .sort((a, b) => b.localeCompare(a))
+    .map((date) =>
+      pairFrom(date, his.get(date) ?? null, hers.get(date) ?? null, input.reactions[date] ?? []),
+    );
+}
+
+/**
+ * Everything a page needs to render a stretch of days as PAIRS.
  *
  * WHY THIS IS ONE FUNCTION AND NOT THREE CALL SITES: every page that shows a day
- * needs all three halves of it, and every page that assembled them itself would
- * be free to forget one — the archive that shows songs but silently drops her
- * replies is the exact bug this prevents.
+ * needs all three parts of it, and every page that assembled them itself would be
+ * free to forget one — the archive that shows his songs and silently drops hers is
+ * the exact bug this prevents, and it is the bug the old one-sided page shipped.
  *
- * TWO ROUND TRIPS, NOT THREE, AND THAT IS THE MOST IT CAN BE. Songs and replies
- * are independent, so they go in parallel. Reactions cannot: they are fetched BY
- * DATE and the dates are not known until the songs come back. So the shape below
- * is `Promise.all` then one dependent read, which is the minimum the data
- * dependency allows.
+ * TWO ROUND TRIPS, NOT THREE, AND THAT IS THE MOST IT CAN BE. The two shelves are
+ * independent, so they go in parallel. Reactions cannot: they are fetched BY DATE
+ * and the dates are not known until the songs come back. So the shape below is
+ * `Promise.all` then one dependent read, which is the minimum the data dependency
+ * allows.
  *
- * Reactions are requested for the SONG dates only. A reaction is something she
- * does to a song I posted — the markup that writes one only ever exists on a card
- * with a song in it — so a reply-only day (a day she went first) has no reactions
- * to fetch and asking for them would be an extra Redis command per day forever, to
- * be told `[]`.
+ * Reactions are requested for HIS dates only, because that is the only kind of
+ * reaction that exists (see DayPair.reactions). Asking about a day only she posted
+ * on would be one extra Redis command per day, forever, to be told `[]`.
  *
- * Failure is NOT swallowed here. The reasoning is the file header's: a page that
- * quietly rendered an empty archive because one read failed would look exactly
- * like a page whose archive is genuinely empty, and the caller is the only one who
- * knows how to say "the shelf is not answering" in her language.
+ * ABOUT `limit`, HONESTLY: it caps each shelf, not the number of days. Two
+ * histories of `limit` records that never overlap produce up to `2 * limit` pairs,
+ * so a caller that renders a fixed number of rows must slice `pairs` itself rather
+ * than trust the length. The counting callers WANT the wider window; the rendering
+ * ones slice. Stating it here is cheaper than a surprise at row 61.
+ *
+ * Failure is NOT swallowed. The reasoning is the file header's: a page that quietly
+ * rendered an empty archive because one read failed would look exactly like a page
+ * whose archive is genuinely empty, and the caller is the only one who knows how to
+ * say "the shelf is not answering" in her language.
  */
 export async function getExchange(
   limit: number,
 ): Promise<{
   songs: SongRecord[];
   replies: ReplyRecord[];
-  /** date -> reaction keys. Keyed for every song date, so no caller checks undefined. */
+  /** date -> reaction keys. Keyed for every one of his dates, so no caller checks undefined. */
   reactions: Record<string, string[]>;
-  /** date -> reply, for O(1) lookup while rendering an archive row. */
-  replyByDate: Record<string, ReplyRecord>;
+  /** Days, newest first. See the note above about how many there can be. */
+  pairs: DayPair[];
+  /** date -> day, for O(1) lookup of one specific day inside the window. */
+  pairByDate: Record<string, DayPair>;
 }> {
   const [songs, replies] = await Promise.all([getSongs(limit), getReplies(limit)]);
   const reactions = await getReactions(songs.map((s) => s.date));
 
-  const replyByDate: Record<string, ReplyRecord> = {};
-  for (const r of replies) replyByDate[r.date] = r;
+  const pairs = buildPairs({ songs, replies, reactions });
+  const pairByDate: Record<string, DayPair> = {};
+  for (const p of pairs) pairByDate[p.date] = p;
 
-  return { songs, replies, reactions, replyByDate };
+  return { songs, replies, reactions, pairs, pairByDate };
 }
 
 /* ============================================================================
@@ -1016,35 +1178,59 @@ export async function getExchange(
    ========================================================================= */
 
 export interface Rhythm {
-  /** Distinct mornings with a song in them. */
-  mornings: number;
-  /** Of those mornings, how many she answered — a reaction, a reply, or both. */
-  answered: number;
-  /** Days she sent a song back. Includes days I never posted: she can go first. */
-  replies: number;
+  /** Days with at least one song on them, either side. */
+  days: number;
+  /** Days he posted. */
+  his: number;
+  /** Days she posted. */
+  hers: number;
   /**
-   * Consecutive days with a song, counting back from today.
+   * Days BOTH of us posted. THE SHARED NUMBER, and the only one either page is
+   * allowed to call a streak.
    *
-   * If nothing is posted today YET, this counts back from yesterday instead and
-   * `streakLive` is false — because at 7am on a Tuesday the Monday-ending run is
-   * the true answer, and resetting the number to zero every midnight would be
-   * both wrong and cruel.
+   * This replaced a one-sided count of his mornings, and the replacement is the
+   * point rather than a refactor. "How many days in a row did I post" measures one
+   * person's discipline, which is a fact about him that she has to watch. "How many
+   * days did we both show up" measures the thing the feature exists for, cannot be
+   * moved by one person alone, and is the number worth putting on a page two people
+   * read. It is also a SMALLER number, which is the honest cost of measuring the
+   * right thing.
+   */
+  both: number;
+  /**
+   * Days she reacted to his song.
+   *
+   * Kept, and kept clearly separate from `hers`, because it is the one signal in
+   * the wing that is still one-directional (see DayPair.reactions). Lumping it in
+   * with "she posted" would have quietly inflated her side using a mechanism only
+   * she has.
+   */
+  reacted: number;
+  /**
+   * Consecutive days we BOTH posted, counting back from today.
+   *
+   * If today is not yet a both-day — which it usually is not, because one of us
+   * has not opened the page — this counts back from yesterday instead and
+   * `streakLive` is false. At 7am on a Tuesday the Monday-ending run is the true
+   * answer, and zeroing the number every midnight would be both wrong and cruel.
    */
   streak: number;
   /** Whether `streak` includes today. Drives the tense of the sentence. */
   streakLive: boolean;
-  /** Longest run of consecutive days anywhere in the window. */
+  /** Longest run of consecutive both-days anywhere in the window. */
   best: number;
-  /** Earliest date seen, songs or replies. '' when there is nothing at all. */
+  /** Earliest date seen, either side. '' when there is nothing at all. */
   first: string;
   /** Calendar days from `first` to `today` inclusive. 0 when empty. */
   span: number;
 }
 
 const EMPTY_RHYTHM: Rhythm = {
-  mornings: 0,
-  answered: 0,
-  replies: 0,
+  days: 0,
+  his: 0,
+  hers: 0,
+  both: 0,
+  reacted: 0,
   streak: 0,
   streakLive: false,
   best: 0,
@@ -1053,50 +1239,61 @@ const EMPTY_RHYTHM: Rhythm = {
 };
 
 /**
- * Count what actually happened.
+ * Count what actually happened, over the days the caller read.
  *
- * Deliberately tolerant of a duplicated or out-of-order input array: the dates go
- * into Sets before anything is counted, so a caller that concatenated two reads
- * cannot inflate a total. That matters because `mornings` is a number she will
- * read as a fact about us.
+ * Takes PAIRS rather than two record arrays, so "both of us posted" is decided in
+ * exactly one place — buildPairs / pairFrom — and cannot be re-derived here with a
+ * slightly different rule.
+ *
+ * EVERY TOTAL IS THE SIZE OF A SET OF DATES, never the length of the input array.
+ * An earlier version of this counted `pairs.length` and incremented per element,
+ * which was correct for the only two callers (both hand it buildPairs output, which
+ * is already de-duplicated) and quietly wrong for anyone else — an adversarial
+ * review fed it the same pair twice and got `days: 2, his: 2`. This function is
+ * exported and takes a plain readonly array, so it cannot assume its input went
+ * through the fold. These numbers are read as facts about two people; they do not
+ * get to be inflated by a caller that concatenated two reads.
  */
 export function summarize(input: {
   /** Today in WING_TZ. Passed, never read from the clock. See the section header. */
   today: string;
-  songs: readonly SongRecord[];
-  replies: readonly ReplyRecord[];
-  reactions: Record<string, string[]>;
+  pairs: readonly DayPair[];
 }): Rhythm {
   const { today } = input;
   if (!isWingDate(today)) return EMPTY_RHYTHM;
 
-  const songDates = new Set(input.songs.map((s) => s.date).filter(isWingDate));
-  const replyDates = new Set(input.replies.map((r) => r.date).filter(isWingDate));
+  // A pair with nothing on it (emptyPair for a day neither of us has reached yet)
+  // is not a day that happened, so it is not counted as one.
+  const pairs = input.pairs.filter((p) => isWingDate(p.date) && (p.his || p.hers));
+  if (pairs.length === 0) return EMPTY_RHYTHM;
 
-  if (songDates.size === 0 && replyDates.size === 0) return EMPTY_RHYTHM;
-
-  // A morning counts as answered if she reacted OR replied. Both is still one
-  // morning: this is "did she show up", not "how many taps".
-  let answered = 0;
-  for (const date of songDates) {
-    const reacted = (input.reactions[date] ?? []).length > 0;
-    if (reacted || replyDates.has(date)) answered += 1;
+  const allDates = new Set<string>();
+  const hisDates = new Set<string>();
+  const herDates = new Set<string>();
+  const reactedDates = new Set<string>();
+  const bothDates = new Set<string>();
+  for (const p of pairs) {
+    allDates.add(p.date);
+    if (p.his) hisDates.add(p.date);
+    if (p.hers) herDates.add(p.date);
+    if (p.both) bothDates.add(p.date);
+    if (p.reactions.length > 0) reactedDates.add(p.date);
   }
 
   // Walk back one day at a time. Bounded by the window the caller read rather
   // than by a `while (true)`: the loop can only ever run as many times as there
-  // are records, because the first gap ends it.
-  let cursor = songDates.has(today) ? today : shiftDate(today, -1);
-  const streakLive = songDates.has(today);
+  // are both-days, because the first gap ends it.
+  const streakLive = bothDates.has(today);
+  let cursor = streakLive ? today : shiftDate(today, -1);
   let streak = 0;
-  while (songDates.has(cursor)) {
+  while (bothDates.has(cursor)) {
     streak += 1;
     cursor = shiftDate(cursor, -1);
   }
 
-  // Longest run ever. Ascending order so a run is "each date's predecessor was
-  // also posted", which is one pass and no lookahead.
-  const ascending = [...songDates].sort();
+  // Longest run ever. Ascending order so a run is "this date's predecessor was
+  // also a both-day", which is one pass and no lookahead.
+  const ascending = [...bothDates].sort();
   let best = 0;
   let run = 0;
   let previous = '';
@@ -1106,13 +1303,17 @@ export function summarize(input: {
     previous = date;
   }
 
-  const everything = [...songDates, ...replyDates].sort();
-  const first = everything[0] ?? '';
+  // Sorted rather than "the last row", so this does not depend on buildPairs
+  // having ordered its output — a total she reads as a fact should not rest on
+  // another function's sort order.
+  const first = [...allDates].sort()[0] ?? '';
 
   return {
-    mornings: songDates.size,
-    answered,
-    replies: replyDates.size,
+    days: allDates.size,
+    his: hisDates.size,
+    hers: herDates.size,
+    both: bothDates.size,
+    reacted: reactedDates.size,
     streak,
     streakLive,
     best,
@@ -1159,39 +1360,46 @@ export function durationLabel(ms: number | undefined): string {
 const RESURFACE_MIN_AGE_DAYS = 14;
 
 /**
- * Pick one old morning to bring back, or null when there is not one worth it.
+ * Pick one old DAY to bring back, or null when there is not one worth it.
  *
- * DETERMINISTIC PER DAY, and that is the requirement that shapes it. A random
- * pick would change on every reload, so the one she wanted to come back to after
- * making coffee would be gone and unfindable — a memory feature whose memories
- * move is actively worse than no feature. Keying the choice off `today` means it
- * is stable for the whole day and different tomorrow.
+ * Returns the whole pair, not one track, and that is the change that matters here.
+ * The old version resurfaced one of his songs and left her half of that day
+ * behind — so the feature that exists to say "remember this one?" was structurally
+ * incapable of remembering hers. A day is the unit.
  *
- * PREFERS THE ONES SHE ANSWERED. If any old morning has a reaction or a reply on
- * it, the pick comes only from those. "Worth playing again" is a claim, and the
- * only evidence in the store for it is that she responded the first time. With no
- * such evidence anywhere, it falls back to any old morning rather than showing
- * nothing, because on day 20 of the archive that evidence may simply not exist yet.
+ * DETERMINISTIC PER DAY, and that is the requirement that shapes the rest. A
+ * random pick would change on every reload, so the one she wanted to come back to
+ * after making coffee would be gone and unfindable — a memory feature whose
+ * memories move is actively worse than no feature. Keying the choice off `today`
+ * means it is stable for the whole day and different tomorrow.
+ *
+ * THE PREFERENCE LADDER, strongest evidence first:
+ *
+ *   1. days we BOTH posted   — two people chose to be there. Nothing in the store
+ *                              is better evidence that a day was worth having.
+ *   2. days she reacted      — the next best, and the only other signal we record.
+ *   3. any old day           — because on day 20 neither of the above may exist
+ *                              yet, and an empty block explaining its own absence
+ *                              is worse than an unremarkable Tuesday.
  */
 export function resurface(input: {
   today: string;
-  songs: readonly SongRecord[];
-  reactions: Record<string, string[]>;
-  replyByDate: Record<string, ReplyRecord>;
-}): SongRecord | null {
+  pairs: readonly DayPair[];
+}): DayPair | null {
   const { today } = input;
   if (!isWingDate(today)) return null;
 
   const cutoff = shiftDate(today, -RESURFACE_MIN_AGE_DAYS);
   // String comparison is correct for ISO dates, and `<=` excludes the cutoff day
   // itself so the boundary is "at least this old".
-  const old = input.songs.filter((s) => isWingDate(s.date) && s.date <= cutoff);
+  const old = input.pairs.filter(
+    (p) => isWingDate(p.date) && p.date <= cutoff && (p.his || p.hers),
+  );
   if (old.length === 0) return null;
 
-  const loved = old.filter(
-    (s) => (input.reactions[s.date] ?? []).length > 0 || Boolean(input.replyByDate[s.date]),
-  );
-  const pool = loved.length > 0 ? loved : old;
+  const together = old.filter((p) => p.both);
+  const answered = old.filter((p) => p.reactions.length > 0);
+  const pool = together.length > 0 ? together : answered.length > 0 ? answered : old;
 
   // Sorted by date so the pool's ORDER does not depend on how the store happened
   // to hand the records back — otherwise the "deterministic" pick would quietly

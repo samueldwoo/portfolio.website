@@ -1,0 +1,771 @@
+/* ============================================================
+   us-together.css — the three things that need both of them.
+
+     THE CLOCKS    where each of them is, right now
+     THINKING      one tap, and the sentence it produces
+     THE QUESTION  one prompt a day, sealed until both answer
+     THE LIST      things to do when they are in the same place
+
+   Loaded ONLY by /stronger/vault, and only ever AFTER us.css:
+   every token used below is declared there and nothing here
+   redeclares one.
+
+   Path is ABSOLUTE (/css/us-together.css) for the reason us.css
+   states: this page lives at /stronger/vault, so a relative
+   href would resolve to /stronger/vault/css/... and 404.
+
+   ------------------------------------------------------------
+   WHY THIS FILE CARRIES ITS OWN FORM AND NOTICE PRIMITIVES
+
+   us-song.css declares `.dj-form`, `.dj-field`, `.dj-label`,
+   `.dj-input`, `.dj-textarea`, `.dj-submit`, `.notice` and
+   `.sr-only`, and its own comment says to treat them as the
+   wing's shared primitives — which letters.astro duly does.
+
+   This file deliberately does NOT reuse them, and the reason is
+   ownership rather than taste: us-song.css is being actively
+   restructured for the mutual song-of-the-day work. A hub that
+   borrowed its form primitives would break the moment that file
+   moved a rule, and the break would look like a hub bug. So the
+   `tg-` primitives below are a deliberate, documented copy that
+   decouples this page from a file somebody else is editing.
+
+   If the two features ever settle, the honest cleanup is to
+   promote one set into us.css — which owns tokens for the whole
+   wing and is the right home for shared primitives — and delete
+   the other. Not while both are moving.
+
+   ------------------------------------------------------------
+   CONTRAST, computed rather than eyeballed. Both columns
+   matter because text in this file sits on two surfaces: bare
+   --void, and the --machine #15161a cards the answers live in.
+
+     token         on --void   on --machine
+     --chalk         21.00        18.08
+     --chalk-dim     14.86        12.79
+     --blue-glow      9.71         8.36
+     --concrete-4     7.64         6.58
+     --concrete-3     5.76         4.96   <- the wing's floor
+     --concrete-2     4.00         3.44   <- borders only
+     --concrete-1     1.50         1.29   <- decoration only
+     --blue-brand     2.74         2.36   <- UNUSED here; see below
+
+   The floor is --concrete-3, and every text role below clears
+   4.5:1 on whichever of the two surfaces it actually sits on —
+   --concrete-3 is used on --void only, never inside a card,
+   which is what keeps its weaker 4.96 column from mattering.
+   Nothing below uses --concrete-2 or --concrete-1 for text.
+   Both appear only as borders, which is what --concrete-2 was
+   retuned for: it clears the 3:1 that WCAG 1.4.11 asks of a
+   control boundary on both surfaces (4.00 / 3.44). --concrete-1
+   is 1.50:1 and is therefore DECORATION ONLY — it is the edge
+   on a card and a row divider, never the edge of a control.
+   --blue-brand appears NOWHERE in this file, and that is
+   deliberate: at 2.74:1 it fails as text and it also fails as a
+   control boundary, so the send button uses --blue-light. See
+   the comment on .tg-send.
+
+   THE ONE RULE STILL HOLDS: nothing in here is warm. Blue is
+   light in the room — it marks a thing that is live, never a
+   "notification", and never the only carrier of a state. Every
+   state below is spelled out in words in the markup; colour and
+   the strike-through sit on top of the words.
+   ============================================================ */
+
+/* ============================================================
+   SHARED PRIMITIVES  (see the header for why these are local)
+   ============================================================ */
+
+/* A block on the hub. Sections are separated by us.css's
+   .studio-rule, so this only owns its internal rhythm. */
+.tg-block {
+    margin: 0;
+}
+
+/* The small mono caps used as a section label throughout the
+   wing. Same role as .studio-kicker; restated so the hub can
+   put one inside a block without inheriting .studio-kicker's
+   bottom margin. */
+.tg-eyebrow {
+    font-family: var(--us-mono);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--concrete-4);
+    margin: 0 0 10px;
+}
+
+/* Status messages. data-kind carries the colour; the markup
+   ALWAYS carries a word too ("sent", "hm", "heads up"), so
+   nothing here is understood by hue alone. */
+.tg-notice {
+    margin: 0 0 14px;
+    padding: 10px 12px;
+    background: var(--machine);
+    border-left: 3px solid var(--concrete-2);
+    border-radius: 2px;
+    font-size: 0.92rem;
+    line-height: 1.5;
+    color: var(--chalk-dim);
+    max-width: 56ch;
+}
+.tg-notice[data-kind='ok']   { border-left-color: var(--blue-light); }
+/* Both values computed on --machine #15161a, which is this element's
+   own background: the edge #ff6b6b is 6.51:1 and the text #ffd8d8 is
+   13.83:1. The edge is decoration either way — the word "hm" in the
+   markup is what actually carries the failure — but a 3:1 boundary is
+   the floor even for that, and this clears it twice over. */
+.tg-notice[data-kind='bad']  { border-left-color: #ff6b6b; color: #ffd8d8; }
+.tg-notice[data-kind='warn'] { border-left-color: var(--concrete-5); }
+.tg-notice[hidden]           { display: none; }
+
+/* Screen-reader-only. NOT `display: none`, which is not
+   announced at all — this has to stay in the accessibility
+   tree because it is where async outcomes are spoken and where
+   the tick buttons keep their real names.
+
+   It is `position: absolute`, so any element that CONTAINS one
+   needs to be a positioning context or the span is laid out
+   against the initial containing block. It is 1px and clipped
+   either way, so nothing is visible — but an out-of-flow node
+   anchored to the page instead of to its button is the kind of
+   thing that later shows up as a stray scrollbar. .tg-tick and
+   .tg-drop are therefore `position: relative`. */
+.tg-sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* ---------- forms -----------------------------------------
+   Phone-first. Every input is 16px+ — anything smaller and
+   iOS Safari zooms the viewport on focus, which then has to be
+   pinched back out, a genuine bug rather than a style choice —
+   and every control clears 44px in both directions.
+   ---------------------------------------------------------- */
+
+.tg-form {
+    display: grid;
+    gap: 12px;
+    margin: 14px 0 0;
+}
+
+.tg-field {
+    display: grid;
+    gap: 6px;
+}
+
+.tg-label {
+    font-family: var(--us-mono);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--concrete-5);
+}
+
+.tg-input,
+.tg-textarea {
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 48px;
+    padding: 12px 14px;
+    background: var(--void);
+    border: 1px solid var(--concrete-2);
+    border-radius: 2px;
+    color: var(--chalk);
+    /* 16px floor. Do not reduce. */
+    font-size: 16px;
+    line-height: 1.45;
+    font-family: var(--us-display);
+}
+
+.tg-textarea {
+    min-height: 104px;
+    resize: vertical;
+}
+
+.tg-input::placeholder,
+.tg-textarea::placeholder {
+    color: var(--concrete-3);
+    opacity: 1;   /* Firefox dims placeholders by default, which would drop it under the floor. */
+}
+
+.tg-input:focus-visible,
+.tg-textarea:focus-visible {
+    outline: 2px solid var(--blue-light);
+    outline-offset: 1px;
+    border-color: var(--blue-light);
+}
+
+/* The generic button. 44px min in BOTH directions — a 44px-tall
+   button 30px wide still fails the target size. */
+.tg-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 48px;
+    min-width: 48px;
+    padding: 12px 20px;
+    background: var(--machine-2);
+    border: 1px solid var(--concrete-2);
+    border-radius: 2px;
+    color: var(--chalk);
+    font-family: var(--us-display);
+    font-size: 1rem;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    cursor: pointer;
+    text-align: center;
+    transition: border-color 160ms ease, background 160ms ease;
+}
+.tg-btn:hover {
+    border-color: var(--blue-light);
+    background: var(--machine);
+}
+.tg-btn:focus-visible {
+    outline: 2px solid var(--blue-light);
+    outline-offset: 2px;
+}
+.tg-btn[disabled] {
+    color: var(--concrete-4);
+    border-color: var(--concrete-1);
+    cursor: progress;
+}
+
+/* A <details> used as a disclosure. Native, so it works with no
+   JavaScript at all, and the marker is left in place because a
+   custom triangle is one more thing to get wrong. */
+.tg-more {
+    margin: 18px 0 0;
+}
+.tg-more > summary {
+    /* Padding rather than height, so the 44px target comes from real
+       box size and the text can wrap on a narrow phone without the
+       target collapsing. */
+    padding: 13px 4px;
+    font-family: var(--us-mono);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--concrete-4);
+    cursor: pointer;
+    border-radius: 2px;
+}
+.tg-more > summary:hover { color: var(--blue-glow); }
+.tg-more > summary:focus-visible {
+    outline: 2px solid var(--blue-light);
+    outline-offset: 2px;
+}
+
+/* ============================================================
+   1. THE CLOCKS
+
+   Unobtrusive on purpose: it sits under the lede, above the
+   countdown, and it is the smallest type on the page. It is
+   ambient context — "here is where each of us is" — and the
+   moment it competes with the countdown it has taken emphasis
+   from the thing that actually matters.
+   ============================================================ */
+
+.tg-clocks {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px 22px;
+    margin: 20px 0 0;
+    font-family: var(--us-mono);
+}
+
+.tg-clock {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 8px;
+}
+
+/* "her" / "you". A real word, because a clock with no owner is
+   just a number and the whole point is whose it is. */
+.tg-clock-who {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--concrete-3);
+}
+
+/* The number. `tabular-nums` so the minute digits do not shift
+   the layout as the clock ticks — without it, 11:11 is narrower
+   than 00:00 and the whole strip jitters once a minute. */
+.tg-clock-time {
+    font-size: 1.02rem;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+    color: var(--chalk-dim);
+}
+
+/* Shown only when the two of them are on different calendar
+   days, which is the actually-useful fact in a nine-hour gap. */
+.tg-clock-day {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--blue-glow);
+}
+
+.tg-apart {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--concrete-3);
+}
+
+/* ============================================================
+   2. THINKING OF YOU
+
+   The incoming sentence is the second-loudest thing on the hub
+   after the wordmark — louder than the countdown, because it is
+   the only thing here that somebody chose to send today.
+
+   NO ANIMATION, and that is a decision rather than an omission:
+   a pulsing dot is the exact visual idiom of an unread-message
+   badge, and this is meant to read as somebody having thought
+   of you, not as a notification waiting to be cleared. There is
+   consequently nothing here for prefers-reduced-motion to
+   reduce beyond the shared button transition.
+   ============================================================ */
+
+.tg-think {
+    display: grid;
+    gap: 12px;
+    max-width: 52ch;
+}
+
+/* The sentence. Display face, generous, and NOT uppercase — it
+   is something a person said, so it is set like prose. */
+.tg-think-line {
+    margin: 0;
+    font-size: clamp(1.18rem, 3.4vw, 1.6rem);
+    font-weight: 500;
+    line-height: 1.35;
+    letter-spacing: -0.02em;
+    color: var(--chalk);
+}
+
+/* The empty state, which is a real sentence somebody wrote and
+   not a blank space — the same discipline the hub's "nothing
+   new since you were last here" line follows. Dimmer, still
+   7.68:1. */
+.tg-think-line--quiet {
+    font-size: clamp(1.02rem, 2.6vw, 1.2rem);
+    font-weight: 400;
+    color: var(--concrete-4);
+}
+
+/* Her own outgoing state: "you sent one this morning." Quiet,
+   mono, and below the button, because it is a receipt and not a
+   message. */
+.tg-think-sent {
+    margin: 0;
+    font-family: var(--us-mono);
+    font-size: 0.74rem;
+    letter-spacing: 0.04em;
+    color: var(--concrete-3);
+}
+
+.tg-think-form {
+    margin: 2px 0 0;
+}
+
+/* The one button. Deliberately wide and unmissable: it is the
+   lightest possible gesture in the wing and it should look like
+   the easiest thing on the page to press.
+
+   IT IS BORDERED IN --blue-light, NOT --blue-brand, and that is
+   a correction rather than a preference. --blue-brand #1e3ae0 is
+   the obvious choice aesthetically — it is the brand mark colour
+   and us-hub.css already uses it as a resting card border — but
+   it measures 2.74:1 on --void, and us.css's own comment on
+   --concrete-2 states the rule this breaks: a control boundary
+   needs the 3:1 that WCAG 1.4.11 asks for, which is exactly why
+   --concrete-2 was raised from #4a4c52 in the first place. This
+   is a real control, its border is its only boundary against the
+   page, so it gets --blue-light at 5.48:1 instead. */
+.tg-send {
+    width: 100%;
+    max-width: 22rem;
+    min-height: 52px;
+    font-size: 1.05rem;
+    border-color: var(--blue-light);
+}
+.tg-send:hover {
+    /* Escalates light-to-brighter, matching how the studio treats blue
+       as a source: --blue-glow is 9.71:1, so hover raises contrast
+       rather than trading it for saturation. */
+    border-color: var(--blue-glow);
+    background: var(--machine);
+}
+
+/* ============================================================
+   3. THE DAILY QUESTION
+
+   Three states, and each one has to look like a different
+   moment rather than like the same card with a field missing:
+
+     UNANSWERED  the prompt, and a box. Nothing else.
+     WAITING     mine is in, theirs is not. The card says so and
+                 shows MY answer back to me. There is nothing of
+                 theirs on the page because there is nothing of
+                 theirs IN the page — see visibleDay().
+     REVEALED    both answers, side by side, mirrored accent.
+   ============================================================ */
+
+.tg-q {
+    max-width: 60ch;
+}
+
+/* The prompt. The largest thing in the block, because it is the
+   thing both of them are answering. */
+.tg-q-prompt {
+    margin: 0 0 6px;
+    font-size: clamp(1.24rem, 3.6vw, 1.7rem);
+    font-weight: 600;
+    line-height: 1.28;
+    letter-spacing: -0.025em;
+    color: var(--chalk);
+}
+
+.tg-q-day {
+    margin: 0 0 16px;
+    font-family: var(--us-mono);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--concrete-3);
+}
+
+/* One answer. Two of these sit in a column on a phone and a row
+   on a wide screen. */
+.tg-a {
+    padding: 16px 18px;
+    background: var(--machine);
+    border: 1px solid var(--concrete-1);
+    border-radius: 2px;
+    /* The accent edge is which side of the exchange this is. It is
+       ALWAYS paired with a written name above it, so the colour is
+       never the only thing distinguishing them. */
+    border-left-width: 3px;
+}
+.tg-a--mine   { border-left-color: var(--concrete-4); }
+.tg-a--theirs { border-left-color: var(--blue-light); }
+
+.tg-a-who {
+    margin: 0 0 8px;
+    font-family: var(--us-mono);
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--concrete-4);
+}
+.tg-a--theirs .tg-a-who { color: var(--blue-glow); }
+
+/* The answer text. Prose measure, prose leading. */
+.tg-a-text {
+    margin: 0;
+    font-size: 1.02rem;
+    line-height: 1.6;
+    color: var(--chalk-dim);
+}
+.tg-a-text + .tg-a-text { margin-top: 0.7em; }
+
+.tg-pair {
+    display: grid;
+    gap: 12px;
+    margin: 0;
+}
+@media (min-width: 720px) {
+    /* Side by side only when there is room for two readable
+       measures. Below this they stack, which is also the order
+       they are read in. */
+    .tg-pair {
+        grid-template-columns: 1fr 1fr;
+        align-items: start;
+    }
+}
+
+/* The sealed half: a card where their answer WOULD be, saying
+   what is missing. It is not their answer hidden — there is
+   nothing to hide, the server never sent one. */
+.tg-a--sealed {
+    border-left-color: var(--concrete-2);
+    border-style: dashed;
+    border-left-style: solid;
+}
+.tg-a-sealed-note {
+    margin: 0;
+    font-size: 0.96rem;
+    line-height: 1.55;
+    color: var(--concrete-4);
+}
+
+/* The one line that explains the mechanic, shown while a day is
+   still sealed. It earns its place: without it, "your answer is
+   in, nothing here yet" reads like a bug. */
+.tg-q-rule {
+    margin: 14px 0 0;
+    font-family: var(--us-mono);
+    font-size: 0.7rem;
+    line-height: 1.6;
+    letter-spacing: 0.04em;
+    color: var(--concrete-3);
+    max-width: 52ch;
+}
+
+/* ---------- past days -------------------------------------- */
+
+.tg-past {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 14px;
+}
+
+.tg-past-item {
+    padding: 14px 0 0;
+    border-top: 1px solid var(--concrete-1);
+}
+
+.tg-past-day {
+    margin: 0 0 4px;
+    font-family: var(--us-mono);
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--concrete-3);
+}
+
+.tg-past-prompt {
+    margin: 0 0 10px;
+    font-size: 1rem;
+    font-weight: 600;
+    line-height: 1.35;
+    color: var(--chalk-dim);
+}
+
+/* A past day nobody completed. Says so in words. */
+.tg-past-half {
+    margin: 0;
+    font-size: 0.92rem;
+    line-height: 1.55;
+    color: var(--concrete-3);
+}
+
+/* ============================================================
+   4. THE LIST
+
+   A column, not a grid. Each row is a tick control, the line
+   itself, and who suggested it — and the byline is not
+   decoration: "he wants to do this" and "she wants to do this"
+   are different pieces of information and the list would be
+   flatter without them.
+   ============================================================ */
+
+.tg-items {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 2px;
+}
+
+.tg-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--concrete-1);
+}
+
+/* The tick is a real submit button inside a real form, so it
+   works with no JavaScript. Square, 44px, and its accessible
+   name is written in the markup ("mark <x> as done") rather
+   than being carried by the glyph. */
+.tg-tick {
+    flex: 0 0 auto;
+    /* Positioning context for the .tg-sr name inside it — see .tg-sr. */
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    background: transparent;
+    border: 1px solid var(--concrete-2);
+    border-radius: 2px;
+    color: var(--concrete-4);
+    font-family: var(--us-mono);
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+    transition: border-color 160ms ease, color 160ms ease;
+}
+.tg-tick:hover {
+    border-color: var(--blue-light);
+    color: var(--blue-glow);
+}
+.tg-tick:focus-visible {
+    outline: 2px solid var(--blue-light);
+    outline-offset: 2px;
+}
+/* Done: the mark is a real character in the markup, so it
+   survives forced-colours and a screen reader reads the
+   button's own label either way. */
+.tg-tick--done {
+    border-color: var(--blue-light);
+    color: var(--blue-glow);
+}
+
+.tg-item-body {
+    flex: 1 1 auto;
+    min-width: 0;   /* so a long unbroken line wraps instead of stretching the row */
+    padding-top: 3px;
+}
+
+.tg-item-text {
+    margin: 0;
+    font-size: 1.02rem;
+    line-height: 1.45;
+    color: var(--chalk-dim);
+    overflow-wrap: anywhere;
+}
+
+/* A done line is struck through AND says "done" in its byline.
+   The strike alone would be a state carried by decoration, which
+   is exactly what the wing's rules forbid — and line-through is
+   invisible to a screen reader. */
+.tg-item--done .tg-item-text {
+    text-decoration: line-through;
+    text-decoration-thickness: 1px;
+    color: var(--concrete-3);
+}
+
+.tg-item-by {
+    margin: 4px 0 0;
+    font-family: var(--us-mono);
+    font-size: 0.66rem;
+    text-transform: uppercase;
+    letter-spacing: 0.13em;
+    color: var(--concrete-3);
+}
+
+/* Retracting your own line. Text-scale, low contrast on purpose
+   — it is the least likely thing anybody wants — but still
+   5.76:1 and still a 44px target. */
+.tg-item-drop {
+    flex: 0 0 auto;
+}
+.tg-drop {
+    /* Positioning context for the .tg-sr name inside it — see .tg-sr. */
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0 8px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 2px;
+    color: var(--concrete-3);
+    font-family: var(--us-mono);
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    cursor: pointer;
+}
+.tg-drop:hover { color: var(--chalk-dim); border-color: var(--concrete-2); }
+.tg-drop:focus-visible {
+    outline: 2px solid var(--blue-light);
+    outline-offset: 2px;
+}
+
+/* The count, and the cap when it is close. */
+.tg-list-meta {
+    margin: 12px 0 0;
+    font-family: var(--us-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.04em;
+    color: var(--concrete-3);
+}
+
+/* The add row: one field and one button, side by side when
+   there is room. */
+.tg-add {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: flex-start;
+    margin: 16px 0 0;
+}
+.tg-add .tg-input {
+    flex: 1 1 16rem;
+    width: auto;
+}
+
+.tg-empty {
+    margin: 0;
+    font-size: 1rem;
+    line-height: 1.6;
+    color: var(--concrete-4);
+    max-width: 52ch;
+}
+
+/* ============================================================
+   MOTION
+
+   Only the shared transitions exist, and they are all
+   colour/background. Nothing here moves anything, so this block
+   is small on purpose — but it is present because a user who has
+   asked for less motion should get none of it rather than
+   "almost none".
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+    .tg-btn,
+    .tg-tick,
+    .tg-input,
+    .tg-textarea {
+        transition: none;
+    }
+}
+
+/* ============================================================
+   FORCED COLOURS
+
+   In a high-contrast mode the browser replaces every colour
+   above, which would flatten the mine/theirs accent edges and
+   the done/not-done tick into each other. That is FINE and is
+   precisely why every one of those states is also written in
+   words in the markup — but two things are worth restoring
+   explicitly so the structure does not disappear.
+   ============================================================ */
+@media (forced-colors: active) {
+    /* Keep the two halves of an exchange visibly separate boxes,
+       using the system border colour rather than our own. */
+    .tg-a {
+        border: 1px solid CanvasText;
+        border-left-width: 3px;
+    }
+    /* A done tick must still read as different from an undone one
+       without relying on our blue. */
+    .tg-tick--done {
+        forced-color-adjust: none;
+        border-color: Highlight;
+        color: Highlight;
+    }
+}

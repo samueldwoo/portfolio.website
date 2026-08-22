@@ -21,8 +21,10 @@
    The album art is the only warm, saturated thing on the
    screen. Everything architectural is black, concrete and blue.
    There is not a single `filter`, `mix-blend-mode`, `opacity`
-   or overlay on .song-art or .archive-thumb anywhere below, and
-   there must never be one. The blue is LIGHT in this room — it
+   or overlay on .song-art or .mini-thumb anywhere below (the
+   latter was .archive-thumb before the archive became rows of
+   days — if you are renaming an art class, this line is part of
+   the rename), and there must never be one. The blue is LIGHT in this room — it
    arrives as rim, wash and glow AROUND objects. The moment it
    is painted ON the art, the room stops being a room and
    becomes a colour scheme, and the whole thesis of the wing
@@ -37,9 +39,19 @@
 /* ============================================================
    SHARED PIECES
 
-   Both pages render the same card: hers to read, mine to check
-   what I just posted. One implementation, so a change to the
-   card cannot make the preview lie.
+   Both pages render the same card, TWICE — once per side of the
+   day. One implementation, so a change to the card cannot make
+   one side look more important than the other, and cannot make
+   my preview lie about what she sees.
+
+   THE SYMMETRY IS STRUCTURAL, NOT A COINCIDENCE OF VALUES. There
+   is no ".song--mine { font-size: bigger }" anywhere below and
+   there must never be one. The only thing the two side modifiers
+   are allowed to change is WHICH EDGE THE LIGHT COMES FROM,
+   because that is identity, not hierarchy. Anything that changes
+   size, weight, spacing or ground between the sides re-creates
+   the exact problem this rewrite existed to remove: her half
+   reading as a footnote to mine.
    ============================================================ */
 
 /* Section label. Mono, uppercase, letterspaced — the same
@@ -54,39 +66,103 @@
     margin: 0 0 12px;
 }
 
-/* ---------- the card --------------------------------------- */
+/* ============================================================
+   THE PAIR
+
+   One day, two slots, side by side. The slots are `1fr 1fr` and
+   never `auto`, so the column widths cannot depend on which of us
+   wrote more that day — a day where I typed a paragraph and she
+   typed four words must still render two equal halves.
+
+   `align-items: start` because the two cards are genuinely
+   different heights: his carries the reaction buttons, hers
+   carries the posting form. Stretching them to match would put
+   dead space inside the shorter one, which reads worse than two
+   honest heights.
+
+   ONE COLUMN FIRST. The 2-up only arrives at --pair-2up (940px),
+   which on a phone means the day is read top to bottom — and the
+   order is his slot, then hers. That is the only place any
+   ordering exists between the two, it is source order, and it is
+   the price of a linear medium. It is also why the side is
+   LABELLED IN WORDS on every card ("me" / "you"), so nothing
+   depends on position.
+
+   WHY 940 AND NOT 861. At 861 the columns are at their narrowest
+   exactly when they first appear: /stronger/dj's wrap is 860px, so
+   two columns there are ~310px, and after the card padding and the
+   art the text column lands around 176px — narrow enough that a
+   32px title wrapped every five characters. 940 is the width at
+   which both wraps (980 in the vault, 860 in the booth) give a
+   text column that can hold a track name. The archive rows use the
+   same number, so the whole feature has ONE breakpoint rather than
+   two that drift.
+   ============================================================ */
+
+.pair {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: clamp(14px, 3vw, 20px);
+    align-items: start;
+}
+
+@media (min-width: 940px) {
+    .pair {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+/* ---------- the card ---------------------------------------
+   ONE template, rendered once per side. The card is a vertical
+   stack of blocks — head, note, player, links — rather than the
+   old art-beside-everything row, and that is what lets two of
+   them sit next to each other at any width without the note
+   ending up in a 200px gutter. */
 
 .song {
     position: relative;
     display: grid;
-    /* Art column sized in ch-free absolute terms so it stays
-       square and predictable next to fluid text. */
-    grid-template-columns: minmax(0, 168px) minmax(0, 1fr);
-    gap: clamp(16px, 3vw, 26px);
-    align-items: start;
-    padding: clamp(16px, 3vw, 24px);
+    gap: clamp(14px, 2.6vw, 20px);
+    padding: clamp(16px, 3vw, 22px);
     background: var(--machine);
     border: 1px solid var(--concrete-1);
     border-radius: 2px;
-    /* The rim light. A 1px inset highlight along the top edge is
-       what a fixture overhead actually does to a matte black
-       surface, and it costs nothing. Not a border: a border on
-       one side would shift the box. */
-    box-shadow: inset 0 1px 0 rgba(62, 123, 255, 0.28);
+    /* min-width so a long unbroken title cannot widen the grid
+       column past its 1fr share and unbalance the pair. */
+    min-width: 0;
 }
 
-/* One column on a phone. The art leads, because the art is the
-   thing that has colour in it. */
-@media (max-width: 620px) {
-    .song {
-        grid-template-columns: minmax(0, 1fr);
-    }
+/* Art beside the identity block, then everything else full
+   width. The art stays modest on purpose: two cards on one
+   phone screen is the requirement, and a 320px square each would
+   have pushed the second song below two full scrolls. */
+.song-head {
+    display: grid;
+    grid-template-columns: minmax(0, 104px) minmax(0, 1fr);
+    gap: 14px;
+    align-items: start;
 }
+
+/* The art stays 104px at EVERY width, deliberately. It grew to
+   132px above the 2-up breakpoint for one revision, which is
+   exactly backwards: that is the width at which the card is
+   HALVED, so the art was taking a bigger bite out of a smaller
+   text column. One number, no breakpoint, and the title gets the
+   room. */
 
 /* The wash behind the art: a soft pool of blue on the wall the
-   record is leaning against. Sits BEHIND (z-index 0 vs the
-   art's 1) and is clipped to the frame, so it never touches the
-   image itself. */
+   record is leaning against.
+
+   It sits BEHIND the art (z-index 0 against the art's 1), and
+   that stacking — not clipping — is what keeps it off the image.
+   An earlier version of this comment claimed the wash was
+   "clipped to the frame", which it is not: `isolation: isolate`
+   creates a stacking context, it does not overflow-clip, so the
+   gradient does bleed a few pixels past the frame on purpose. It
+   stays inside the card because the card's padding is larger
+   than the bleed. Do not "fix" that with overflow: hidden — it
+   would cut the pool off at a hard edge, which is the one thing
+   a pool of light does not have. */
 .song-frame {
     position: relative;
     display: block;
@@ -97,7 +173,7 @@
 .song-frame::before {
     content: "";
     position: absolute;
-    inset: -14px -14px 6px -14px;
+    inset: -12px -12px 4px -12px;
     background: radial-gradient(70% 60% at 50% 0%, rgba(62, 123, 255, 0.22), transparent 70%);
     z-index: 0;
     pointer-events: none;
@@ -109,7 +185,6 @@
     z-index: 1;
     display: block;
     width: 100%;
-    max-width: 320px;
     aspect-ratio: 1 / 1;
     object-fit: cover;
     background: var(--void);
@@ -126,13 +201,12 @@
     display: grid;
     place-items: center;
     width: 100%;
-    max-width: 320px;
     aspect-ratio: 1 / 1;
     background: var(--concrete-1);
     border: 1px solid var(--concrete-2);
     border-radius: 2px;
     font-family: var(--us-display);
-    font-size: 2rem;
+    font-size: 1.6rem;
     font-weight: 700;
     letter-spacing: -0.04em;
     color: var(--concrete-3);
@@ -140,6 +214,32 @@
 
 .song-body {
     min-width: 0; /* lets long titles wrap instead of blowing out the grid */
+}
+
+/* ---------- who ---------------------------------------------
+   WHOSE SONG THIS IS, IN WORDS. This is the primary identity
+   carrier, not a caption on one: the light edge says the same
+   thing but only to someone who can see it, and the two brand
+   blues cannot be made to differ in hue without also differing
+   in brightness (see .song--his / .song--hers below). So the word
+   does the work, it is on every card on both pages, and it is the
+   <h2> that makes the two halves peers in the document outline as
+   well as on screen.
+
+   IDENTICAL ON BOTH SIDES — same size, same weight, same tracking,
+   same colour. Any per-side value here would be a thumb on the
+   scale. */
+.song-side {
+    font-family: var(--us-mono);
+    font-size: 0.72rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: var(--blue-light);
+    /* No margin: this is a grid item of .song and the card's `gap`
+       is the single authority on spacing between blocks. See
+       .song-note. */
+    margin: 0;
 }
 
 .song-day {
@@ -153,7 +253,13 @@
 
 .song-title {
     font-family: var(--us-display);
-    font-size: clamp(1.4rem, 4.4vw, 2rem);
+    /* Sized for HALF A CARD, because that is what it now lives in.
+       This was clamp(1.4rem, 4.4vw, 2rem) when a card was the full
+       width of the page — which pinned it to its 32px ceiling from
+       ~727px upward, i.e. it was at its largest in the layout where
+       its column is at its smallest. A title is not the headline of
+       this page; the day is. */
+    font-size: clamp(1.15rem, 2.4vw, 1.55rem);
     font-weight: 600;
     letter-spacing: -0.03em;
     line-height: 1.15;
@@ -186,7 +292,11 @@
    strip of light rather than as a decorative accent bar. */
 .song-note {
     position: relative;
-    margin: clamp(16px, 3vw, 22px) 0 0;
+    /* No margin: the card is a grid and its `gap` is the single
+       authority on spacing between blocks. A margin here would
+       add to that gap on one side only, and the two cards would
+       stop being the same card. */
+    margin: 0;
     padding: 2px 0 2px 16px;
     border-left: 1px solid var(--blue-light);
     font-family: var(--us-display);
@@ -215,7 +325,7 @@
    deliberately renders no iframes at all, because sixty
    embedded players is a page that never finishes loading. */
 .song-player {
-    margin: clamp(18px, 3.5vw, 26px) 0 0;
+    margin: 0;  /* card gap owns spacing — see .song-note */
     background: var(--void);
     border: 1px solid var(--concrete-1);
     border-radius: 2px;
@@ -232,7 +342,7 @@
 /* Fallback when there is no embed to show, and the "open in
    Spotify" escape hatch under the player. */
 .song-links {
-    margin: 12px 0 0;
+    margin: 0;  /* card gap owns spacing — see .song-note */
     font-family: var(--us-mono);
     font-size: 0.72rem;
     text-transform: uppercase;
@@ -250,31 +360,98 @@
     outline-offset: 3px;
 }
 
-/* ---------- nothing posted yet ------------------------------ */
-.song-blank {
-    padding: clamp(26px, 6vw, 44px) clamp(18px, 4vw, 28px);
-    background: var(--machine);
-    border: 1px dashed var(--concrete-2);
-    border-radius: 2px;
-    text-align: left;
+/* ---------- WHICH SIDE, AND WHERE THE LIGHT COMES FROM -------
+   The ONLY difference between the two cards: WHICH EDGE. Same
+   colour, same alpha, same 1px, same ground, same border, same
+   padding, same type. A fixture above versus a fixture to the
+   left.
+
+   THIS WAS MEASURED, AND THE FIRST ATTEMPT FAILED IT. Her card
+   originally used --blue-glow at 0.42 against his --blue-light at
+   0.30, and her byline used --blue-glow (8.36:1) against his
+   --blue-light (4.72:1) — three signals, all ~1.7x brighter on
+   her side. That is not identity, it is emphasis, and it did not
+   fix the old asymmetry so much as invert it: before this rewrite
+   her half read as a footnote, and the "fix" made it the featured
+   one. An adversarial review computed the ratios.
+
+   The two brand blues simply do not have matching luminance, so
+   hue cannot be the identity carrier without also being a
+   hierarchy. What carries identity instead is the WORD on every
+   card (.song-side, "me" / "you") plus the edge below — one of
+   which a screen reader can read out, which the colour never
+   could.
+
+   Not a border on one edge: a border changes the box, and a box
+   that is 1px different on one side is a box that is not equal.
+   Both of these are inset shadows, so the geometry is identical
+   and only the light moves. */
+
+.song--his {
+    /* Overhead. What a fixture above a matte black surface
+       actually does to its top edge. */
+    box-shadow: inset 0 1px 0 rgba(62, 123, 255, 0.30);
 }
 
-.song-blank p {
+.song--hers {
+    /* The same fixture, same intensity, on the wall to the left. */
+    box-shadow: inset 1px 0 0 rgba(62, 123, 255, 0.30);
+}
+
+/* ---------- a slot with nothing in it yet --------------------
+   THE COMMON CASE. For most of a year exactly one of us will have
+   posted by the time the other opens this page, so this state is
+   not an error, not a warning, and not a countdown. It is dashed
+   rather than solid — the visual language the wing already uses
+   for "a room that is not built yet" — it keeps the side's own
+   rim light so the slot still reads as that person's, and it
+   carries no red, no icon and no word like "missing", "waiting"
+   or "yet to".
+
+   THE BORDER STAYS --concrete-1, THE SAME TOKEN THE FILLED CARD
+   USES. It was --concrete-2 for a revision, which measures 4.00:1
+   against the page where --concrete-1 is 1.50:1 — so on a
+   one-sided day, the day this file keeps calling ordinary, the
+   EMPTY half was the most strongly outlined thing on the page and
+   the eye went straight to the absence. Dashed instead of solid,
+   plus a recessed ground, is the whole signal. It is strictly
+   quieter than the card beside it, which is the point. */
+.song[data-open] {
+    border-style: dashed;
+    border-color: var(--concrete-1);
+    /* Slightly recessed ground: an open slot is a space in the
+       room, not an object in it. */
+    background: color-mix(in srgb, var(--machine) 55%, var(--void));
+}
+
+/* color-mix is ~95% supported and the failure is a card that
+   is simply --machine like its partner. Stated so nobody
+   "fixes" the missing fallback with an opacity, which would
+   drag the prose under contrast. */
+@supports not (background: color-mix(in srgb, #000 50%, #fff)) {
+    .song[data-open] { background: var(--machine); }
+}
+
+.song-open {
     margin: 0;
-    font-size: 1.05rem;
+    font-family: var(--us-display);
+    font-size: clamp(1rem, 2.5vw, 1.1rem);
     line-height: 1.6;
-    color: var(--concrete-4);
-    max-width: 44ch;
+    color: var(--concrete-5);
+    max-width: 40ch;
 }
 
-.song-blank strong {
+/* The second sentence: the honest detail under the invitation.
+   --concrete-3 is the wing's floor for text (5.76:1 on void,
+   4.96:1 on machine) and this is the dimmest thing on the card. */
+.song-open-sub {
     display: block;
-    font-family: var(--us-display);
-    font-size: clamp(1.3rem, 4vw, 1.7rem);
-    font-weight: 600;
-    letter-spacing: -0.03em;
-    color: var(--chalk);
-    margin: 0 0 10px;
+    margin-top: 8px;
+    font-family: var(--us-mono);
+    font-size: 0.72rem;
+    line-height: 1.6;
+    letter-spacing: 0.04em;
+    color: var(--concrete-3);
 }
 
 /* ============================================================
@@ -297,7 +474,11 @@
    item, sometimes outside the formatting context entirely — and
    the fix for that is to not put it in one. */
 .react-bar {
-    margin: clamp(18px, 3.5vw, 26px) 0 0;
+    /* Sits inside HIS card, after his player, because a reaction
+       is given to a specific song and a bar floating between two
+       cards could not say which one. The card's grid gap owns the
+       spacing above it. */
+    margin: 0;
     padding: 0;
     border: 0;
     /* min-inline-size: fieldset defaults to min-content, which
@@ -429,11 +610,20 @@
 }
 
 /* ============================================================
-   THE ARCHIVE
+   THE ARCHIVE — A LEDGER OF DAYS, TWO SLOTS PER DAY
 
-   A list, not a grid. Sixty mornings read as a column of days,
-   and a column can carry a date without the date becoming
-   decoration. NO iframes here — see .song-player.
+   Was a flat list of his songs with her half named inside the
+   row as plain text. It had to be plain text, because the row
+   itself was one big <a> and an <a> inside an <a> is invalid —
+   so in the old archive HER SONGS WERE NOT CLICKABLE. That is a
+   real capability the pair layout hands back: a row is now a
+   date plus up to two SIBLING links, and both are real links to
+   real tracks.
+
+   Hairlines between rows rather than a box per row: this is a
+   ledger, and boxes would make every day shout. NO iframes here
+   — sixty embedded players is a page that never finishes
+   loading. See .song-player.
    ============================================================ */
 
 .archive {
@@ -442,37 +632,81 @@
     list-style: none;
 }
 
-.archive-item {
+.archive-row {
+    padding: 12px 0;
+    border-bottom: 1px solid var(--concrete-1);
+}
+
+.archive-row:first-child {
+    border-top: 1px solid var(--concrete-1);
+}
+
+/* The day, stated once for the whole row rather than repeated on
+   each of the two tracks. */
+.archive-date {
+    font-family: var(--us-mono);
+    font-size: 0.64rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--concrete-3);
+    margin: 0 0 8px;
+}
+
+/* Two slots, equal, exactly like .pair above and for the same
+   reason.
+
+   BUT IT IS NOT .pair, AND THE DIFFERENCE IS THE POINT. Today
+   always shows BOTH slots, because both are still actionable —
+   an empty one is an invitation. A past day shows only what
+   happened: one track, packed into the first cell, and no second
+   slot at all. There is nothing to invite on a day that is over,
+   and a ghost slot on every one-sided day in the archive would
+   turn a year of ordinary days into a year of gaps.
+
+   So a one-sided row has no placeholder, no dash, no "she
+   didn't" and no hole — just one track that says whose it is. */
+.archive-tracks {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+}
+
+/* Same 940px as .pair, on purpose: one breakpoint for the whole
+   feature. Two that drift apart is how a page ends up with the
+   day 2-up and the archive stacked at some width nobody tested. */
+@media (min-width: 940px) {
+    .archive-tracks {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+    }
+}
+
+.mini {
     display: grid;
     grid-template-columns: 56px minmax(0, 1fr);
-    gap: 14px;
+    gap: 12px;
     align-items: center;
-    padding: 12px 14px;
-    /* Hairline rules between rows rather than a box per row: this
-       is a ledger of days, and boxes would make each one shout. */
-    border-bottom: 1px solid var(--concrete-1);
+    padding: 6px 8px;
+    border-radius: 2px;
     text-decoration: none;
     color: inherit;
-    /* 56 + 12 + 12 padding keeps the whole row past 44px tall. */
+    /* 56px thumb + 6px padding each side clears the 44px floor. */
     min-height: 56px;
     transition: background 160ms ease;
 }
 
-.archive-item:first-child {
-    border-top: 1px solid var(--concrete-1);
-}
-
-a.archive-item:hover {
+a.mini:hover {
     background: var(--machine);
 }
 
-a.archive-item:focus-visible {
+a.mini:focus-visible {
     outline: 2px solid var(--blue-light);
-    outline-offset: -2px;
+    outline-offset: -1px;
 }
 
-/* Same rule as the hero art: warm, unfiltered, untouched. */
-.archive-thumb {
+/* Same rule as every other piece of album art in this file:
+   warm, unfiltered, untouched. */
+.mini-thumb {
     width: 56px;
     height: 56px;
     object-fit: cover;
@@ -482,7 +716,7 @@ a.archive-item:focus-visible {
     border-radius: 2px;
 }
 
-.archive-thumb--empty {
+.mini-thumb--empty {
     display: grid;
     place-items: center;
     width: 56px;
@@ -495,26 +729,41 @@ a.archive-item:focus-visible {
     color: var(--concrete-3);
 }
 
-.archive-body {
+.mini-body {
     min-width: 0;
 }
 
-.archive-day {
+/* Whose track, in words, on every single one. This is what makes
+   an empty cell unambiguous: the row never has to be read as
+   "somebody is missing", because the track that IS there says
+   who it belongs to. */
+.mini-side {
+    display: block;
     font-family: var(--us-mono);
+    /* 0.64rem, matching the date line, and NOT the 0.6rem this
+       started at: for a sighted reader this is the only thing in
+       the archive that says whose track a row belongs to, and it
+       has no business being the smallest type in the file. (An
+       assistive reader gets it from the link's aria-label either
+       way, which is exactly why it was easy to under-size.) */
     font-size: 0.64rem;
     text-transform: uppercase;
-    letter-spacing: 0.14em;
-    color: var(--concrete-3);
-    margin: 0;
+    letter-spacing: 0.18em;
+    /* One colour for both sides, like .song-side: --blue-light is
+       5.42:1 on void, --blue-glow is 9.7:1, and using both would
+       make one side's rows brighter than the other's. The WORD is
+       the identity. */
+    color: var(--blue-light);
 }
 
-.archive-title {
+.mini-title {
+    display: block;
     font-family: var(--us-display);
     font-size: 1rem;
     font-weight: 500;
     letter-spacing: -0.015em;
     color: var(--chalk);
-    margin: 3px 0 0;
+    margin: 2px 0 0;
     /* One line, clipped. A long remaster suffix must not push the
        row height around. */
     overflow: hidden;
@@ -522,37 +771,25 @@ a.archive-item:focus-visible {
     white-space: nowrap;
 }
 
-.archive-note {
-    font-size: 0.84rem;
+.mini-note {
+    display: block;
+    font-size: 0.82rem;
     line-height: 1.4;
     color: var(--concrete-4);
-    margin: 4px 0 0;
+    margin: 3px 0 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-/* Her reactions on an old day, as small glyphs. Decorative
-   duplicates of the aria-label on the wrapper. */
-.archive-reacts {
-    margin: 5px 0 0;
+/* Her reactions on an old day, as small glyphs, on HIS track —
+   which is the track they were given to. Decorative duplicates
+   of the words already in that link's aria-label. */
+.mini-reacts {
+    display: block;
+    margin: 4px 0 0;
     font-size: 0.85rem;
     letter-spacing: 0.12em;
-}
-
-/* Her reply, named inside the row. Not a link: an <a> inside an
-   <a> is invalid and browsers drop one of them unpredictably, so
-   this is text and the words are also in the row's aria-label. */
-.archive-reply {
-    display: block;
-    font-family: var(--us-mono);
-    font-size: 0.7rem;
-    letter-spacing: 0.06em;
-    color: var(--blue-glow);
-    margin: 4px 0 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
 }
 
 .archive-empty {
@@ -562,63 +799,35 @@ a.archive-item:focus-visible {
 }
 
 /* ============================================================
-   THE EXCHANGE — HER HALF OF A DAY
+   THE ONE RULE STILL HOLDS ON BOTH CARDS
 
-   The feature stopped being a broadcast when she got a way to
-   answer with a song of her own. The visual job here is
-   SYMMETRY WITHOUT SAMENESS: her card must not read as a
-   footnote stapled under mine, and it must not read as a second
-   copy of mine either. So it is the same card — same grid, same
-   type, same art treatment — set one step deeper into the room
-   and lit from the other side.
+   Her album art gets no filter, no tint, no blend mode, exactly
+   like his. The only thing that differs between the two cards is
+   which edge the light arrives from — see .song--his /
+   .song--hers above.
 
-   THE ONE RULE STILL HOLDS. Her album art gets no filter, no
-   tint, no blend mode, exactly like mine. The only thing that
-   differs is the LIGHT AROUND IT: a blue edge on the left rather
-   than a rim along the top, which is what a fixture on the
-   opposite wall would actually do.
+   There was a `.song-day--hers` here that recoloured her byline
+   to --blue-glow. It is gone, along with the per-side class in
+   both templates: --blue-glow measures 8.36:1 on the card ground
+   against --blue-light's 4.72:1, so "the hotter end of the same
+   light" was in practice "hers is brighter". Identity lives in
+   the word, not the hue.
    ============================================================ */
 
-/* Deeper into the room: void ground instead of machine, so it
-   sits behind my card in the same way a reply sits after a
-   statement. The left edge is the light source. */
-.song--reply {
-    background: var(--void);
-    border-left: 2px solid var(--blue-light);
-    /* Replaces the top rim light rather than adding to it — two
-       light sources on one small card is a lighting rig, not a
-       room. */
-    box-shadow: inset 1px 0 0 rgba(62, 123, 255, 0.22);
-}
+/* ---------- the posting form -------------------------------
+   Lives INSIDE her slot, so the empty half of a day is where the
+   action is rather than a gap with a form somewhere below it.
 
-/* Her byline. --blue-glow rather than the --blue-light my own
-   card uses: the hotter end of the same light, so the two lines
-   are obviously a pair and obviously not the same speaker. */
-.song-day--reply {
-    color: var(--blue-glow);
-}
-
-/* The prompt when she has not answered yet. Prose, not a label:
-   it is asking for something. */
-.reply-lede {
-    margin: 0 0 clamp(16px, 3vw, 22px);
-    font-family: var(--us-display);
-    font-size: clamp(1rem, 2.6vw, 1.12rem);
-    line-height: 1.6;
-    color: var(--concrete-5);
-    max-width: 46ch;
-}
-
-/* ---------- the send form ----------------------------------
-   <details> so a day she has already answered is a card and not
-   a big empty form, and so it collapses with no JavaScript at
-   all. The summary is the disclosure control, which means it has
-   to obey the same rules as a button: 44px of target, a visible
+   <details> so a day she has already posted is a card and not a
+   big empty form, and so it collapses with no JavaScript at all.
+   The summary is the disclosure control, which means it has to
+   obey the same rules as a button: 44px of target, a visible
    focus ring, and a state that is not carried by colour alone
    (the marker rotates, and the words change). */
 
 .reply-details {
-    margin: clamp(18px, 3.5vw, 26px) 0 0;
+    /* Inside HER slot; the card grid owns the spacing above it. */
+    margin: 0;
 }
 
 .reply-summary {
@@ -668,107 +877,24 @@ a.archive-item:focus-visible {
 
 /* Reuses .dj-form / .dj-field / .dj-input / .dj-textarea /
    .dj-submit wholesale — see the FORMS section below, which is
-   shared by both sides on purpose. The only difference is the
-   measure: her form sits in the full-width vault page, and a
-   text input eight hundred pixels wide is a text input nobody
-   can see the start of. */
-.reply-form {
-    max-width: 560px;
-}
+   shared by both sides on purpose. Both of us fill in the same
+   fields with the same caps; that is what makes the two cards
+   able to render the same lines. */
 
-/* ---------- the resurfaced morning -------------------------
-   A callout, not a ledger row: it is one thing being singled
-   out, so it gets a box where the archive gets hairlines. A
-   LINK and not an embed — see .song-player. */
+/* ---------- the resurfaced day -----------------------------
+   A callout, not a ledger row: it is one day being singled out,
+   so it gets a box where the archive gets hairlines. It holds
+   the SAME .archive-tracks grid the archive rows use, because it
+   is a day and days have two slots — the old version resurfaced
+   one of his songs and structurally could not bring back hers.
+   LINKS and not embeds — see .song-player. */
 
 .again {
-    display: grid;
-    grid-template-columns: 72px minmax(0, 1fr);
-    gap: 16px;
-    align-items: center;
     padding: 14px;
     background: var(--machine);
     border: 1px solid var(--concrete-1);
     border-left: 2px solid var(--concrete-4);
     border-radius: 2px;
-    text-decoration: none;
-    color: inherit;
-    min-height: 56px;
-    transition: border-color 160ms ease, background 160ms ease;
-}
-
-.again:hover {
-    background: var(--machine-2);
-    border-left-color: var(--blue-light);
-}
-
-.again:focus-visible {
-    outline: 2px solid var(--blue-light);
-    outline-offset: 2px;
-}
-
-/* Warm, unfiltered, untouched. Same rule as every other piece
-   of album art in this file. */
-.again-thumb {
-    width: 72px;
-    height: 72px;
-    object-fit: cover;
-    display: block;
-    background: var(--void);
-    border: 1px solid var(--concrete-1);
-    border-radius: 2px;
-}
-
-.again-thumb--empty {
-    display: grid;
-    place-items: center;
-    background: var(--concrete-1);
-    border-color: var(--concrete-2);
-    font-family: var(--us-mono);
-    font-size: 0.72rem;
-    color: var(--concrete-3);
-}
-
-.again-body {
-    min-width: 0;
-}
-
-.again-day {
-    display: block;
-    font-family: var(--us-mono);
-    font-size: 0.64rem;
-    text-transform: uppercase;
-    letter-spacing: 0.14em;
-    color: var(--concrete-3);
-}
-
-.again-title {
-    display: block;
-    font-family: var(--us-display);
-    font-size: 1.05rem;
-    font-weight: 500;
-    letter-spacing: -0.015em;
-    color: var(--chalk);
-    margin: 4px 0 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.again-note {
-    /* Two lines of the note, then stop. A resurfaced morning is a
-       nudge to go and read it again, not the reading itself.
-       -webkit-box is still the only interoperable way to clamp by
-       line count; it is prefixed but universally supported, and
-       the graceful failure is an unclamped note. */
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-    font-size: 0.84rem;
-    line-height: 1.4;
-    color: var(--concrete-4);
-    margin: 4px 0 0;
 }
 
 /* ============================================================
@@ -877,29 +1003,31 @@ a.archive-item:focus-visible {
 }
 
 /* ============================================================
-   /stronger/dj — WHAT CAME BACK
+   WHAT SHE SAID — the read-only view of her reactions
 
-   Her reactions, on my side of the wall. This block exists
-   because the round trip the whole feature is built around was
-   previously invisible to me: reactions are written by her page,
-   which needs a SESSION token that my admin cookie deliberately
-   is not, so there was nowhere I could ever see one.
+   Rendered on /stronger/dj, INSIDE his card, on the song the
+   reactions were given to. It used to be a separate "what came
+   back" block hanging under both cards, which made it ambiguous
+   which song it referred to the moment there were two songs on
+   the page.
+
+   The block exists at all because the round trip the whole
+   feature is built around was invisible from my side: reactions
+   are written by her page, which needs a SESSION token that my
+   admin cookie deliberately is not, so there was nowhere I could
+   ever see one.
    ============================================================ */
 
-.her {
-    margin: clamp(18px, 3.5vw, 26px) 0 0;
-}
-
-.her-reacts {
+.said {
     display: flex;
     flex-wrap: wrap;
-    gap: 10px;
+    gap: 8px;
     margin: 0;
     padding: 0;
     list-style: none;
 }
 
-.her-reacts li {
+.said li {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -913,7 +1041,7 @@ a.archive-item:focus-visible {
 
 /* The words, always paired with the emoji. Never the glyph
    alone: an emoji is not a label. */
-.her-react-label {
+.said-label {
     font-family: var(--us-mono);
     font-size: 0.62rem;
     text-transform: uppercase;
@@ -921,7 +1049,7 @@ a.archive-item:focus-visible {
     color: var(--blue-glow);
 }
 
-.her-quiet {
+.said-quiet {
     margin: 0;
     font-family: var(--us-mono);
     font-size: 0.74rem;
@@ -990,8 +1118,12 @@ a.archive-item:focus-visible {
    placeholders.
    ============================================================ */
 
+/* Widened from 640px when /stronger/dj started rendering the day as a
+   PAIR: at 640 the two slots were ~300px each and the cards were
+   cramped for no reason. The form keeps its own narrow measure below,
+   so nothing about the one-handed typing case changed. */
 .dj-wrap {
-    max-width: 640px;
+    max-width: 860px;
     margin: 0 auto;
 }
 
@@ -999,6 +1131,11 @@ a.archive-item:focus-visible {
     display: grid;
     gap: 18px;
     margin: 0;
+    /* A text input eight hundred pixels wide is a text input nobody can
+       see the start of. Applies to both forms in the wing — mine on
+       /stronger/dj and hers inside her slot — because they are the same
+       form primitives filled in by two people with the same thumbs. */
+    max-width: 560px;
 }
 
 .dj-field {
@@ -1133,8 +1270,7 @@ a.archive-item:focus-visible {
    ============================================================ */
 @media (prefers-reduced-motion: reduce) {
     .react,
-    .archive-item,
-    .again,
+    .mini,
     .dj-submit {
         transition: none;
     }

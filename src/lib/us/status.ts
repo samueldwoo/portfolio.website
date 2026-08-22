@@ -271,7 +271,7 @@ export function countdown(today: string): Countdown | null {
    ---------------------------------------------------------------------------
    WHAT IS NOT COUNTED, AND WHY
 
-   HER REPLIES. A reply is HERS — kv.ts's key spaces are split precisely so that
+   HER OWN SONGS. A reply is HERS — kv.ts's key spaces are split precisely so that
    her session cookie writes `us:reply:<date>` and my admin cookie writes
    `us:song:<date>`, and this page is hers alone (my admin token cannot open the
    vault; see today.astro). So there is no such record as "a reply from Sam" to

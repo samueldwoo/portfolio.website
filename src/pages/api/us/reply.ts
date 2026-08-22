@@ -1,5 +1,5 @@
 /**
- * POST /api/us/reply — she sends one back.
+ * POST /api/us/reply — HER HALF OF THE DAY. Not a reply. See the name note below.
  *
  * ---------------------------------------------------------------------------
  * WHY THIS ENDPOINT EXISTS AT ALL
@@ -8,17 +8,34 @@
  * receipt, and a receipt is still a broadcast with an acknowledgement stapled to
  * it: I choose, she confirms. This endpoint is the one that makes the feature
  * two-way, because it lets her CHOOSE — a track of her own, with her own note,
- * filed on the same day as mine so the day reads as an exchange rather than as a
- * transmission and a nod.
+ * filed on the same day as mine so a day is a PAIR rather than a transmission and
+ * a nod.
  *
  * Over a year of long distance that is not a nice-to-have, it is the whole point.
  * The song was always the excuse.
  *
  * ---------------------------------------------------------------------------
+ * THE PATH SAYS `reply` AND THE PRODUCT NO LONGER DOES. THAT IS DELIBERATE.
+ *
+ * Nothing she reads says "reply" any more: the two halves of a day are peers, both
+ * rendered by one card template, neither waiting on the other. The URL and the
+ * store keys (`us:reply:<date>` / `doc.replies[date]`) keep the old word anyway.
+ *
+ * Renaming the PATH would break the live no-JavaScript form on a page her phone may
+ * have had open for a week — the whole no-JS guarantee is that the form in front of
+ * her posts somewhere that exists. Renaming the KEYS is a migration whose
+ * half-applied state shows her entire history as deleted; kv.ts's header spells
+ * that out at length.
+ *
+ * So the divergence is documented rather than resolved, in both places a reader
+ * could land: `reply` is a WIRE AND STORAGE fact, "her half" is the PRODUCT fact.
+ * Do not tidy the noun without a migration and a rollback plan.
+ *
+ * ---------------------------------------------------------------------------
  * SESSION ONLY — NOT ADMIN. AND THE OTHER HALF OF THAT RULE MATTERS MORE.
  *
  * This endpoint accepts HER session cookie and refuses my admin one, for the same
- * reason /api/us/react does: a reply I could write as her is a reply that means
+ * reason /api/us/react does: a song I could post as her is a song that means
  * nothing. If I want to see the round trip work, I answer the three questions like
  * anybody else.
  *
@@ -29,6 +46,13 @@
  * enforced by convention — it is two endpoints, each naming one cookie, writing
  * two different key spaces in the store (`us:reply:*` vs `us:song:*`, or
  * `doc.replies` vs `doc.songs`). A bug in this file cannot produce a song.
+ *
+ * THE TWO HALVES BEING EQUALS ON SCREEN DID NOT SOFTEN ANY OF THAT. The pages now
+ * render one card template twice and give both sides the same weight — and the
+ * reason that is safe to show is precisely that the credentials underneath are NOT
+ * symmetric. One endpoint per identity is what makes "this half came from her" a
+ * fact rather than a caption. Never merge these two endpoints, never let either one
+ * choose its key space from a request field.
  *
  * The cookie is verified HERE with verify(), not merely by src/middleware.ts. The
  * middleware is default-deny for everything under /api/us that is not explicitly
@@ -70,8 +94,10 @@ import { SESSION_SECRET } from '../../../lib/us/config';
 import { readCookie, verify } from '../../../lib/us/session';
 import { clientKey, hit } from '../../../lib/us/ratelimit';
 import { isWingDate, putReply, wingDate, type ReplyRecord } from '../../../lib/us/kv';
-// The one parser, the one metadata resolver, the one text cleaner. See the header.
-import { MAX_NOTE, cleanText, extractTrackId, resolveMetadata } from './song';
+// The one parser, the one metadata resolver, the one text cleaner, and the SAME
+// field caps as his side — a shorter note on her card would be an asymmetry
+// nobody chose. See the header.
+import { MAX_ARTIST, MAX_NOTE, cleanText, extractTrackId, resolveMetadata } from './song';
 
 export const prerender = false;
 
@@ -140,6 +166,7 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
   // ---- parse ------------------------------------------------------------
   let rawUrl = '';
   let note = '';
+  let artist = '';
   let date = wingDate();
   try {
     const fields: Record<string, unknown> = wantsJson
@@ -148,6 +175,7 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
 
     rawUrl = typeof fields.url === 'string' ? fields.url : '';
     note = cleanText(fields.note, MAX_NOTE);
+    artist = cleanText(fields.artist, MAX_ARTIST);
 
     // The form sends the date of the card she is answering, which is normally
     // today but is not required to be: answering yesterday's song at 1am is a
@@ -170,20 +198,22 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
 
   // ---- resolve + store --------------------------------------------------
   //
-  // NOT checked: whether I posted a song that day. Letting her answer a morning I
-  // missed is the point rather than an edge case — she gets to go first — and
-  // checking would cost a store round trip to prevent something desirable.
+  // NOT checked: whether I posted a song that day. A day with only her half on it
+  // is a complete day, not a pending one — she is not answering me, she is posting.
+  // Checking would cost a store round trip to prevent the ordinary case.
   const meta = await resolveMetadata(id);
 
   const reply: ReplyRecord = {
     date,
     id,
-    // ARTIST IS NOT A FIELD SHE FILLS IN. Her form is a link and a note, because
-    // it is used one-handed in bed and a third input is the difference between
-    // sending one and not. The Web API fills it when those credentials exist; the
-    // credential-free path leaves it empty and her card omits the line, exactly as
-    // mine does when Spotify gives us nothing.
-    artist: meta.artist,
+    // WHAT SHE TYPED WINS, exactly as it does on my side — the resolver only ever
+    // fills a blank. This field used to be missing from her form entirely, on the
+    // reasoning that a third input is friction at 1am. That was true and it was
+    // still wrong: Spotify's credential-free metadata endpoint returns no artist,
+    // so her cards rendered without the line while mine rendered with it, and the
+    // asymmetry was visible on the page every single day. It is optional on both
+    // forms now, which costs her nothing and makes the two cards the same card.
+    artist: artist || meta.artist,
     title: meta.title,
     art: meta.art,
     note,
@@ -194,10 +224,11 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
   };
 
   try {
-    // Overwrites any earlier reply for that day, on purpose: the realistic mistake
+    // Overwrites her earlier song for that day, on purpose: the realistic mistake
     // is pasting the wrong link, and the fix has to be "send it again" from the
-    // same phone. One reply per day is also what keeps a day readable as a single
-    // exchange rather than as a thread nobody scrolls.
+    // same phone. One song per side per day is also what keeps a day readable as a
+    // pair rather than as a thread nobody scrolls. Exactly the same rule as
+    // putSong, because the two halves are the same shape by design.
     await putReply(reply);
   } catch (err) {
     // Loud, and reported as a failure. The one outcome that must never happen is a

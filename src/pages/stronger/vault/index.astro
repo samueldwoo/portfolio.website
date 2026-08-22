@@ -61,9 +61,31 @@
  */
 import { HER_NAME, SESSION_SECRET } from '../../../lib/us/config';
 import { readCookie, verify } from '../../../lib/us/session';
-import { getSongs, wingDate, type SongRecord } from '../../../lib/us/kv';
+import { getSongs, wingDate, wingDateLabel, type SongRecord } from '../../../lib/us/kv';
 import { countVisitSafe, getMarksSafe } from '../../../lib/us/marks';
 import { countdown, newSince } from '../../../lib/us/status';
+import {
+  ANSWER_MAX,
+  HER_TZ,
+  HIS_TZ,
+  HUB_DAY_WINDOW,
+  ITEM_MAX,
+  LATE_ANSWER_DAYS,
+  OPEN_CAP,
+  answerParagraphs,
+  apartLine,
+  board,
+  clocks,
+  getAllSafe,
+  identify,
+  otherOne,
+  sentLine,
+  thinkingLine,
+  togetherTier,
+  visibleDay,
+  type VisibleDay,
+  type Who,
+} from '../../../lib/us/together';
 
 export const prerender = false;
 
@@ -71,10 +93,52 @@ const secret = SESSION_SECRET();
 const session = secret ? verify(secret, 'session', readCookie(Astro.cookies, 'session', Astro.url)) : null;
 if (!session) return Astro.redirect('/stronger', 302);
 
+/**
+ * WHICH OF THEM IS READING THIS PAGE.
+ *
+ * ---------------------------------------------------------------------------
+ * THIS IS PURELY ADDITIVE AND CANNOT GRANT ACCESS TO ANYTHING
+ *
+ * The `session` check above is unchanged and still the only thing that decides
+ * whether this page renders. My admin token cannot open her vault and this does not
+ * change that — the redirect on line 72 fires first, and identify() runs afterwards.
+ *
+ * What it does is decide whose SIDE of the three new blocks to show. The wing has
+ * been strictly one-directional until now, so every other page could safely assume
+ * its reader was her. "Thinking of you" and the daily question are two-sided, so the
+ * pronouns, the clock labels and which half of an exchange is "yours" all depend on
+ * who is holding the cookie.
+ *
+ * It resolves to 'him' when an admin token is present, because I know the answers to
+ * my own questions and can therefore hold BOTH cookies at once — see the PART ZERO
+ * comment in together.ts, which owns this rule. The endpoints call the same function,
+ * so a tap attributed to 'him' on write is rendered as 'him' here. Two
+ * implementations of that would eventually put one person's words under the other's
+ * name, which is the worst bug this feature has available.
+ *
+ * `session` is non-null by the time this runs, so identify() cannot return null in
+ * practice; the `?? 'her'` is there so the type is `Who` rather than `Who | null` and
+ * no expression below has to defend against a state that cannot happen.
+ */
+const viewer: Who = identify(Astro.cookies, Astro.url) ?? 'her';
+const them = otherOne(viewer);
+
 const her = HER_NAME();
 
 /** Today in the wing's timezone. Passed into everything; never re-derived. */
 const today = wingDate();
+
+/**
+ * ONE clock reading for the whole render.
+ *
+ * Every relative phrase on this page ("this morning", "half an hour ago") and both
+ * wall clocks derive from this single number rather than each calling Date.now(). Two
+ * readings a few milliseconds apart cannot disagree in any way a human would notice —
+ * but they CAN straddle a minute boundary, and a page that renders "18:42" in one
+ * place and computes "an hour ago" against 18:43 in another is a page with two clocks
+ * in it. Same discipline status.ts and kv.ts's derivations apply to `today`.
+ */
+const nowMs = Date.now();
 
 /**
  * How far back to look for songs written since her last visit.
@@ -93,16 +157,20 @@ const today = wingDate();
 const HISTORY_WINDOW = 365;
 
 /**
- * Three reads, in parallel, because none of them depends on another.
+ * Four reads, in parallel, because none of them depends on another.
  *
- * Two of them hit the marks document and one hits the songs document. On the R2 tier
- * that is two GETs of the same object, which is a real if small waste — the honest
- * alternative would be a seventh operation on marks.ts's Store interface returning
- * marks and visits together, and that interface's own header sets the bar: a new
- * operation has to justify itself three times over, once per tier. Saving one GET on
- * one page does not clear it.
+ * Two of them hit the marks document, one hits the songs document, and one hits the
+ * together document. On the R2 tier that is two GETs of the same marks object, which
+ * is a real if small waste — the honest alternative would be a seventh operation on
+ * marks.ts's Store interface returning marks and visits together, and that interface's
+ * own header sets the bar: a new operation has to justify itself three times over, once
+ * per tier. Saving one GET on one page does not clear it.
+ *
+ * The together read is ONE call for all three new features rather than three, which is
+ * why together.ts exposes getAll() instead of a getter per feature — three separate
+ * reads would be three GETs of one R2 object on every render of the front door.
  */
-const [songs, marks, visits] = await Promise.all([
+const [songs, marks, visits, together] = await Promise.all([
   getSongs(HISTORY_WINDOW).catch((err): SongRecord[] => {
     // kv.ts throws on read failure by policy. Here that is decoration failing, so it
     // degrades to "nothing new" rather than to an error page.
@@ -111,6 +179,12 @@ const [songs, marks, visits] = await Promise.all([
   }),
   getMarksSafe(),
   countVisitSafe(),
+  /* The *Safe wrapper, matching every other read on this page. together.ts's header
+     states the policy: writes fail loud, reads fail soft, and this page is the front
+     door — a dead store must cost her the three blocks and never the door. It returns a
+     snapshot with today's (empty) day present, which is a state the markup renders
+     correctly. */
+  getAllSafe(today, HUB_DAY_WINDOW),
 ]);
 
 const fresh = newSince({ today, visits, songs, marks });
@@ -118,11 +192,167 @@ const fresh = newSince({ today, visits, songs, marks });
 /** null when Sam has not set a date, or has set one that has passed. Renders nothing. */
 const until = countdown(today);
 
+/* ============================================================================
+   THE TWO CLOCKS
+
+   Both wall clocks from the one `nowMs` above. `mine` and `theirs` rather than
+   `her` and `him` so the markup below never branches on who is reading — the
+   perspective is resolved once, here.
+   ========================================================================= */
+const twoClocks = clocks(nowMs);
+const myClock = viewer === 'her' ? twoClocks.her : twoClocks.him;
+const theirClock = viewer === 'her' ? twoClocks.him : twoClocks.her;
+/** '' most of the time. Only worth saying when the gap has crossed a date line. */
+const theirDayNote = twoClocks.differentDay
+  ? theirClock.date > myClock.date
+    ? 'already tomorrow'
+    : 'still yesterday'
+  : '';
+
+/* ============================================================================
+   THINKING OF YOU
+
+   Two sentences, and either can be ''. `incoming` is what THEY sent, rendered in
+   MY timezone (see warmAgo — "this morning" is a claim about the reader's morning,
+   so it has to be computed in the reader's zone or it is wrong for both of them).
+   `outgoing` is my own receipt.
+   ========================================================================= */
+const myTz = viewer === 'her' ? HER_TZ : HIS_TZ;
+
+const incoming = thinkingLine({
+  who: them,
+  record: together.thinking[them],
+  nowMs,
+  readerTz: myTz,
+  today,
+});
+const outgoing = sentLine(together.thinking[viewer], nowMs, myTz);
+
+/* ============================================================================
+   THE DAILY QUESTION
+
+   ---------------------------------------------------------------------------
+   EVERY DAY ON THIS PAGE GOES THROUGH visibleDay() AND NOTHING ELSE
+
+   `together.days` holds raw DayRecords, which contain BOTH answers. Not one of them
+   is rendered directly. visibleDay(rec, viewer, today) is the seal: it returns an
+   object whose `theirs` field is ABSENT — not blanked, not hidden behind a class —
+   unless both of them have answered. letters.ts's visibleLetter() does exactly this
+   for a sealed body, and the reasoning is the same: the page cannot leak what it was
+   never given, and `display: none` on something I promised not to show her yet is a
+   promise broken by View Source.
+   ========================================================================= */
+
+/** Today's, always present — getAll() unions today in even when nobody has answered. */
+const dayToday: VisibleDay = visibleDay(
+  together.days[today] ?? { date: today, her: '', herAt: 0, him: '', himAt: 0 },
+  viewer,
+  today,
+);
+
+/**
+ * The past days worth showing, newest first.
+ *
+ * THREE KINDS SURVIVE THE FILTER and the rest are dropped, which is a deliberate
+ * choice about what a past day is FOR:
+ *
+ *   revealed        both answered. The archive. This is the good part.
+ *   canAnswer       I never answered and it is still inside the window — so this is
+ *                   an invitation, and it belongs on the page precisely because
+ *                   answering it now still works and still reveals both halves.
+ *   closed + theirs-answered
+ *                   nobody can complete it any more. Shown as an honest gravestone
+ *                   ("this one stayed half-open") with NO answer text, because the
+ *                   seal outlives the window — see below.
+ *
+ * A day where only I answered and nobody else ever will is NOT shown as a gravestone
+ * with my words in it; it shows my own answer, because you can always read what you
+ * wrote. That falls out of visibleDay() rather than being decided here.
+ */
+const pastDays: VisibleDay[] = Object.keys(together.days)
+  .filter((d) => d !== today)
+  .sort((a, b) => b.localeCompare(a))
+  .map((d) => visibleDay(together.days[d], viewer, today))
+  .filter((d) => d.revealed || d.canAnswer || d.mine.length > 0 || d.theyAnswered);
+
+/** How many past days are still open to a late answer. Drives one line of copy. */
+const stillOpen = pastDays.filter((d) => d.canAnswer).length;
+
+/* ============================================================================
+   THE LIST
+   ========================================================================= */
+const list = board(together.items);
+/** Room left before OPEN_CAP refuses an add. Only mentioned when it is getting close. */
+const roomLeft = OPEN_CAP - list.open.length;
+
+/* ============================================================================
+   OUTCOMES FROM THE NO-JAVASCRIPT FORM PATHS
+
+   Both endpoints 303 back here with `?ok=<code>` or `?e=<code>` and a fragment. The
+   codes are turned into her language rather than into HTTP: she does not need to know
+   what a 502 is, only that it was not her fault and it is worth another go.
+
+   Written as two lookup tables rather than one, because a success and a failure are
+   rendered in different elements with different wording — collapsing them would mean
+   the markup guessing which kind it had from the string's content.
+   ========================================================================= */
+const okCode = Astro.url.searchParams.get('ok') ?? '';
+const errCode = Astro.url.searchParams.get('e') ?? '';
+
+const OK_TEXT: Record<string, string> = {
+  sent: 'sent. That is all it says, and that is the point.',
+  already: 'already sent — one is enough for now. It counts.',
+  answered: 'in. Nothing of theirs shows up until they answer too.',
+  revealed: 'in — and you were both there. Have a look.',
+  added: 'on the list.',
+  ticked: 'ticked off.',
+  unticked: 'put back on the list.',
+  removed: 'taken off.',
+  done: 'done.',
+};
+const ERR_TEXT: Record<string, string> = {
+  store: "that didn't save — not your fault. Try it again?",
+  rate: 'okay, easy. Give it a minute and try again.',
+  unauthorized: 'your session ran out. Answer the questions again and you are back in.',
+  unconfigured: 'something is unplugged on my end. Not your fault.',
+  'cross-site': 'that request did not come from this page, so it was refused.',
+  'bad-request': "the server couldn't read that. Try again?",
+  'bad-action': "the server couldn't read that. Try again?",
+  'bad-date': 'that is not a real day.',
+  'text-missing': 'there was nothing in the box.',
+  empty: 'there was nothing in the box.',
+  'too-long': 'that is longer than the box will hold. Trim it a little?',
+  frozen: 'you both already answered that one — it is set now, on purpose.',
+  closed: `that one closed after ${LATE_ANSWER_DAYS} days. Today's is open.`,
+  'no-such-item': "I can't find that one. It may already be gone.",
+  'not-removable': 'only whoever added a line can take it back off.',
+  'open-full': `the list is full at ${OPEN_CAP} open things. Tick something off first.`,
+  'total-full': 'the list is completely full. Nothing was lost — but nothing more fits.',
+};
+const okText = okCode ? (OK_TEXT[okCode] ?? 'done.') : '';
+const errText = errCode ? (ERR_TEXT[errCode] ?? "that didn't go through. Try again?") : '';
+
+/* ---- copy helpers --------------------------------------------------------- */
+
+/** What to call the other person, in the second person's voice. */
+const themWord = them === 'her' ? 'she' : 'he';
+const themPossessive = them === 'her' ? 'hers' : 'his';
+
+/** e.g. `Sat 22 Aug 2026`. '' when the date is unusable. */
+function dayLabel(date: string): string {
+  return date ? wingDateLabel(date, { withYear: true }) : '';
+}
+
+/** "you" / "her" / "him" for a list byline, from the reader's side. */
+function byWord(by: Who): string {
+  return by === viewer ? 'you' : by === 'her' ? 'her' : 'him';
+}
+
 const rooms = [
   {
     n: 'line 01',
-    title: 'song of the day',
-    note: 'whatever I could not stop playing this morning, and why.',
+    title: 'one day, two songs',
+    note: 'one from each of us, every day. and why.',
     href: '/stronger/vault/today',
     ready: true,
     /* The marker is WORDS, not a colour and not a dot on its own. Two reasons, and
@@ -191,6 +421,12 @@ const rooms = [
          card that has something new in it, and the cascade order is the only thing
          making that win. -->
     <link rel="stylesheet" href="/css/us-hub.css">
+    <!-- Last, and after us.css for the tokens it uses. It deliberately does NOT
+         depend on us-song.css's `.dj-*` / `.notice` form primitives the way
+         letters.astro does — that file is being restructured for the mutual
+         song-of-the-day work, and a hub that borrowed its rules would break when it
+         moved. us-together.css carries its own `tg-` copies and says so. -->
+    <link rel="stylesheet" href="/css/us-together.css">
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23000'/%3E%3Ctext x='16' y='23' font-family='monospace' font-size='20' font-weight='700' text-anchor='middle' fill='%233e7bff'%3E%5B%5D%3C/text%3E%3C/svg%3E">
 </head>
 <body class="studio">
@@ -207,6 +443,49 @@ const rooms = [
         You got in, {her}. Obviously you got in.
         <br>
         This is the part of the site nobody else has the address to.
+    </p>
+
+    {/* ============================================================
+        THE TWO CLOCKS
+
+        Smallest type on the page, directly under the lede: it is ambient
+        context — where each of you is — and it sets up the countdown
+        below rather than competing with it.
+
+        Both are real <time datetime> elements carrying the same instant
+        with each zone's own offset, so the machine-readable value is the
+        actual fact and not a bare "18:42" in an unspecified zone.
+
+        `data-tg-clock` is the ONLY hook the tick script uses. It is a
+        data attribute rather than a class so that restyling can never
+        silently unhook the script. See the script at the bottom for why
+        a tick is warranted at all and why it is not a live region.
+        ============================================================ */}
+    <p class="tg-clocks">
+        <span class="tg-clock">
+            <span class="tg-clock-who">you</span>
+            <time
+                class="tg-clock-time"
+                datetime={myClock.iso}
+                data-tg-clock="mine"
+                data-tz={myClock.tz}
+            >{myClock.time}</time>
+        </span>
+        <span class="tg-clock">
+            {/* A word, not a colour and not an icon. Which clock is whose is
+                the entire information content of this strip. */}
+            <span class="tg-clock-who">{them === 'her' ? her : 'him'}</span>
+            <time
+                class="tg-clock-time"
+                datetime={theirClock.iso}
+                data-tg-clock="theirs"
+                data-tz={theirClock.tz}
+            >{theirClock.time}</time>
+            {/* Only when the gap has crossed a date line, which is the
+                genuinely useful fact in an eight-or-nine-hour split. */}
+            {theirDayNote && <span class="tg-clock-day">{theirDayNote}</span>}
+        </span>
+        <span class="tg-apart">{apartLine(twoClocks, viewer)}</span>
     </p>
 
     {/* Nothing at all when the date is unset, mistyped, or long past. No
@@ -226,6 +505,71 @@ const rooms = [
             </span>
         </p>
     )}
+
+    <hr class="studio-rule">
+
+    {/* ============================================================
+        THINKING OF YOU
+
+        ABOVE THE ROOMS, deliberately. Everything below this needs a tap
+        and then a page and then attention. This needs none — it is the
+        one thing on the hub that has already happened by the time she
+        reads it, and the one thing she can answer without having words.
+
+        The outcome notices live here rather than at the top of the page
+        because both endpoints 303 back with a fragment, so she lands on
+        the block she acted on and the message is right where she is
+        looking. `role="status"` announces them without stealing focus.
+        ============================================================ */}
+    <section class="tg-block" id="thinking" aria-labelledby="thinking-head">
+        <p class="tg-eyebrow" id="thinking-head">no words needed</p>
+
+        {errText && (
+            <p class="tg-notice" data-kind="bad" role="status">hm &mdash; {errText}</p>
+        )}
+        {okText && !errText && (
+            <p class="tg-notice" data-kind="ok" role="status">{okText}</p>
+        )}
+
+        <div class="tg-think">
+            {incoming ? (
+                /* The sentence. It is the loudest thing in this block because
+                   somebody chose to send it today. */
+                <p class="tg-think-line">{incoming}</p>
+            ) : (
+                /* THE EMPTY STATE IS A REAL SENTENCE, not a blank space and not
+                   a zero — same discipline as the hub's "nothing new since you
+                   were last here" line. It is also the state she will see most
+                   often, so it has to read as deliberate. */
+                <p class="tg-think-line tg-think-line--quiet">
+                    Nothing from {them === 'her' ? her : 'him'} today. One tap is a
+                    whole message here &mdash; it does not need anything else in it.
+                </p>
+            )}
+
+            {/* A real form that 303s back. The script upgrades it to a fetch so a
+                one-tap gesture does not cost a page navigation and her scroll
+                position, but everything works with the script absent. `?a=` is
+                not needed here: /api/us/thinking has exactly one action and
+                hard-codes its own fragment. */}
+            <form class="tg-think-form" id="think-form" method="post" action="/api/us/thinking">
+                <button class="tg-btn tg-send" id="think-send" type="submit">
+                    I&rsquo;m thinking of you
+                </button>
+            </form>
+
+            {/* Her own receipt, so a tap visibly landed even though the coalesce
+                means a second one changes nothing. Repainted by the script after
+                a successful fetch. */}
+            <p class="tg-think-sent" id="think-sent">{outgoing}</p>
+
+            {/* The script's announcement channel. aria-live so the outcome is
+                spoken without moving focus; visually hidden because the button
+                and the line above already show it, and a duplicated sentence on
+                screen would be noise. */}
+            <p class="tg-sr" id="think-status" role="status" aria-live="polite"></p>
+        </div>
+    </section>
 
     <hr class="studio-rule">
 
@@ -269,10 +613,696 @@ const rooms = [
 
     <hr class="studio-rule">
 
+    {/* ============================================================
+        THE DAILY QUESTION
+
+        EVERY `VisibleDay` ON THIS PAGE CAME OUT OF visibleDay(). Nothing
+        below reads a raw DayRecord, so `theirs` is only ever a non-empty
+        string when the server decided both of them had answered. The
+        sealed branch does not hide their answer — it never received one.
+        Read the block comment in the frontmatter.
+        ============================================================ */}
+    <section class="tg-block" id="question" aria-labelledby="question-head">
+        <p class="tg-eyebrow" id="question-head">
+            today&rsquo;s question &middot; you both answer, then you both see
+        </p>
+
+        <div class="tg-q">
+            <h2 class="tg-q-prompt">{dayToday.prompt}</h2>
+            <p class="tg-q-day">{dayLabel(dayToday.date)}</p>
+
+            {dayToday.revealed ? (
+                /* BOTH ANSWERED. The only branch in which a `theirs` string
+                   exists at all. Mirrored accents, and each half is titled
+                   with a word so the two are never told apart by colour. */
+                <div class="tg-pair">
+                    <article class="tg-a tg-a--mine">
+                        <p class="tg-a-who">you said</p>
+                        {answerParagraphs(dayToday.mine).map((p) => (
+                            <p class="tg-a-text">{p}</p>
+                        ))}
+                    </article>
+                    <article class="tg-a tg-a--theirs">
+                        <p class="tg-a-who">{themWord} said</p>
+                        {answerParagraphs(dayToday.theirs).map((p) => (
+                            <p class="tg-a-text">{p}</p>
+                        ))}
+                    </article>
+                </div>
+            ) : dayToday.mine ? (
+                /* MINE IS IN, THEIRS IS NOT. My own words come back to me —
+                   you can always read what you wrote — and the other card
+                   says what is missing rather than sitting empty. */
+                <>
+                    <div class="tg-pair">
+                        <article class="tg-a tg-a--mine">
+                            <p class="tg-a-who">you said</p>
+                            {answerParagraphs(dayToday.mine).map((p) => (
+                                <p class="tg-a-text">{p}</p>
+                            ))}
+                        </article>
+                        <article class="tg-a tg-a--sealed">
+                            <p class="tg-a-who">{themWord} has not answered yet</p>
+                            <p class="tg-a-sealed-note">
+                                When {themWord} does, both answers appear here at the
+                                same time. Yours is not shown to {themWord} until then
+                                either.
+                            </p>
+                        </article>
+                    </div>
+                    {/* Editing is allowed only until the reveal — see
+                        VisibleDay.editable. Offered as a <details> so an answered
+                        day looks answered rather than like a big open form. */}
+                    {dayToday.editable && (
+                        <details class="tg-more">
+                            <summary>change what you said</summary>
+                            <form
+                                class="tg-form"
+                                id="answer-form"
+                                method="post"
+                                action="/api/us/together?a=answer"
+                            >
+                                <input type="hidden" name="action" value="answer">
+                                <input type="hidden" name="date" value={dayToday.date}>
+                                <div class="tg-field">
+                                    <label class="tg-label" for="answer-text">
+                                        Your answer &mdash; up to {ANSWER_MAX}
+                                    </label>
+                                    <textarea
+                                        class="tg-textarea"
+                                        id="answer-text"
+                                        name="text"
+                                        rows="4"
+                                        maxlength={ANSWER_MAX}
+                                    >{dayToday.mine}</textarea>
+                                </div>
+                                <button class="tg-btn" id="answer-send" type="submit">
+                                    replace it
+                                </button>
+                                <p class="tg-notice" id="answer-status" role="status" aria-live="polite" hidden></p>
+                            </form>
+                        </details>
+                    )}
+                </>
+            ) : (
+                /* I HAVE NOT ANSWERED. A box, and nothing else — not even
+                   whether they have, until after I commit. */
+                <>
+                    {dayToday.theyAnswered && (
+                        /* A FACT, NOT THEIR WORDS. This is the one thing allowed
+                           out while a day is sealed, and it is the entire call to
+                           action. It leaks nothing about what they said. */
+                        <p class="tg-notice" data-kind="ok">
+                            {themWord} has answered. Yours is the missing half.
+                        </p>
+                    )}
+                    <form
+                        class="tg-form"
+                        id="answer-form"
+                        method="post"
+                        action="/api/us/together?a=answer"
+                    >
+                        <input type="hidden" name="action" value="answer">
+                        <input type="hidden" name="date" value={dayToday.date}>
+                        <div class="tg-field">
+                            <label class="tg-label" for="answer-text">
+                                Your answer &mdash; up to {ANSWER_MAX}
+                            </label>
+                            {/* maxlength matches ANSWER_MAX, which the endpoint also
+                                checks. The browser stopping her at the limit is
+                                friendlier than the server refusing a sentence she has
+                                already written. */}
+                            <textarea
+                                class="tg-textarea"
+                                id="answer-text"
+                                name="text"
+                                rows="4"
+                                maxlength={ANSWER_MAX}
+                                placeholder="a sentence is plenty"
+                            ></textarea>
+                        </div>
+                        <button class="tg-btn" id="answer-send" type="submit">answer it</button>
+                        <p class="tg-notice" id="answer-status" role="status" aria-live="polite" hidden></p>
+                    </form>
+                </>
+            )}
+
+            {!dayToday.revealed && (
+                /* Without this line, "your answer is in, nothing here yet" reads
+                   like a bug rather than like the mechanic. */
+                <p class="tg-q-rule">
+                    neither answer shows up until both are in &mdash; that is the whole
+                    point of it
+                </p>
+            )}
+
+            {/* ---- the days before ----------------------------------------
+                A native <details>, so it collapses with no JavaScript at all.
+                Bounded at HUB_DAY_WINDOW days, which is a LAYOUT limit and not
+                a retention policy — nothing is ever deleted from the store. */}
+            {pastDays.length > 0 && (
+                <details class="tg-more">
+                    <summary>
+                        the ones before
+                        {stillOpen > 0 && <> &mdash; {stillOpen} still open to you</>}
+                    </summary>
+                    <ul class="tg-past">
+                        {pastDays.map((d) => (
+                            <li class="tg-past-item">
+                                <p class="tg-past-day">{dayLabel(d.date)}</p>
+                                <p class="tg-past-prompt">{d.prompt}</p>
+
+                                {d.revealed ? (
+                                    <div class="tg-pair">
+                                        <article class="tg-a tg-a--mine">
+                                            <p class="tg-a-who">you</p>
+                                            {answerParagraphs(d.mine).map((p) => (
+                                                <p class="tg-a-text">{p}</p>
+                                            ))}
+                                        </article>
+                                        <article class="tg-a tg-a--theirs">
+                                            <p class="tg-a-who">{themWord}</p>
+                                            {answerParagraphs(d.theirs).map((p) => (
+                                                <p class="tg-a-text">{p}</p>
+                                            ))}
+                                        </article>
+                                    </div>
+                                ) : d.canAnswer ? (
+                                    /* STILL ANSWERABLE. The invitation, and the
+                                       reveal works exactly as it would have on the
+                                       day — which is what stops a missed day from
+                                       being a dead end with her words locked in it. */
+                                    <form
+                                        class="tg-form"
+                                        method="post"
+                                        action="/api/us/together?a=answer"
+                                    >
+                                        <input type="hidden" name="action" value="answer">
+                                        <input type="hidden" name="date" value={d.date}>
+                                        <div class="tg-field">
+                                            <label class="tg-label" for={`late-${d.date}`}>
+                                                {d.theyAnswered
+                                                    ? `${themWord} answered this one — yours would open it`
+                                                    : 'you can still answer this one'}
+                                            </label>
+                                            <textarea
+                                                class="tg-textarea"
+                                                id={`late-${d.date}`}
+                                                name="text"
+                                                rows="3"
+                                                maxlength={ANSWER_MAX}
+                                            ></textarea>
+                                        </div>
+                                        <button class="tg-btn" type="submit">answer it</button>
+                                    </form>
+                                ) : d.mine ? (
+                                    /* My own answer on a day nobody completed. I can
+                                       always read what I wrote; theirs is absent. */
+                                    <>
+                                        <article class="tg-a tg-a--mine">
+                                            <p class="tg-a-who">you</p>
+                                            {answerParagraphs(d.mine).map((p) => (
+                                                <p class="tg-a-text">{p}</p>
+                                            ))}
+                                        </article>
+                                        <p class="tg-past-half">
+                                            {themWord} never answered this one, and it has
+                                            closed. Yours stays here.
+                                        </p>
+                                    </>
+                                ) : (
+                                    /* An honest gravestone. THEY answered, I never
+                                       did, and the window has closed — so their
+                                       answer is never revealed. The seal outlives the
+                                       deadline, because "wait long enough and you can
+                                       read it without answering" would make the seal
+                                       optional and therefore fake. */
+                                    <p class="tg-past-half">
+                                        {themWord} answered this one and it closed before
+                                        you did, so it stays {themPossessive}. Only
+                                        today&rsquo;s and the last {LATE_ANSWER_DAYS} days
+                                        can still be opened.
+                                    </p>
+                                )}
+                            </li>
+                        ))}
+                    </ul>
+                </details>
+            )}
+        </div>
+    </section>
+
+    <hr class="studio-rule">
+
+    {/* ============================================================
+        THE LIST
+
+        Both add, either ticks off, only the author retracts. Every one of
+        those is a real form, so the whole block works with JavaScript off —
+        which is why there is no script for it at all.
+        ============================================================ */}
+    <section class="tg-block" id="list" aria-labelledby="list-head">
+        <p class="tg-eyebrow" id="list-head">when we are in the same place</p>
+
+        {list.open.length === 0 ? (
+            <p class="tg-empty">
+                Nothing on the list yet. Put something stupid and specific on it &mdash;
+                that is the kind you actually end up doing.
+            </p>
+        ) : (
+            <ul class="tg-items">
+                {list.open.map((item) => (
+                    <li class="tg-item">
+                        {/* Each tick is its own form. A single form wrapping the
+                            whole list could not carry a per-item id without
+                            JavaScript, and this block deliberately has none. */}
+                        <form method="post" action="/api/us/together?a=tick">
+                            <input type="hidden" name="action" value="tick">
+                            <input type="hidden" name="id" value={item.id}>
+                            <input type="hidden" name="on" value="1">
+                            {/* The accessible name is a real sentence including the
+                                item's own text, so a screen reader user hears WHICH
+                                thing they are about to tick. The glyph is
+                                aria-hidden — an empty box character is not a label.
+
+                                THE NAME IS A VISUALLY-HIDDEN SPAN, NOT AN
+                                aria-label={...}, AND THAT IS A SECURITY CHOICE AS
+                                MUCH AS AN ACCESSIBILITY ONE. Both are correct
+                                patterns and Astro escapes both contexts — an XSS
+                                probe with `">` in an item confirmed the attribute
+                                form is inert. But an attribute value is the classic
+                                escaping footgun: it survives only because `"` is
+                                escaped, so it is one careless refactor (a template
+                                quote, a `set:html`, an attribute built by
+                                concatenation) away from a breakout. Element text
+                                content escapes `<` itself, which is a stronger
+                                guarantee that does not depend on quoting.
+                                Putting it here means NO untrusted string appears in
+                                any attribute anywhere in this feature. */}
+                            <button class="tg-tick" type="submit">
+                                <span aria-hidden="true">&#9744;</span>
+                                <span class="tg-sr">Tick off: {item.text}</span>
+                            </button>
+                        </form>
+
+                        <div class="tg-item-body">
+                            <p class="tg-item-text">{item.text}</p>
+                            <p class="tg-item-by">{byWord(item.by)} added this</p>
+                        </div>
+
+                        {/* Only the author sees a way to retract. The store checks
+                            ownership against the STORED author regardless, so this
+                            is the affordance and not the control. */}
+                        {item.by === viewer && (
+                            <div class="tg-item-drop">
+                                <form method="post" action="/api/us/together?a=remove">
+                                    <input type="hidden" name="action" value="remove">
+                                    <input type="hidden" name="id" value={item.id}>
+                                    {/* "drop" is visible, and the hidden span
+                                        extends the accessible name with WHICH line
+                                        — so a screen reader hears "drop, take off
+                                        the list: <the thing>" rather than a column
+                                        of identical "drop" buttons. Text content,
+                                        not an attribute; see the tick button. */}
+                                    <button class="tg-drop" type="submit">
+                                        drop
+                                        <span class="tg-sr"> &mdash; take off the list: {item.text}</span>
+                                    </button>
+                                </form>
+                            </div>
+                        )}
+                    </li>
+                ))}
+            </ul>
+        )}
+
+        {/* Only mentioned when it is close, so the cap is never a number she has
+            to think about until it matters. See OPEN_CAP's reasoning. */}
+        {roomLeft <= 8 && (
+            <p class="tg-list-meta">
+                {roomLeft > 0
+                    ? `${roomLeft} more will fit before you have to tick something off.`
+                    : `the list is full at ${OPEN_CAP}. Tick something off to add another — nothing gets deleted.`}
+            </p>
+        )}
+
+        {roomLeft > 0 && (
+            <form class="tg-add" method="post" action="/api/us/together?a=add">
+                <input type="hidden" name="action" value="add">
+                {/* A real <label>, visually hidden rather than replaced by the
+                    placeholder: a placeholder is not a label, it disappears on
+                    focus, and it is not reliably announced. */}
+                <label class="tg-sr" for="add-text">Something to do together</label>
+                <input
+                    class="tg-input"
+                    id="add-text"
+                    name="text"
+                    type="text"
+                    maxlength={ITEM_MAX}
+                    placeholder="something to do together"
+                    autocomplete="off"
+                >
+                <button class="tg-btn" type="submit">add it</button>
+            </form>
+        )}
+
+        {list.done.length > 0 && (
+            <details class="tg-more">
+                <summary>done ({list.done.length})</summary>
+                <ul class="tg-items">
+                    {list.done.map((item) => (
+                        <li class="tg-item tg-item--done">
+                            <form method="post" action="/api/us/together?a=tick">
+                                <input type="hidden" name="action" value="tick">
+                                <input type="hidden" name="id" value={item.id}>
+                                {/* Explicit `0`: readOn() treats an ABSENT `on` as
+                                    true, which is what lets the tick form above be
+                                    minimal. Un-ticking therefore has to say so. */}
+                                <input type="hidden" name="on" value="0">
+                                <button class="tg-tick tg-tick--done" type="submit">
+                                    <span aria-hidden="true">&#9745;</span>
+                                    {/* Text content, not an attribute — see the
+                                        tick button above. */}
+                                    <span class="tg-sr">Put back on the list: {item.text}</span>
+                                </button>
+                            </form>
+                            <div class="tg-item-body">
+                                <p class="tg-item-text">{item.text}</p>
+                                {/* "done" IN WORDS. The strike-through above is
+                                    decoration: it is invisible to a screen reader and
+                                    to anyone in a forced-colours mode, so the state
+                                    has to be written down. */}
+                                <p class="tg-item-by">
+                                    done &middot; {byWord(item.by)} added it{
+                                    item.doneBy ? `, ${byWord(item.doneBy)} ticked it off` : ''}
+                                </p>
+                            </div>
+                        </li>
+                    ))}
+                </ul>
+            </details>
+        )}
+
+        {/* Dev only. She should never be shown a sentence about serverless
+            instances; on /stronger/dj the equivalent warnings are permanent
+            because there they are actionable. */}
+        {import.meta.env.DEV && togetherTier() === 'memory' && (
+            <p class="tg-notice" data-kind="warn">
+                dev &mdash; in-process together store. Taps, answers and this list are
+                non-durable and per-instance.
+            </p>
+        )}
+    </section>
+
+    <hr class="studio-rule">
+
     <div class="studio-foot">
         <span class="studio-tag">Stronger for it.</span>
         <a href="/api/us/out">sign out</a>
     </div>
 </div>
+
+{/* `themWord` is passed in rather than hard-coded in the script below: the hub
+    renders for whichever of them holds the cookie, so a literal "he" in a success
+    message is wrong half the time. It is one of `she` / `he` — never user text —
+    so there is nothing here that could carry a payload into the script context. */}
+<script is:inline define:vars={{ serverNowMs: nowMs, themWord }}>
+/* --------------------------------------------------------------------------
+   THREE JOBS, AND DELIBERATELY NO MORE.
+
+   Rendered unconditionally rather than wrapped in a template expression: a
+   <script> inside `{...}` asks the Astro compiler to read JavaScript braces as
+   template braces, and the failure mode is a build error in a file that reads as
+   correct. Each block below bails out on its own if its markup is absent.
+
+   WHAT IS DELIBERATELY ABSENT: any script for the LIST. Add, tick and remove are
+   native forms that 303 back, they lose nothing on failure, and every line of
+   script that is not here is a line that cannot break the accessible path.
+   -------------------------------------------------------------------------- */
+(function () {
+    /* ====================================================================
+       1. THE CLOCKS TICK.
+
+       WHY A TICK IS WARRANTED AT ALL: the server renders the true time, and it
+       is true for about thirty seconds. This wing is an installed PWA whose
+       start_url is this page, so "opened it this morning and left it open" is
+       the normal case, not the edge — a server-only clock would sit there
+       reading 08:14 all afternoon, which is worse than showing nothing.
+
+       WHY IT IS ANCHORED TO THE SERVER'S CLOCK: `skew` is measured ONCE
+       against the server's own `Date.now()` at render, and every subsequent
+       frame renders `Date.now() - skew`. So a phone whose clock is four
+       minutes fast still shows the correct time in both zones. Trusting the
+       device clock outright would have quietly replaced a correct
+       server-rendered value with a wrong client-rendered one.
+
+       WHY IT IS NOT AN aria-live REGION: it would announce the time every
+       minute, forever, which is actively hostile. The <time> text and its
+       `datetime` are updated silently; a screen reader reads the current value
+       whenever the user navigates to it, which is exactly the right behaviour.
+
+       Intl does the zone arithmetic, so the device's own timezone is
+       irrelevant — only that its clock is roughly right, which `skew` then
+       corrects anyway.
+       ==================================================================== */
+    var clockEls = document.querySelectorAll('[data-tg-clock]');
+    if (clockEls.length) {
+        var skew = Date.now() - serverNowMs;
+
+        var pad = function (n) { return n < 10 ? '0' + n : String(n); };
+
+        var paintClocks = function () {
+            var at = new Date(Date.now() - skew);
+            for (var i = 0; i < clockEls.length; i += 1) {
+                var el = clockEls[i];
+                var tz = el.getAttribute('data-tz');
+                if (!tz) continue;
+                try {
+                    var parts = new Intl.DateTimeFormat('en-CA', {
+                        timeZone: tz,
+                        year: 'numeric', month: '2-digit', day: '2-digit',
+                        hour: '2-digit', minute: '2-digit',
+                        hourCycle: 'h23'
+                    }).formatToParts(at);
+                    var g = function (type) {
+                        for (var k = 0; k < parts.length; k += 1) {
+                            if (parts[k].type === type) return parts[k].value;
+                        }
+                        return '';
+                    };
+                    var hh = pad(Number(g('hour')) % 24);
+                    var mm = g('minute');
+                    /* textContent, never innerHTML. Nothing here is user text, but
+                       the rule is absolute in this wing and a future edit that
+                       introduced one would otherwise be an XSS. */
+                    el.textContent = hh + ':' + mm;
+                    /* The machine-readable value has to move with the visible one,
+                       or `datetime` slowly becomes a lie about the same element.
+                       The offset is kept from the server-rendered attribute: it only
+                       changes at a DST boundary, and re-deriving it here would mean
+                       reimplementing tzOffsetMinutes in the browser. */
+                    var prev = el.getAttribute('datetime') || '';
+                    var offset = prev.slice(16);
+                    el.setAttribute(
+                        'datetime',
+                        g('year') + '-' + g('month') + '-' + g('day') + 'T' + hh + ':' + mm + offset
+                    );
+                } catch (err) {
+                    /* An unknown timezone throws in Intl. The server-rendered value
+                       is already correct-at-render, so the honest failure is to stop
+                       ticking and leave it alone rather than to blank it. */
+                    return;
+                }
+            }
+        };
+
+        /* Aligned to the top of the next minute, then every minute. A naive
+           60s interval started mid-minute is visibly wrong for up to 59
+           seconds at a time. */
+        var tick = function () {
+            paintClocks();
+            setTimeout(function () {
+                paintClocks();
+                setInterval(paintClocks, 60000);
+            }, 60000 - (Date.now() % 60000));
+        };
+        tick();
+
+        /* iOS freezes timers in a backgrounded tab, so an installed app brought
+           back after lunch would paint a stale time until the next interval
+           fires. Repaint on the way back in. */
+        document.addEventListener('visibilitychange', function () {
+            if (!document.hidden) paintClocks();
+        });
+    }
+
+    /* ====================================================================
+       2. THINKING OF YOU, WITHOUT A PAGE NAVIGATION.
+
+       The form already works: 303, re-render, done. What a native submit
+       cannot do is complete without navigating, and for a single tap on a long
+       page that means losing her scroll position every time. That is the whole
+       purchase — the endpoint, the copy and the outcome are identical.
+       ==================================================================== */
+    var thinkForm = document.getElementById('think-form');
+    var thinkBtn = document.getElementById('think-send');
+    var thinkSaid = document.getElementById('think-status');
+    var thinkSent = document.getElementById('think-sent');
+
+    if (thinkForm && thinkBtn && thinkSaid) {
+        var THINK_MSG = {
+            rate: 'give it a minute, then try again.',
+            store: "that didn't send — not your fault. Try again?",
+            unauthorized: 'your session ran out. Answer the questions again and you are back in.',
+            unconfigured: 'something is unplugged on the server. Not your fault.',
+            'cross-site': 'that did not come from this page, so it was refused.'
+        };
+        var thinkLabel = thinkBtn.textContent;
+
+        thinkForm.addEventListener('submit', async function (event) {
+            event.preventDefault();
+            thinkBtn.disabled = true;
+            thinkBtn.textContent = 'sending';
+
+            var res, data;
+            try {
+                res = await fetch('/api/us/thinking', {
+                    /* JSON in, JSON out. The endpoint keys its response shape off
+                       this header, so the no-JS form POST still gets its 303. */
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
+                    body: '{}'
+                });
+                data = await res.json();
+            } catch (err) {
+                thinkSaid.textContent = 'hm — the server did not answer. Nothing was sent.';
+                return;
+            } finally {
+                thinkBtn.disabled = false;
+                thinkBtn.textContent = thinkLabel;
+            }
+
+            if (!res.ok || !data || data.ok !== true) {
+                var code = (data && data.code) || 'no';
+                thinkSaid.textContent =
+                    'hm — ' + (THINK_MSG[code] || 'that did not go through. Nothing was sent.');
+                return;
+            }
+
+            /* `sent: false` is a SUCCESS — the coalesce, not an error. Both
+               branches read as something warm rather than as a rejection. */
+            thinkSaid.textContent = data.sent
+                ? 'sent. ' + themWord.charAt(0).toUpperCase() + themWord.slice(1) + ' will see it.'
+                : 'already sent — one is enough for now.';
+
+            if (thinkSent) {
+                /* `data.ago` is rendered SERVER-SIDE by warmAgo() and assigned
+                   with textContent. Deliberately not composed here: a second
+                   implementation in the browser would have to know both
+                   timezones, the part-of-day bands and the wing calendar, and
+                   would disagree with the server at exactly the boundaries
+                   nobody tests. */
+                thinkSent.textContent = 'you sent one ' + (data.ago || 'just now') + '.';
+            }
+        });
+    }
+
+    /* ====================================================================
+       3. HER ANSWER, WITHOUT LOSING WHAT SHE TYPED.
+
+       The only reason this block exists: a native submit that fails has
+       already navigated away and taken up to four hundred characters with it.
+       Everything it buys is that on failure her answer is still in the box.
+
+       On SUCCESS it hands control back to the server with a reload rather than
+       painting the revealed pair itself. Patching it here would mean a second
+       renderer in JavaScript — paragraph splitting, the mirrored cards, the
+       sealed-versus-revealed branch — that can disagree with the Astro one, and
+       a card that disagrees with the store is worse than a reload. It is also
+       the only way the REVEAL is guaranteed to come from the server, which is
+       where the seal lives.
+       ==================================================================== */
+    var ansForm = document.getElementById('answer-form');
+    var ansBtn = document.getElementById('answer-send');
+    var ansOut = document.getElementById('answer-status');
+    var ansBox = document.getElementById('answer-text');
+
+    if (ansForm && ansBtn && ansOut && ansBox) {
+        var ANS_MSG = {
+            empty: 'there is nothing in the box yet.',
+            'text-missing': 'there is nothing in the box yet.',
+            'too-long': 'that is longer than the box will hold. Trim it a little?',
+            frozen: 'you both already answered that one — it is set now, on purpose.',
+            closed: 'that day has closed. Today’s is open.',
+            'bad-date': 'that is not a real day.',
+            'bad-request': "the server couldn't read that. Nothing was saved.",
+            unauthorized: 'your session ran out. Answer the questions again and you are back in.',
+            unconfigured: 'something is unplugged on the server. Not your fault.',
+            store: "that didn't save. Nothing was lost — your answer is still here. Try again?",
+            rate: 'give it a minute, then send it again.'
+        };
+
+        var say = function (kind, text) {
+            /* The word is part of the message, so this never depends on colour. */
+            ansOut.dataset.kind = kind;
+            ansOut.textContent = (kind === 'bad' ? 'hm — ' : '') + text;
+            ansOut.hidden = false;
+        };
+
+        var ansLabel = ansBtn.textContent;
+
+        ansForm.addEventListener('submit', async function (event) {
+            event.preventDefault();
+
+            if (!ansBox.value.trim()) {
+                say('bad', 'write something first.');
+                ansBox.focus();
+                return;
+            }
+
+            ansBtn.disabled = true;
+            ansBtn.textContent = 'saving';
+
+            var res, data;
+            try {
+                res = await fetch('/api/us/together', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({
+                        action: 'answer',
+                        date: ansForm.elements.date ? ansForm.elements.date.value : '',
+                        text: ansBox.value
+                    })
+                });
+                data = await res.json();
+            } catch (err) {
+                say('bad', 'the server did not answer. Nothing was saved, and what you wrote is still here.');
+                return;
+            } finally {
+                ansBtn.disabled = false;
+                ansBtn.textContent = ansLabel;
+            }
+
+            if (!res.ok || !data || data.ok !== true) {
+                var code = (data && data.code) || 'no';
+                say('bad', ANS_MSG[code] || 'that did not go through. Nothing was saved.');
+                return;
+            }
+
+            say('ok', data.revealed
+                ? 'in — and you were both there. Loading it now.'
+                : 'in. Nothing of theirs shows up until they answer too.');
+
+            /* Straight back to the server. The pause is so the line above is
+               readable first. */
+            setTimeout(function () {
+                window.location.assign('/stronger/vault?ok=' + (data.revealed ? 'revealed' : 'answered') + '#question');
+            }, 700);
+        });
+    }
+})();
+</script>
 </body>
 </html>

@@ -36,18 +36,20 @@ import { readCookie, verify } from '../../lib/us/session';
 import {
   REACTIONS,
   durationLabel,
+  emptyPair,
   getExchange,
   getReactions,
   getReply,
   getSong,
   isWingDate,
+  pairFrom,
   storeTier,
   summarize,
   wingDate,
   wingDateLabel,
-  type ReplyRecord,
+  type DayPair,
   type Rhythm,
-  type SongRecord,
+  type Side,
   type TrackRecord,
 } from '../../lib/us/kv';
 
@@ -90,39 +92,43 @@ const tier = storeTier();
 /**
  * The day this page is looking at.
  *
- * `postedDate` arrives in a query string, so it is validated before it is used as
- * a store key or printed. An unvalidated value would not have been dangerous —
- * getSong() rejects a non-date and Astro escapes on render — but it would have
- * produced a preview headed by whatever text was in the URL, which is a confusing
- * enough answer to be worth one isWingDate() call.
- *
- * `||` rather than `??`: postedDate is '' when the parameter is absent, and '' is
- * a perfectly good string that ?? would happily keep.
+ * `postedDate` arrives in a query string, so it is validated before it is used as a
+ * store key AND before it is printed. Neither was ever dangerous — getSong()
+ * rejects a non-date and Astro escapes on render — but this comment used to claim
+ * both and only did the first: wingDateLabel() returns a non-date verbatim, so
+ * `?posted=<script>…` landed, escaped and inert, inside a green "saved —
+ * posted for …" banner. An adversarial review caught the gap between the claim and
+ * the code. A confirmation is the last place a page should repeat text it was
+ * handed, so an invalid value now produces no banner at all — which is also the
+ * honest answer, because we cannot confirm a day that is not a day.
  */
-const wantDate = isWingDate(postedDate) ? postedDate : today;
+const confirmedDate = isWingDate(postedDate) ? postedDate : '';
+const wantDate = confirmedDate || today;
 
 /** How far back the numbers count. Same window, same reasoning, as her page. */
 const HISTORY_WINDOW = 365;
 
 /**
- * What is currently filed under the day I am looking at, plus HER SIDE of it.
+ * THE WHOLE DAY I AM LOOKING AT — both halves, as one pair.
  *
  * Read from the store rather than echoed back from the redirect, so the preview is
  * the actual persisted record. A preview built from the form I just submitted
  * would happily show me a song that never saved, which is the one thing this page
  * exists to rule out.
  *
- * FIVE READS IN PARALLEL, AND THE EXACT-DATE ONES ARE SEPARATE ON PURPOSE.
- * getExchange() returns the newest N records, which is the right window for
- * counting but the wrong lookup for a confirmation: if I backfill a morning older
- * than that window, it would not be in the list and this page would tell me
- * "nothing yet" about a song that saved perfectly. Being wrong in that direction
- * is the single failure this page exists to prevent, so the previewed day is
- * fetched by key as well. Promise.all means it costs one round trip, not five.
+ * FOUR READS IN PARALLEL, AND THE EXACT-DATE ONES ARE SEPARATE ON PURPOSE.
+ * getExchange() returns the newest N days, which is the right window for counting
+ * but the wrong lookup for a confirmation: if I backfill a day older than that
+ * window, it would not be in the list and this page would tell me "nothing yet"
+ * about a song that saved perfectly. Being wrong in that direction is the single
+ * failure this page exists to prevent, so the previewed day is fetched by key as
+ * well. Promise.all means it costs one round trip, not four.
+ *
+ * pairFrom() rather than assembling the day here: her page folds days with
+ * buildPairs(), and a second fold on this page is how a preview starts disagreeing
+ * with the thing it previews.
  */
-let current: SongRecord | null = null;
-let herReply: ReplyRecord | null = null;
-let herReactions: string[] = [];
+let pair: DayPair = emptyPair(wantDate);
 let rhythm: Rhythm | null = null;
 let storeUnreachable = false;
 if (admin) {
@@ -133,25 +139,16 @@ if (admin) {
       getReply(wantDate),
       getReactions([wantDate]),
     ]);
-    current = song;
-    herReply = reply;
-    herReactions = reactions[wantDate] ?? [];
-    rhythm = summarize({
-      today,
-      songs: exchange.songs,
-      replies: exchange.replies,
-      reactions: exchange.reactions,
-    });
+    pair = pairFrom(wantDate, song, reply, reactions[wantDate] ?? []);
+    rhythm = summarize({ today, pairs: exchange.pairs });
   } catch (err) {
     console.error('[us] dj page could not read the store:', err);
     storeUnreachable = true;
   }
 }
 
-const previewDate = current?.date || wantDate;
-
 /** Which of her reactions landed on the previewed day, as emoji + words. */
-const chosenReactions = REACTIONS.filter((r) => herReactions.includes(r.key));
+const chosenReactions = REACTIONS.filter((r) => pair.reactions.includes(r.key));
 
 /**
  * Album, year, length — whichever of them we actually know.
@@ -164,47 +161,92 @@ function metaBits(track: TrackRecord): string[] {
   return [track.album ?? '', track.year ?? '', durationLabel(track.durationMs)].filter(Boolean);
 }
 
+/* ============================================================================
+   THE TWO SLOTS, FROM MY SIDE
+
+   Same array, same one-loop card template, same rules as her page — the only
+   differences are the WORDS ("me" / "her" rather than "me" / "you") and what an
+   empty slot says. That is deliberate to the point of being the design: if this
+   page assembled its own preview markup, the confirmation surface would slowly
+   stop resembling the page it is confirming, and I would be checking a rendering
+   nobody else ever sees.
+   ========================================================================= */
+
+interface Slot {
+  side: Side;
+  who: string;
+  track: TrackRecord | null;
+  open: string;
+  openSub: string;
+  unnamed: string;
+}
+
+const slots: Slot[] = [
+  {
+    side: 'his',
+    who: 'me',
+    track: pair.his,
+    open: storeUnreachable ? 'Unknown.' : 'Nothing filed for this day.',
+    openSub: storeUnreachable
+      ? 'The store did not answer, so this is not evidence of anything.'
+      : 'Her page says so honestly rather than showing yesterday. The form above files one.',
+    unnamed: '(Spotify gave us no title — the embeds will still name it)',
+  },
+  {
+    side: 'hers',
+    who: 'her',
+    track: pair.hers,
+    open: storeUnreachable ? 'Unknown.' : 'Nothing from her on this day.',
+    // NOT a nudge, and not a complaint. There is no action for me here, and any
+    // wording that implied one would be inventing an obligation she never took on.
+    openSub: storeUnreachable
+      ? 'The store did not answer, so this is not evidence of anything.'
+      : 'Which is a fine way for a day to be.',
+    unnamed: '(Spotify gave us no title — the embed will still name it)',
+  },
+];
+
 /**
  * The state of the habit, as one sentence.
  *
  * A sentence rather than her page's stat grid, because this page is a form and a
- * dashboard above a form is a dashboard I would stop reading. It is also the only
- * nudge in the wing: the number that makes me post is "how many days in a row",
- * and the honest version of that is stated in the past tense — a claim about
- * tomorrow's number is a claim I have not earned yet, so `streakLive === false`
- * gets a conditional ("post one and it is N+1"), never a promise.
+ * dashboard above a form is a dashboard I would stop reading.
  *
- * Empty string on day one, and the page renders nothing rather than a zero.
+ * THE STREAK IS THE SHARED ONE, and that changed what this sentence is allowed to
+ * promise. The old version said "post one and it is N+1", which was true when the
+ * streak counted only my mornings. It counts days we BOTH posted now, so posting
+ * cannot extend it on my own — and a nudge that quietly implies otherwise is a
+ * nudge that will be wrong most mornings. What is left is honest: my half is half.
+ *
+ * Empty string on day one, and the page renders nothing rather than a row of
+ * zeroes.
  */
 function rhythmLine(r: Rhythm | null): string {
-  if (!r || r.mornings === 0) return '';
+  if (!r || r.days === 0) return '';
 
   const parts: string[] = [];
   if (r.streak > 1) {
     parts.push(
       r.streakLive
-        ? `${r.streak} in a row.`
-        : `${r.streak} in a row through yesterday — post one and it is ${r.streak + 1}.`,
-    );
-  } else if (!r.streakLive) {
-    parts.push('Nothing posted today yet.');
-  }
-
-  // "altogether" rather than "on the shelf" so this does not repeat the word
-  // "mornings" one clause after the streak sentence already used it.
-  parts.push(r.mornings === 1 ? 'One morning altogether.' : `${r.mornings} mornings altogether.`);
-
-  if (r.answered > 0) {
-    parts.push(
-      r.answered === r.mornings
-        ? 'She has been there for every one.'
-        : `She was there for ${r.answered}.`,
+        ? `${r.streak} days in a row with both of us on them.`
+        : `${r.streak} in a row through yesterday — mine is half of keeping it.`,
     );
   }
-  if (r.replies > 0) {
-    parts.push(r.replies === 1 ? 'One sent back.' : `${r.replies} sent back.`);
+
+  parts.push(r.days === 1 ? 'One day altogether.' : `${r.days} days altogether.`);
+
+  if (r.both === 0) parts.push('None yet with both of us on it.');
+  else if (r.both === r.days) parts.push('Both of us on every one.');
+  else parts.push(`Both of us on ${r.both}.`);
+
+  // Stated in one clause with one shape, so neither number reads as the score to
+  // beat. They are two counts of the same habit, not a league table.
+  parts.push(`Mine ${r.his}, hers ${r.hers}.`);
+
+  if (r.reacted > 0) {
+    parts.push(r.reacted === 1 ? 'One day she reacted.' : `${r.reacted} days she reacted.`);
   }
-  if (r.best > r.streak) parts.push(`Best run: ${r.best}.`);
+  if (r.best > r.streak) parts.push(`Best shared run: ${r.best}.`);
 
   return parts.join(' ');
 }
@@ -268,9 +310,9 @@ const habit = rhythmLine(rhythm);
         <p class="notice" data-kind="bad" role="status">no &mdash; {errorText}</p>
     )}
 
-    {postedDate && !errorText && (
+    {confirmedDate && !errorText && (
         <p class="notice" data-kind="ok" role="status">
-            saved &mdash; posted for {wingDateLabel(postedDate, { withYear: true })}.
+            saved &mdash; posted for {wingDateLabel(confirmedDate, { withYear: true })}.
         </p>
     )}
 
@@ -441,171 +483,171 @@ const habit = rhythmLine(rhythm);
             <hr class="studio-rule">
 
             <p class="song-eyebrow">
-                in the store for {wingDateLabel(previewDate, { withYear: true })}
+                the day so far &mdash; {wingDateLabel(pair.date, { withYear: true })}
             </p>
 
-            {current ? (
-                /* Deliberately NOT the full card she sees: no player, no
-                   reaction buttons. What I need to confirm is that the right
-                   art, the right title and the right note landed on the right
-                   day — three facts, not a re-render of her page. */
-                <div class="song">
-                    <span class="song-frame">
-                        {current.art ? (
-                            <img
-                                class="song-art"
-                                src={current.art}
-                                alt=""
-                                width="320"
-                                height="320"
-                                loading="lazy"
-                                decoding="async"
-                                referrerpolicy="no-referrer"
-                            >
-                        ) : (
-                            <span class="song-art--empty" aria-hidden="true">[ ]</span>
-                        )}
-                    </span>
-                    <div class="song-body">
-                        <p class="song-day">{wingDateLabel(current.date, { withYear: true })}</p>
-                        {current.title ? (
-                            <h2 class="song-title">{current.title}</h2>
-                        ) : (
-                            <h2 class="song-title song-title--unknown">
-                                (Spotify gave us no title &mdash; her embed will still name it)
-                            </h2>
-                        )}
-                        {current.artist && <p class="song-artist">{current.artist}</p>}
-                        {/* Album, year, length. Present only when the Spotify Web
-                            API credentials are configured — the whole
-                            pre-credential archive has none of these and renders
-                            no line at all, which is also how I can tell at a
-                            glance whether the enrichment is actually working. */}
-                        {metaBits(current).length > 0 && (
-                            <ul class="song-meta">
-                                {metaBits(current).map((bit) => <li>{bit}</li>)}
-                            </ul>
-                        )}
-                        {current.note ? (
-                            <p class="song-note">{current.note}</p>
-                        ) : (
-                            <p class="song-note song-note--empty">No note. Just the song.</p>
-                        )}
-                        <p class="song-links">
-                            <a
-                                href={`https://open.spotify.com/track/${current.id}`}
-                                target="_blank"
-                                rel="noreferrer noopener"
-                            >open in spotify</a>
-                        </p>
-                    </div>
-                </div>
-            ) : (
-                <p class="archive-empty">
-                    {storeUnreachable
-                        ? 'Unknown — the store did not answer.'
-                        : 'Nothing yet. Her page will say so, honestly, rather than showing yesterday.'}
-                </p>
-            )}
-
             {/* ==============================================================
-                HER SIDE OF THAT DAY
+                THE PAIR, FROM MY SIDE
 
-                THIS IS THE HALF THAT WAS MISSING. Her reactions have always
-                been written to the store and read back on her own page, but
-                her page requires a SESSION token, which this admin cookie is
-                deliberately not — so until now the round trip that the whole
-                feature is built around ("so I can see she listened") was
-                write-only from where I stand. There was literally nowhere I
-                could see it.
+                THE HALF THAT USED TO BE MISSING IS HER HALF, AND IT IS NOT A
+                SECTION ANY MORE — IT IS A SLOT. Her reactions and her songs
+                have always been written to the store, but reading them needs
+                her page, which needs a SESSION token that this admin cookie
+                deliberately is not. So the round trip the whole feature is
+                built around ("so I can see she listened") used to be
+                write-only from where I stand, and the first fix for that was a
+                "what came back" block bolted under my card.
 
-                So both halves are rendered here: what she tapped, and what
-                she sent back. Only for the day being previewed, because this
-                is a confirmation surface and not a second archive.
+                That block was the asymmetry in miniature: my song was a card,
+                her song was an appendix. Both halves now render from the same
+                loop and the same template her page uses — so a change to the
+                card cannot make my preview lie, and cannot quietly promote one
+                of us again.
+
+                BOTH CARDS GET A PLAYER, including mine, which I do not need.
+                One template rendered twice is worth more than saving myself an
+                iframe: the moment this page special-cases a side, it stops
+                being a preview of hers.
                 ============================================================== */}
-            {current && (
-                <div class="her">
-                    <p class="song-eyebrow">what came back</p>
+            <section class="pair" aria-label={`both sides of ${wingDateLabel(pair.date, { withYear: true })}`}>
+                {slots.map((slot) => (
+                    <article
+                        class={`song song--${slot.side}`}
+                        aria-labelledby={`who-${slot.side}`}
+                        data-open={slot.track ? undefined : 'true'}
+                    >
+                        <h2 class="song-side" id={`who-${slot.side}`}>{slot.who}</h2>
 
-                    {chosenReactions.length > 0 ? (
-                        <ul class="her-reacts">
-                            {chosenReactions.map((r) => (
-                                <li>
-                                    {/* The emoji is decorative and the words are
-                                        the content — the same pairing rule as her
-                                        page's buttons, so this is never a glyph a
-                                        screen reader has to guess at. */}
-                                    <span aria-hidden="true">{r.emoji}</span>
-                                    <span class="her-react-label">{r.label}</span>
-                                </li>
-                            ))}
-                        </ul>
-                    ) : (
-                        <p class="her-quiet">
-                            {storeUnreachable
-                                ? 'Unknown — the store did not answer.'
-                                : 'No reaction on this one yet.'}
-                        </p>
-                    )}
-                </div>
-            )}
+                        {slot.track ? (
+                            <>
+                                <div class="song-head">
+                                    <span class="song-frame">
+                                        {slot.track.art ? (
+                                            <img
+                                                class="song-art"
+                                                src={slot.track.art}
+                                                alt=""
+                                                width="320"
+                                                height="320"
+                                                loading="lazy"
+                                                decoding="async"
+                                                referrerpolicy="no-referrer"
+                                            >
+                                        ) : (
+                                            <span class="song-art--empty" aria-hidden="true">[ ]</span>
+                                        )}
+                                    </span>
 
-            {herReply && (
-                /* Her reply, with a real player. The preview of MY OWN song
-                   deliberately has no embed — I just played it, I do not need
-                   to hear it again. Hers is the opposite: it is the one thing
-                   on this page I have not heard, so it gets the player.
+                                    <div class="song-body">
+                                        <p class="song-day">
+                                            {wingDateLabel(slot.track.date, { withYear: true })}
+                                        </p>
 
-                   The id has been through /^[A-Za-z0-9]{22}$/ twice — once in
-                   extractTrackId when she pasted it, once in parseTrack when it
-                   was read back out — before it reaches this src. */
-                <div class="song song--reply">
-                    <span class="song-frame">
-                        {herReply.art ? (
-                            <img
-                                class="song-art"
-                                src={herReply.art}
-                                alt=""
-                                width="320"
-                                height="320"
-                                loading="lazy"
-                                decoding="async"
-                                referrerpolicy="no-referrer"
-                            >
+                                        {slot.track.title ? (
+                                            <h3 class="song-title">{slot.track.title}</h3>
+                                        ) : (
+                                            <h3 class="song-title song-title--unknown">{slot.unnamed}</h3>
+                                        )}
+
+                                        {slot.track.artist && <p class="song-artist">{slot.track.artist}</p>}
+
+                                        {/* Album, year, length. Present only when
+                                            the Spotify Web API credentials are
+                                            configured — the whole pre-credential
+                                            archive has none of these and renders no
+                                            line at all, which is also how I can tell
+                                            at a glance whether the enrichment is
+                                            actually working. */}
+                                        {metaBits(slot.track).length > 0 && (
+                                            <ul class="song-meta">
+                                                {metaBits(slot.track).map((bit) => <li>{bit}</li>)}
+                                            </ul>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {slot.track.note ? (
+                                    <p class="song-note">{slot.track.note}</p>
+                                ) : (
+                                    <p class="song-note song-note--empty">No note. Just the song.</p>
+                                )}
+
+                                {/* The id has been through /^[A-Za-z0-9]{22}$/
+                                    twice — once in extractTrackId when it was
+                                    pasted, once in parseTrack when it was read
+                                    back out of the store — before it reaches this
+                                    src, which is the only reason interpolating it
+                                    here is safe. No autoplay: two embeds that
+                                    could start on their own is a page that
+                                    ambushes you. */}
+                                <div class="song-player">
+                                    <iframe
+                                        src={`https://open.spotify.com/embed/track/${slot.track.id}`}
+                                        title={slot.track.title
+                                            ? `Spotify player: ${slot.track.title}`
+                                            : 'Spotify player'}
+                                        width="100%"
+                                        height="152"
+                                        loading="lazy"
+                                        allow="encrypted-media; clipboard-write; fullscreen; picture-in-picture"
+                                        referrerpolicy="no-referrer"
+                                    ></iframe>
+                                </div>
+
+                                <p class="song-links">
+                                    <a
+                                        href={`https://open.spotify.com/track/${slot.track.id}`}
+                                        target="_blank"
+                                        rel="noreferrer noopener"
+                                    >open in spotify &nearr;</a>
+                                </p>
+                            </>
                         ) : (
-                            <span class="song-art--empty" aria-hidden="true">[ ]</span>
+                            <p class="song-open">
+                                {slot.open}
+                                <span class="song-open-sub">{slot.openSub}</span>
+                            </p>
                         )}
-                    </span>
-                    <div class="song-body">
-                        <p class="song-day song-day--reply">she sent this back</p>
-                        {herReply.title ? (
-                            <h2 class="song-title">{herReply.title}</h2>
-                        ) : (
-                            <h2 class="song-title song-title--unknown">
-                                (Spotify gave us no title &mdash; the embed will still name it)
-                            </h2>
+
+                        {/* WHAT SHE SAID, on the song she said it about.
+
+                            It hangs off MY card because that is whose track it
+                            answers: /api/us/react takes her session and refuses
+                            this admin cookie, so a reaction from me does not
+                            exist and her card correctly has no equivalent. That
+                            is the one thing in the feature still going one way,
+                            and it is stated rather than papered over — see the
+                            header of /api/us/react for what making it mutual
+                            would actually take. */}
+                        {slot.side === 'his' && slot.track && (
+                            <div>
+                                <p class="song-eyebrow">what she said</p>
+                                {chosenReactions.length > 0 ? (
+                                    <ul class="said">
+                                        {chosenReactions.map((r) => (
+                                            <li>
+                                                {/* The emoji is decorative and the
+                                                    words are the content — the same
+                                                    pairing rule as her page's
+                                                    buttons, so this is never a glyph
+                                                    a screen reader has to guess at. */}
+                                                <span aria-hidden="true">{r.emoji}</span>
+                                                <span class="said-label">{r.label}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                ) : (
+                                    <p class="said-quiet">
+                                        {storeUnreachable
+                                            ? 'Unknown — the store did not answer.'
+                                            : 'Nothing tapped on this one.'}
+                                    </p>
+                                )}
+                            </div>
                         )}
-                        {herReply.artist && <p class="song-artist">{herReply.artist}</p>}
-                        {metaBits(herReply).length > 0 && (
-                            <ul class="song-meta">
-                                {metaBits(herReply).map((bit) => <li>{bit}</li>)}
-                            </ul>
-                        )}
-                        {herReply.note && <p class="song-note">{herReply.note}</p>}
-                        <div class="song-player">
-                            <iframe
-                                src={`https://open.spotify.com/embed/track/${herReply.id}`}
-                                title={herReply.title ? `Spotify player: ${herReply.title}` : 'Spotify player'}
-                                width="100%"
-                                height="152"
-                                loading="lazy"
-                                allow="encrypted-media; clipboard-write; fullscreen; picture-in-picture"
-                                referrerpolicy="no-referrer"
-                            ></iframe>
-                        </div>
-                    </div>
-                </div>
-            )}
+                    </article>
+                ))}
+            </section>
 
             <div class="dj-foot">
                 {/* Reaching her page needs a SESSION token, not this admin one —
@@ -661,10 +703,16 @@ const habit = rhythmLine(rhythm);
         };
 
         function say(kind, text) {
+            /* UNHIDDEN FIRST, THEN WRITTEN. A `hidden` element is not in the
+               accessibility tree, and several screen-reader/browser pairs only
+               announce MUTATIONS to a live region that is already there — so
+               writing the text before revealing the region is how you get an
+               aria-live region that silently announces nothing. Same fix, same
+               reason, as the one on her page. */
+            status.hidden = false;
             // The word is part of the message, so this never depends on colour.
             status.dataset.kind = kind;
             status.textContent = (kind === 'bad' ? 'no — ' : 'saved — ') + text;
-            status.hidden = false;
         }
 
         form.addEventListener('submit', async function (event) {

@@ -4,11 +4,18 @@
  * ---------------------------------------------------------------------------
  * TWO METHODS, TWO DIFFERENT CREDENTIALS
  *
- *   GET  — needs a `session` (her) OR an `admin` (me) token. Reading is shared.
+ *   GET  — needs a `session` (her) OR an `admin` (me) token. Reading is shared,
+ *          and it reads BOTH halves of every day: a day is a pair now, and an
+ *          endpoint that returned one side would guarantee a page that renders
+ *          one side.
  *   POST — needs the `admin` token SPECIFICALLY. A session must never be able to
- *          write: her cookie lives for 30 days on a phone that goes to the gym,
- *          and the whole point of the feature is that what appears tomorrow
- *          morning came from me.
+ *          write MY half: her cookie lives for 30 days on a phone that goes to the
+ *          gym, and the guarantee worth keeping is that each half of a day came
+ *          from the person it is attributed to. Her half is written by
+ *          /api/us/reply, which is the mirror of this rule — it takes her session
+ *          and refuses my admin token. The two endpoints are equals; the cookies
+ *          are not interchangeable. That asymmetry of CREDENTIALS is what makes
+ *          the symmetry of CONTENT safe to show.
  *
  * Both are verified in this file with verify(), not merely by middleware.ts. The
  * middleware is default-deny for /api/us/* and would already have stopped an
@@ -85,6 +92,7 @@ import { readCookie, verify } from '../../../lib/us/session';
 import { clientKey, hit } from '../../../lib/us/ratelimit';
 import {
   StoreError,
+  emptyPair,
   getExchange,
   isWingDate,
   putSong,
@@ -94,7 +102,14 @@ import {
 
 export const prerender = false;
 
-/** How far back the archive goes in one response. ~2 months of mornings. */
+/**
+ * How far back the archive goes in one response. ~2 months.
+ *
+ * It caps EACH SIDE's history, not the number of days — see getExchange(). Two
+ * sides of 60 records that never overlap would yield up to 120 days, which is fine
+ * for a JSON response and is the honest thing to return rather than truncating
+ * whichever side sorted second.
+ */
 const ARCHIVE_LIMIT = 60;
 
 /**
@@ -185,6 +200,14 @@ export function extractTrackId(raw: unknown): string | null {
   // Spotify surface (an album, an episode, a user) and is not what this is for.
   if (trackAt === -1 || trackAt > 1) return null;
   if (trackAt === 1 && !/^intl-[a-z]{2,3}$/i.test(segments[0])) return null;
+  // NOTHING AFTER THE ID. This bound was missing for a revision, and an
+  // adversarial review caught the gap: `/track/<22>/anything` was accepted. It was
+  // never exploitable — the host is compared for equality and the id is
+  // re-validated below — but this file's own header claims "an extra path segment"
+  // is rejected outright, and a comment that overstates what the code does is worse
+  // than no comment. A trailing slash still passes: the filter above drops empty
+  // segments, so `/track/<22>/` is two segments, not three.
+  if (segments.length !== trackAt + 2) return null;
 
   const id = segments[trackAt + 1] ?? '';
   return TRACK_ID_RE.test(id) ? id : null;
@@ -496,31 +519,33 @@ export const GET: APIRoute = async ({ cookies, url }) => {
   const today = wingDate();
 
   try {
-    // One composite read, then split. `today` is whatever is filed under today's
-    // date, and the archive is everything else — so a morning I never posted shows
-    // an empty card above a full archive rather than silently promoting
-    // yesterday's song. Pretending yesterday is today would be a small lie that
-    // makes the whole feature untrustworthy.
-    const { songs, reactions, replyByDate } = await getExchange(ARCHIVE_LIMIT);
-
-    // Her reply rides along with the day it answers. A client that had to make a
-    // second call for the other half of a conversation would eventually render
-    // half of one.
-    const decorate = (s: SongRecord) => ({
-      ...s,
-      reactions: reactions[s.date] ?? [],
-      reply: replyByDate[s.date] ?? null,
-    });
-    const todaySong = songs.find((s) => s.date === today);
+    // One composite read, already folded into days. `pair` is whatever is filed
+    // under today's date — never "the most recent day". Promoting yesterday would
+    // be a small lie that makes the whole feature untrustworthy: neither of us
+    // could tell a day the other posted from a day they did not.
+    const { pairs, pairByDate } = await getExchange(ARCHIVE_LIMIT);
 
     return json({
       ok: true,
       date: today,
-      today: todaySong ? decorate(todaySong) : null,
-      // Present even on a day I have not posted, because she may have gone first
-      // and a null `today` must not mean "nothing happened today".
-      reply: replyByDate[today] ?? null,
-      archive: songs.filter((s) => s.date !== today).map(decorate),
+      // ALWAYS a pair, never null, even when nobody has posted. A caller that had
+      // to distinguish "no day" from "an empty day" would grow a branch for a
+      // state that is not different: an empty slot is the ordinary case here.
+      pair: pairByDate[today] ?? emptyPair(today),
+      archive: pairs.filter((p) => p.date !== today),
+
+      /* ---- deprecated, and kept on purpose -------------------------------
+         The old one-sided shape: `today` was his song with her reply nested
+         inside it. Her phone keeps this tab alive for a week, so a page rendered
+         before this deploy is still running the OLD rollover probe, which reads
+         exactly these two keys. Without them that probe silently stops noticing
+         the day change — it fails safe (it just never reloads) but it fails
+         invisibly, and the whole point of the probe is that the page does not go
+         stale on her. Two keys is a cheap way to not break a tab I cannot reach.
+
+         Delete both once no live tab predates the deploy — a fortnight is plenty. */
+      today: pairByDate[today]?.his ?? null,
+      reply: pairByDate[today]?.hers ?? null,
     });
   } catch (err) {
     // A store failure is reported as one. Her page is server-rendered from the

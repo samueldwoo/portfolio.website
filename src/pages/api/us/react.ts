@@ -22,6 +22,23 @@
  * EITHER token, so it cannot tell us apart.
  *
  * ---------------------------------------------------------------------------
+ * THIS IS THE ONE THING IN THE FEATURE THAT IS STILL ONE-DIRECTIONAL, AND IT STAYS
+ *
+ * The two halves of a day are peers now — same shape, same card, same weight, one
+ * endpoint each. Reactions are not: she can react to my song and I cannot react to
+ * hers. That is not an oversight and it is not laziness, it is the honest cost of
+ * the rule above. A reaction only means something because exactly one person can
+ * write it, so "make it symmetric" here does not mean relaxing this check — it
+ * means a SECOND endpoint that names the admin cookie and writes a THIRD key space
+ * (`us:react-his:*`), mirroring how the two posting endpoints are separate.
+ *
+ * Worth doing, deliberately not done here: it is a new write path with a new key
+ * space, which is a feature rather than a reframing, and it wants its own
+ * verification pass. Until then the pages state whose reaction it is rather than
+ * implying a mutual mechanism, and DayPair.reactions sits beside `his` in the type
+ * so nobody reads it as per-side.
+ *
+ * ---------------------------------------------------------------------------
  * IDEMPOTENT BY CONSTRUCTION
  *
  * The request states a desired END STATE (`on: true|false`) rather than an action

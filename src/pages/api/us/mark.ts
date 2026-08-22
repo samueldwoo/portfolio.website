@@ -111,11 +111,24 @@ const RATE_WINDOW_SEC = 600;
  *
  * This is a cookie-authenticated POST that accepts `application/x-www-form-
  * urlencoded` — a CORS-simple content type, so a cross-site form submission needs
- * no preflight and no cooperation from us. Astro's own `security.checkOrigin` is
- * NOT protecting it: astro.config.mjs sets `output: 'static'`, and Astro only
- * installs its origin-check middleware when the build output is `server`, so the
- * flag resolves to false for this project. Verified in
- * node_modules/astro/dist/core/build/plugins/plugin-manifest.js.
+ * no preflight and no cooperation from us.
+ *
+ * CORRECTION. An earlier version of this comment said `security.checkOrigin` was
+ * NOT protecting this endpoint, reasoning that `output: 'static'` makes Astro's
+ * `checkOrigin && buildOutput === "server"` resolve false. The source reading was
+ * right; the conclusion was wrong. `buildOutput` is "server" HERE precisely
+ * because several routes set `prerender = false`. Measured two ways: the built
+ * manifest in .vercel/output carries `checkOrigin: true`, and a cross-origin form
+ * POST to a sibling endpoint returns 403 before the handler runs.
+ *
+ * So the form path IS origin-checked by the framework, and this guard is defence
+ * in depth rather than the only wall. It is still worth keeping, for two reasons:
+ * checkOrigin does NOT cover `application/json` (a cross-origin JSON post is not
+ * blocked — measured), and the framework's protection is contingent on something
+ * unrelated. Delete the last `prerender = false` route and `buildOutput` flips to
+ * "static", checkOrigin silently becomes false, and every form endpoint loses its
+ * origin check with nothing failing and no warning. That fragility is recorded in
+ * astro.config.mjs next to the adapter.
  *
  * Without this, the only thing standing between a cross-site page and her data is
  * `sameSite: 'lax'` in session.ts — a cookie attribute set in a different file
