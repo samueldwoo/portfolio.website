@@ -13,7 +13,7 @@
  *
  * WHAT SHIPS IN THE HTML, AND WHAT DOES NOT
  *
- * Captions, month labels and the hidden notes ship in the initial HTML. That is
+ * Captions and the hidden notes ship in the initial HTML. That is
  * deliberate: this response is only ever produced after a signed session cookie
  * has been verified twice (middleware, then again below), and the notes have to
  * be here for the reveal to be instant and for the static grid to be readable
@@ -37,6 +37,12 @@
 import { HER_NAME, SESSION_SECRET, hasR2 } from '../../../lib/us/config';
 import { readCookie, verify } from '../../../lib/us/session';
 import { CHAPTERS, clientManifest } from '../../../lib/us/photos';
+import {
+    MARK_NOTE_MAX,
+    countVisitSafe,
+    getMarksSafe,
+    visitLine,
+} from '../../../lib/us/marks';
 import StudioRoom from '../../../components/StudioRoom.tsx';
 
 export const prerender = false;
@@ -56,6 +62,84 @@ if (!session) return Astro.redirect('/stronger', 302);
 const her = HER_NAME();
 const memories = clientManifest();
 const lines = CHAPTERS.map((c) => ({ line: c.line, label: c.label, blurb: c.blurb }));
+
+/* ---------------------------------------------------------------------------
+   HER MARKS, AND THIS VISIT
+
+   Both read on the SERVER, and both through the *Safe wrappers, which log and
+   degrade to empty rather than throwing. That split is deliberate (marks.ts's
+   header explains it): a mark WRITE fails loud, because a note she typed that
+   silently vanished is unforgivable, but a mark READ is decoration on a room that
+   must render regardless. An unreachable bucket costs her the keep-badges and the
+   visit line. It must never cost her the gallery.
+
+   Reading here rather than fetching from the island buys three things at once:
+   the first paint already carries her keeps and her notes with no
+   fetch-and-flicker, the STATIC FALLBACK GRID carries them too (and that grid is
+   the page whenever WebGL or hydration fails), and the visit line needs no
+   JavaScript at all.
+
+   Run concurrently: they hit the same store but are independent, and this is on
+   the critical path of rendering the room.
+
+   countVisit, not getVisits — THIS PAGE LOAD IS THE VISIT. It is debounced inside
+   the store (VISIT_DEBOUNCE_MS, 20 minutes), which is what makes a refresh, a
+   back-forward and iOS restoring the tab in the morning all the same visit. That
+   debounce lives in the store rather than here precisely so no future caller can
+   double-count by forgetting it.
+   --------------------------------------------------------------------------- */
+const [marks, visits] = await Promise.all([getMarksSafe(), countVisitSafe()]);
+
+/**
+ * "the 7th time you've been in here.", or '' when there is nothing worth saying.
+ *
+ * Composed on the server so the ordinal edge cases (1, 2, 11th) are decided once,
+ * next to the counter, rather than in a component.
+ */
+const visitText = visitLine(visits.count);
+
+/**
+ * What the island actually needs, and nothing else.
+ *
+ * `Mark` also carries `id` (redundant — it is the key) and `at` (an epoch
+ * timestamp of when she last touched it). Neither is rendered, and `at` is the
+ * kind of field that gets shipped once and then quietly relied on. Narrowing here
+ * keeps the client's view of a mark to the three things it draws.
+ */
+const clientMarks: Record<string, { kept: boolean; note: string; seen: number }> =
+    // Annotated rather than inferred: Object.fromEntries returns `any`, so without
+    // this the island's `marks` prop is unchecked and a renamed field would only
+    // surface as a blank badge in the browser.
+    Object.fromEntries(
+        Object.entries(marks).map(([id, m]) => [id, { kept: m.kept, note: m.note, seen: m.seen }]),
+    );
+
+/**
+ * A failed no-JS mark submission comes back as `?e=<code>` — see /api/us/mark's
+ * `answer()`. Translated into a sentence here rather than shown as a code,
+ * because the person reading it is not debugging an API.
+ *
+ * Anything unrecognised falls through to the generic line: the codes are ours, but
+ * the query string is not, and echoing an unknown value back into the page is how
+ * a reflected-content bug starts. Astro escapes by default, so this is
+ * belt-and-braces rather than the only defence.
+ */
+const MARK_ERRORS: Record<string, string> = {
+    store: 'That did not save — the store did not answer. Try it again.',
+    rate: 'That was a lot of taps very quickly. Give it a minute.',
+    'note-too-long': `That note was longer than ${MARK_NOTE_MAX} characters, so it was not saved.`,
+    'note-missing': 'That came through with no note at all, so nothing was changed.',
+    'no-such-memory': 'That memory is not on the rail any more.',
+    'cross-site': 'That did not come from this page, so it was refused.',
+    unconfigured: 'Something is misconfigured on my end. Not your fault.',
+    /* `unauthorized` is deliberately absent. /api/us/mark does answer it, but on the
+       no-JS path the 303 lands on THIS page and src/middleware.ts then bounces an
+       unauthenticated caller straight to the gate — so she would never read the
+       sentence. Listing a string that cannot be shown is worse than the fallback
+       below, which is honest about not knowing. */
+};
+const errCode = Astro.url.searchParams.get('e');
+const markError = errCode ? (MARK_ERRORS[errCode] ?? 'That did not save. Try it again.') : null;
 
 /** Chapters, with their memories, for the static grid. Empty chapters are dropped. */
 const chapters = CHAPTERS.map((c) => ({
@@ -118,7 +202,26 @@ const showPlaceholderNotice = import.meta.env.DEV && !hasR2();
   this HTML — which is why us-studio.css keeps `.room-stage` display:none until
   the component has proven WebGL works.
 -->
-<StudioRoom client:load memories={memories} lines={lines} />
+<StudioRoom
+    client:load
+    memories={memories}
+    lines={lines}
+    marks={clientMarks}
+    visitLine={visitText}
+/>
+
+{/*
+  A failed no-JS mark. Above the fallback grid rather than inside it, because the
+  submission that failed could have come from any card and she should not have to
+  find the one she was on to learn that it did not work. /api/us/mark's 303 puts a
+  `#m-<id>` fragment on the URL, so the browser has already scrolled her back to
+  the right card — this banner is what tells her why she is looking at it.
+*/}
+{markError && (
+    <div class="room-noscript" role="alert">
+        <b>Not saved.</b> {markError}
+    </div>
+)}
 
 <noscript>
     <div class="room-noscript">
@@ -148,10 +251,17 @@ const showPlaceholderNotice = import.meta.env.DEV && !hasR2();
 
     <p class="room-fallback-head">[us] &middot; the studio &middot; every memory, plainly</p>
     <p class="room-fallback-note">
-        This is the same room without the room, {her} — one card per month since we met,
+        This is the same room without the room, {her} — every photograph on the rail,
         every caption, and every note already open to you. Nothing here is behind a
-        gesture, a hold or a scroll.
+        gesture, a hold or a scroll. You can keep any of them and write back on any of
+        them from here too, with no JavaScript at all.
     </p>
+    {/*
+      The visit line, in full here rather than truncated as it is in the HUD's top
+      bar. Server-rendered from the same persisted counter, so this page says the
+      same thing the 3D room does — and says it even when the 3D room never runs.
+    */}
+    {visitText && <p class="room-fallback-visits">{visitText}</p>}
 
     {chapters.map((group) => (
         <section>
@@ -160,7 +270,13 @@ const showPlaceholderNotice = import.meta.env.DEV && !hasR2();
             </h2>
             <ol class="room-grid">
                 {group.items.map((m) => (
-                    <li class="room-card">
+                    <li class="room-card" id={`m-${m.id}`}>
+                        {/*
+                          `id` above so /api/us/mark's 303 can put her back on the
+                          card she submitted from. A `#m-<id>` fragment is the
+                          entire reason the no-JS path does not dump her at the top
+                          of a thirteen-card page every time she keeps something.
+                        */}
                         {/*
                           src is the API route, never an R2 URL: the endpoint
                           re-verifies the cookie and only then hands over a
@@ -183,11 +299,86 @@ const showPlaceholderNotice = import.meta.env.DEV && !hasR2();
                             style={`aspect-ratio: ${m.aspect}`}
                         />
                         <div class="room-card-body">
-                            <p class="room-card-month">{m.hidden ? 'still one more' : m.month}</p>
+                            {/* `when` is optional free text now, not a derived
+                                date, so the line is omitted entirely rather than
+                                rendering an empty strip. */}
+                            {(m.hidden || m.when) && (
+                              <p class="room-card-when">{m.hidden ? 'still one more' : m.when}</p>
+                            )}
                             <p class="room-card-caption">{m.caption}</p>
                             <details class="room-card-note">
                                 <summary>the note</summary>
                                 <p>{m.note}</p>
+                            </details>
+
+                            {/*
+                              ===================================================
+                              WHAT SHE CAN DO, WITH ZERO JAVASCRIPT.
+
+                              Two real forms per card, posting to /api/us/mark,
+                              which answers a form submission with a 303 back to
+                              this page. This is not a courtesy path: this grid IS
+                              the room whenever WebGL, JS or hydration fails, and a
+                              keep button that only worked with the island running
+                              would mean the accessible version of the room is
+                              read-only while the pretty one is not.
+
+                              303 rather than 302, so the redirect forces a GET and
+                              a refresh cannot resubmit the tap.
+                              ===================================================
+                            */}
+                            <form class="room-card-keep" action={`/api/us/mark?m=${m.id}`} method="post">
+                                <input type="hidden" name="action" value="keep" />
+                                <input type="hidden" name="id" value={m.id} />
+                                {/*
+                                  The DESIRED END STATE, not an action — so a
+                                  double-submit on a laggy phone converges instead
+                                  of toggling twice. `on` is only sent when
+                                  un-keeping, because /api/us/mark's readOn() treats
+                                  an ABSENT field as true; that default is what lets
+                                  the keep form carry nothing but the id.
+                                */}
+                                {marks[m.id]?.kept && <input type="hidden" name="on" value="0" />}
+                                <button type="submit" aria-pressed={marks[m.id]?.kept ? 'true' : 'false'}>
+                                    {marks[m.id]?.kept ? 'kept' : 'keep this'}
+                                </button>
+                            </form>
+
+                            {/*
+                              Her note. Shown OUTSIDE the <details> that holds his,
+                              and labelled, because the room now carries two voices
+                              and they must not read as one.
+                            */}
+                            {marks[m.id]?.note && (
+                                <div class="room-card-hers">
+                                    <p class="room-card-hers-label">yours</p>
+                                    <p class="room-card-hers-text">{marks[m.id]?.note}</p>
+                                </div>
+                            )}
+
+                            <details class="room-card-reply">
+                                <summary>{marks[m.id]?.note ? 'edit your note' : 'write back'}</summary>
+                                <form action={`/api/us/mark?m=${m.id}`} method="post">
+                                    <input type="hidden" name="action" value="note" />
+                                    <input type="hidden" name="id" value={m.id} />
+                                    {/*
+                                      A real <label>, tied by id. Thirteen cards on
+                                      one page means thirteen textareas, so the id
+                                      has to carry the memory id or they collide and
+                                      every label points at the first one.
+                                    */}
+                                    <label class="room-sr-only" for={`reply-${m.id}`}>
+                                        your note back on: {m.caption}
+                                    </label>
+                                    <textarea
+                                        id={`reply-${m.id}`}
+                                        name="note"
+                                        rows="3"
+                                        maxlength={MARK_NOTE_MAX}
+                                        placeholder="anything."
+                                    >{marks[m.id]?.note ?? ''}</textarea>
+                                    <button type="submit">save</button>
+                                </form>
                             </details>
                         </div>
                     </li>

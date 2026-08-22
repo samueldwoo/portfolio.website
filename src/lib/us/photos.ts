@@ -9,10 +9,35 @@
  * stranger read it — which a stranger can, at any time, from the GitHub API
  * (verified: unauthenticated request → 200. See PLAN.md R1).
  *
- * The captions and notes below are deliberately, visibly placeholders. They
- * render as "replace this" in the room, which is a better artifact than
- * plausible-looking filler that ships to production because nobody noticed it
- * was fake.
+ * ---------------------------------------------------------------------------
+ * THE CAPTION CONVENTION: A SQUARE BRACKET MEANS "SAM, THIS IS YOURS"
+ *
+ * Every caption and note below is wrapped in [square brackets], and that is the
+ * only signal that matters in this file. It is not decoration and it is not a
+ * style — it is the thing that makes a placeholder impossible to mistake for
+ * content, and it is why they can afford to be evocative.
+ *
+ * The previous set was NOT bracketed, and that was the actual bug: lines like
+ * "somewhere with bad coffee" and "the kitchen, 1am" read as REAL captions for
+ * memories that do not exist. They looked finished. A room full of plausible
+ * invented specifics is the single easiest thing to ship by accident, because
+ * nothing about it looks wrong — and worse, it puts words in her mouth and mine
+ * about a relationship neither of us described that way.
+ *
+ * So each caption now names the SLOT rather than inventing the memory: it says
+ * what KIND of photograph belongs there, in Sam's own second person, as a
+ * directive he can either follow or ignore. Brackets everywhere also match the
+ * wing's `[us]` lockup, so a half-finished room still looks deliberate.
+ *
+ * THREE RULES IF YOU EDIT THESE:
+ *   1. Keep the brackets until the line is real. Dropping them is how you say
+ *      "this one is finished".
+ *   2. Never invent a specific. No named places, no dates, no quoted speech, no
+ *      claims about what either of them did. A slot description is honest; a
+ *      fabricated memory is not.
+ *   3. `note` is what she reaches at MAX TENSION, and every one of them says the
+ *      word "replace" out loud, because that is the field most likely to ship
+ *      unedited — it is hidden behind a gesture, so nobody sees it in review.
  * ---------------------------------------------------------------------------
  * TWO MODES, AND WHY THE SECOND ONE EXISTS
  *
@@ -110,8 +135,19 @@ export interface Memory {
    */
   note: string;
   chapter: ChapterId;
-  /** 1-based month since we met. Drives the monthly-focus labels. */
-  monthIndex: number;
+  /**
+   * OPTIONAL, and free text. "last spring", "that tuesday", "somewhere in the
+   * middle of august" — or omitted entirely.
+   *
+   * This replaced a `monthIndex: number` that derived a strict `MMM YYYY` label
+   * off a single MONTH_ZERO constant, which turned the room into a calendar:
+   * exactly twelve panels, one per month, each stamped with a date. Sam asked
+   * for casual and less structured, and he is right — a filing system is the
+   * wrong frame for this. A memory is allowed to be "that weekend" or to carry
+   * no date at all, and the room should not imply a gap where a month has no
+   * photograph. Nothing is derived from this and nothing validates it.
+   */
+  when?: string;
   /**
    * Width / height HINT, used to lay the panel out before its bytes arrive and
    * to shape the placeholder card.
@@ -130,16 +166,10 @@ export interface Memory {
 }
 
 /**
- * PLACEHOLDER. The month we met, as `YYYY-MM`.
+ * The memories, in the order the carriage meets them, plus one past the end.
  *
- * Every month label in the room is derived from this one constant, so setting
- * it correctly is a single edit rather than thirteen. Left obviously round so
- * it reads as unset rather than as a date somebody chose.
- */
-export const MONTH_ZERO = '2024-01';
-
-/**
- * Thirteen panels: twelve months, and one more.
+ * There is no required count and no required cadence — add or remove freely.
+ * `when` is optional free text, not a date.
  *
  * Keys are `photos/mNN.webp`, and the prefix is not a free choice: it is the one
  * the upload script writes to. Aligning on it here means `npm run photos:push`
@@ -154,123 +184,130 @@ export const MONTH_ZERO = '2024-01';
  * WebP is ~120KB where the JPEG is ~400KB.
  */
 export const MEMORIES: readonly Memory[] = [
-  // ---- warm-up / core activation: ONE panel, dead centre, low light --------
+  /* ---- WARM-UP / CORE ACTIVATION -----------------------------------------
+     One panel, dead centre, low light, before the room widens into chapters.
+     This is the first thing she sees, so it is the one caption worth writing
+     first — and the one placeholder it would be most embarrassing to ship. */
   {
     id: 'm01',
     key: 'photos/m01.webp',
-    caption: 'month one — replace this caption',
-    note: 'replace this note. it is revealed at max tension and nowhere else.',
+    caption: '[the earliest one of us you still have]',
+    note: '[replace this note. she reaches it at max tension and nowhere else, so it is the one nobody catches in review. two sentences, in your voice, about why this is the one that opens the room.]',
     chapter: 'core',
-    monthIndex: 1,
+    when: '[when it started]',
     aspect: 0.8,
   },
   {
     id: 'm02',
     key: 'photos/m02.webp',
-    caption: 'month two — replace this caption',
-    note: 'replace this note.',
+    caption: '[the one she would delete and you never will]',
+    note: '[replace this note. tell her why you kept it.]',
     chapter: 'core',
-    monthIndex: 2,
+    when: '[roughly when]',
     aspect: 1.5,
   },
   {
     id: 'm03',
     key: 'photos/m03.webp',
-    caption: 'month three — replace this caption',
-    note: 'replace this note.',
+    /* `when` deliberately omitted on this one and several below. It is optional
+       free text, and leaving some blank is how the room demonstrates that a
+       memory is allowed to carry no date at all — which is the whole reason the
+       monthly calendar was torn out. */
+    caption: '[one where neither of you is looking at the camera]',
+    note: '[replace this note.]',
     chapter: 'core',
-    monthIndex: 3,
     aspect: 0.8,
   },
+  /* ---- LINE 02 - LOWER BODY - everywhere we went ------------------------- */
   {
     id: 'm04',
     key: 'photos/m04.webp',
-    caption: 'month four — replace this caption',
-    note: 'replace this note.',
+    caption: '[somewhere the two of you went together]',
+    note: '[replace this note.]',
     chapter: 'lower',
-    monthIndex: 4,
+    when: '[a trip]',
     aspect: 1.0,
   },
   {
     id: 'm05',
     key: 'photos/m05.webp',
-    caption: 'month five — replace this caption',
-    note: 'replace this note.',
+    caption: '[an ordinary evening that turned out to matter]',
+    note: '[replace this note.]',
     chapter: 'lower',
-    monthIndex: 5,
     aspect: 1.5,
   },
   {
     id: 'm06',
     key: 'photos/m06.webp',
-    caption: 'month six — replace this caption',
-    note: 'replace this note.',
+    caption: '[her, mid-laugh, at something off-frame]',
+    note: '[replace this note. you are the only person who knows what was off-frame.]',
     chapter: 'lower',
-    monthIndex: 6,
     aspect: 0.8,
   },
+  /* ---- LINE 03 - OBLIQUES - the sideways ones ---------------------------- */
   {
     id: 'm07',
     key: 'photos/m07.webp',
-    caption: 'month seven — replace this caption',
-    note: 'replace this note.',
+    caption: '[the one where something went wrong and it was fine]',
+    note: '[replace this note.]',
     chapter: 'obliques',
-    monthIndex: 7,
     aspect: 0.8,
   },
   {
     id: 'm08',
     key: 'photos/m08.webp',
-    caption: 'month eight — replace this caption',
-    note: 'replace this note.',
+    caption: '[not a photograph of either of you]',
+    note: '[replace this note. a room of faces needs one thing in it that is not a face.]',
     chapter: 'obliques',
-    monthIndex: 8,
     aspect: 1.5,
   },
   {
     id: 'm09',
     key: 'photos/m09.webp',
-    caption: 'month nine — replace this caption',
-    note: 'replace this note.',
+    caption: '[the least remarkable day you would both go back to]',
+    note: '[replace this note.]',
     chapter: 'obliques',
-    monthIndex: 9,
+    when: '[a weekday]',
     aspect: 1.0,
   },
+  /* ---- LINE 04 - UPPER BODY - the long-distance one ---------------------- */
   {
     id: 'm10',
     key: 'photos/m10.webp',
-    caption: 'month ten — replace this caption',
-    note: 'replace this note.',
+    caption: '[a goodbye, or the hour before one]',
+    note: '[replace this note.]',
     chapter: 'upper',
-    monthIndex: 10,
     aspect: 0.8,
   },
   {
     id: 'm11',
     key: 'photos/m11.webp',
-    caption: 'month eleven — replace this caption',
-    note: 'replace this note.',
+    caption: '[a screen, a distance, a bad connection]',
+    note: '[replace this note. the year of long distance gets at least one honest picture.]',
     chapter: 'upper',
-    monthIndex: 11,
+    when: '[this year, somewhere]',
     aspect: 1.5,
   },
   {
     id: 'm12',
     key: 'photos/m12.webp',
-    caption: 'month twelve — replace this caption',
-    note: 'replace this note.',
+    caption: '[the most recent one of the two of you]',
+    note: '[replace this note. this is the last one on the rail before the room gives her one more.]',
     chapter: 'upper',
-    monthIndex: 12,
+    when: '[recently]',
     aspect: 0.8,
   },
-  // ---- "still one more." --------------------------------------------------
+  /* ---- "still one more." -------------------------------------------------
+     Past the apparent end of the rail, and it comes to HER rather than asking
+     for travel the machine has already said it will not give. Whatever goes here
+     is the last thing she sees, so it should be the one you would have put
+     first. */
   {
     id: 'still-one-more',
     key: 'photos/still-one-more.webp',
-    caption: 'still one more',
-    note: 'replace this note. this is the one past the end of the rail.',
+    caption: '[still one more - put the best one here]',
+    note: '[replace this note. she only reaches this panel by scrolling to the very end, or by holding the + in the index. it is the one place in the room where being thorough is rewarded, so make it worth it.]',
     chapter: 'upper',
-    monthIndex: 13,
     aspect: 1.0,
     hidden: true,
   },
@@ -349,25 +386,6 @@ export function chapterOf(m: Memory): Chapter {
   return CHAPTERS.find((c) => c.id === m.chapter) ?? CHAPTERS[0];
 }
 
-/**
- * `MAR 2024` for month 3, derived from MONTH_ZERO.
- *
- * Deliberately arithmetic on the month number rather than a Date object: `new
- * Date('2024-01')` is parsed as UTC midnight and then formatted in the local
- * zone, which renders December 2023 for anybody west of Greenwich. That class
- * of bug is invisible in London and wrong everywhere else.
- */
-const MONTH_NAMES = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
-
-export function monthLabel(m: Memory): string {
-  const [y0, mo0] = MONTH_ZERO.split('-').map((n) => Number(n));
-  if (!Number.isFinite(y0) || !Number.isFinite(mo0)) return `month ${m.monthIndex}`;
-  // monthIndex is 1-based and month 1 IS MONTH_ZERO, hence the -1.
-  const absolute = (y0 * 12 + (mo0 - 1)) + (m.monthIndex - 1);
-  const year = Math.floor(absolute / 12);
-  const month = absolute % 12;
-  return `${MONTH_NAMES[month]} ${year}`;
-}
 
 /* ===========================================================================
    PLACEHOLDERS — the room, with no Cloudflare account
@@ -413,7 +431,9 @@ export function placeholderSvg(m: Memory): string {
   const barY = 0.30 + (pick(3) / 100) * 0.34;
   const ch = chapterOf(m);
 
-  const label = m.hidden ? 'still one more' : monthLabel(m).toUpperCase();
+  // `when` is optional now, so the placeholder falls back to the chapter rather
+  // than inventing a date. Never shows an empty strip where a label used to be.
+  const label = m.hidden ? 'still one more' : (m.when || ch.label).toUpperCase();
   const line = `line 0${ch.line} · ${ch.label}`;
 
   // Type sizes are in user units against a 1000-unit tall box, so they scale
@@ -767,8 +787,8 @@ export interface ClientMemory {
   chapter: ChapterId;
   /** Carriage line 1–4, denormalised so the island needs no chapter lookup. */
   line: number;
-  month: string;
-  monthIndex: number;
+  /** Free text or '' — see Memory.when. Never derived, never a date format. */
+  when: string;
   aspect: number;
   hidden: boolean;
   /** Same-origin URL that resolves to the bytes. Never an R2 URL. */
@@ -789,8 +809,7 @@ export function clientManifest(): ClientMemory[] {
     note: m.note,
     chapter: m.chapter,
     line: chapterOf(m).line,
-    month: monthLabel(m),
-    monthIndex: m.monthIndex,
+    when: m.when ?? '',
     aspect: m.aspect,
     hidden: Boolean(m.hidden),
     src: `/api/us/photo/${m.id}`,

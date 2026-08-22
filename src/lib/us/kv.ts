@@ -4,12 +4,15 @@
  * ---------------------------------------------------------------------------
  * WHAT THIS FILE IS, AND WHY IT IS MORE THAN A CLIENT
  *
- * Four things belong together and are therefore all here:
+ * Five things belong together and are therefore all here:
  *
- *   1. THE INTERFACE — putSong / getSong / getSongs / putReaction / getReactions.
+ *   1. THE INTERFACE — songs, replies, reactions. Read and write.
  *   2. THREE BACKENDS behind it, chosen from whatever credentials exist.
- *   3. THE KEY LAYOUT — the exact strings a song and a reaction live under.
+ *   3. THE KEY LAYOUT — the exact strings a song, a reply and a reaction live under.
  *   4. THE CALENDAR — the day-string those keys are built from.
+ *   5. THE DERIVATIONS — streak, totals, and which old morning to resurface. Pure
+ *      functions over records that are already here, so the pages cannot each
+ *      invent their own arithmetic and disagree about how long we have done this.
  *
  * They are one module because they are one decision. Every song is stored under
  * `<YYYY-MM-DD>`, so the rule that turns "now" into that date string is not a
@@ -22,6 +25,23 @@
  * For the same reason the REACTIONS vocabulary lives here. Those keys are
  * persisted forever; renaming one silently orphans every reaction she ever gave.
  * A list that gets written into a database is a schema, not a UI constant.
+ *
+ * ---------------------------------------------------------------------------
+ * A REPLY IS A SEPARATE RECORD, NOT A SONG
+ *
+ * She can send one back. It is stored under its own key space (`us:reply:<date>`
+ * / `doc.replies[date]`) and NEVER through putSong, and that separation is a
+ * security boundary rather than a modelling preference. Her endpoint is
+ * authenticated by the SESSION cookie; mine by the ADMIN cookie. If both sides
+ * wrote into `songs`, then any bug that let a session reach putSong would let her
+ * cookie — which lives for thirty days on a phone that goes to the gym — overwrite
+ * the thing the whole feature exists to deliver. Two key spaces mean the worst
+ * case for that bug is a wrong reply, not a forged song.
+ *
+ * ONE REPLY PER DAY, overwritable, exactly like a song. Re-sending replaces, so
+ * "wrong link" is fixable from her phone. If a day ever needs to hold a thread
+ * rather than a single answer, that is a new key space again, not a list crammed
+ * into this one.
  *
  * Callers NEVER branch on the backend. That is the whole point of the Store
  * interface below: the pages and endpoints are written once, and which tier is
@@ -159,6 +179,31 @@ function dateScore(date: string): number {
   return Number(date.replace(/-/g, ''));
 }
 
+/**
+ * The day `days` away from this one, still as `YYYY-MM-DD`.
+ *
+ * Done in UTC on purpose, and that is not a contradiction of WING_TZ above. A
+ * wing date is a LABEL for a calendar day, not an instant; anchoring it at UTC
+ * midnight and adding whole 86400000ms steps moves the label by exactly one day
+ * every time, because UTC has no DST to skip an hour. Doing the same arithmetic
+ * "in the wing's timezone" is what actually breaks: on the two DST boundaries a
+ * day is 23 or 25 hours long, +24h lands on the wrong side of midnight, and a
+ * streak silently loses or double-counts a day once every spring.
+ */
+function shiftDate(date: string, days: number): string {
+  const at = Date.parse(`${date}T00:00:00Z`);
+  if (Number.isNaN(at)) return date;
+  return new Date(at + days * 86_400_000).toISOString().slice(0, 10);
+}
+
+/** Whole days from `from` to `to`, inclusive of both ends. 0 if either is bad. */
+function daysBetween(from: string, to: string): number {
+  const a = Date.parse(`${from}T00:00:00Z`);
+  const b = Date.parse(`${to}T00:00:00Z`);
+  if (Number.isNaN(a) || Number.isNaN(b)) return 0;
+  return Math.floor((b - a) / 86_400_000) + 1;
+}
+
 /* ============================================================================
    REACTION VOCABULARY
 
@@ -197,7 +242,18 @@ export function isReactionKey(value: unknown): value is string {
    THE RECORD
    ========================================================================= */
 
-export interface SongRecord {
+/**
+ * One track, filed under one day, with the words that came with it.
+ *
+ * EVERY FIELD EXCEPT `date` AND `id` IS ALLOWED TO BE EMPTY, and that is the
+ * central design fact of this record rather than a tolerance. The metadata comes
+ * from an endpoint that needs no credentials and can therefore refuse, change or
+ * disappear; the enriched fields come from an API whose credentials may never
+ * exist. A card that renders from `date` + `id` alone still plays the song, so
+ * every optional field is a bonus the page omits rather than a dependency it
+ * breaks on.
+ */
+export interface TrackRecord {
   /** `YYYY-MM-DD` in WING_TZ. Also the primary key. */
   date: string;
   /** Spotify track id, always 22 base62 chars. Validated before it gets here. */
@@ -207,21 +263,50 @@ export interface SongRecord {
   artist: string;
   /** Album art URL, or empty when the metadata call failed or was rejected. */
   art: string;
-  /** My note. The actual point of the feature. */
+  /** The note. The actual point of the feature. */
   note: string;
   /** Epoch millis, for "posted this morning" copy and for debugging. */
   postedAt: number;
+
+  /* ---- enriched, and only ever present when the Web API credentials exist ----
+     See resolveMetadata() in /api/us/song. All three are absent on every record
+     written before those credentials were configured, so they are OPTIONAL in the
+     type as well as empty-tolerant at render time: a page that assumed they were
+     there would break on the entire existing archive. */
+
+  /** Album name. '' or undefined when unknown. */
+  album?: string;
+  /** Release year as four digits, e.g. `1994`. '' or undefined when unknown. */
+  year?: string;
+  /** Track length in milliseconds. 0 or undefined when unknown. */
+  durationMs?: number;
 }
+
+/**
+ * His and hers, and they are DELIBERATELY THE SAME SHAPE.
+ *
+ * Not laziness: the point of the feature is that a day reads as one exchange, so
+ * the two halves are rendered by the same card and validated by the same parser.
+ * The moment they diverge, one side gets a field the other cannot show and the
+ * conversation stops being symmetrical. What separates them is the KEY SPACE and
+ * the COOKIE THAT MAY WRITE IT (see the header) — never the fields.
+ */
+export type SongRecord = TrackRecord;
+export type ReplyRecord = TrackRecord;
 
 /**
  * Validate a record read back out of a store.
  *
- * We are the only writer, so this is not about hostile input — it is about SCHEMA
- * DRIFT. Adding a field, or hand-editing a value in the Upstash console at 1am,
- * must degrade to "that day has no song" rather than throwing inside a page
+ * We are the only two writers, so this is not about hostile input — it is about
+ * SCHEMA DRIFT. Adding a field, or hand-editing a value in the Upstash console at
+ * 1am, must degrade to "that day has no song" rather than throwing inside a page
  * render and 500ing her whole vault.
+ *
+ * Used for replies as well as songs, because they are one shape. A reply that
+ * fails this check is dropped exactly like a song that fails it: the day renders
+ * with the half that IS valid rather than erroring on the half that is not.
  */
-function parseSong(raw: unknown): SongRecord | null {
+function parseTrack(raw: unknown): TrackRecord | null {
   let obj: Record<string, unknown> | null = null;
   if (typeof raw === 'string' && raw.length > 0) {
     try {
@@ -246,6 +331,22 @@ function parseSong(raw: unknown): SongRecord | null {
     art: str(obj.art),
     note: str(obj.note),
     postedAt: Number(obj.postedAt) || 0,
+    album: str(obj.album),
+    // Four digits or nothing. A stored `year` only ever comes from Spotify's
+    // `release_date`, but this read runs against records a human may have edited,
+    // and "199x" printed on her card as a release year would be worse than no
+    // year at all.
+    year: /^\d{4}$/.test(str(obj.year)) ? str(obj.year) : '',
+    // Guarded against negatives and NaN so the duration formatter downstream
+    // never has to. Anything absurd (over ~3 hours) is treated as absent rather
+    // than rendered, because a wrong runtime is a visible lie and a missing one
+    // is just a missing one.
+    durationMs:
+      Number.isFinite(Number(obj.durationMs)) &&
+      Number(obj.durationMs) > 0 &&
+      Number(obj.durationMs) < 3 * 60 * 60 * 1000
+        ? Math.floor(Number(obj.durationMs))
+        : 0,
   };
 }
 
@@ -259,12 +360,12 @@ function parseSong(raw: unknown): SongRecord | null {
  * turns a schema bug into "works on my laptop".
  *
  * Accepts raw values (JSON strings from Redis, plain objects from R2 or the Map)
- * because parseSong handles both, so no tier has to pre-normalize.
+ * because parseTrack handles both, so no tier has to pre-normalize.
  */
-function parseAndOrder(raws: unknown[], limit: number): SongRecord[] {
+function parseAndOrder(raws: unknown[], limit: number): TrackRecord[] {
   return raws
-    .map(parseSong)
-    .filter((s): s is SongRecord => s !== null)
+    .map(parseTrack)
+    .filter((s): s is TrackRecord => s !== null)
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, limit);
 }
@@ -272,9 +373,19 @@ function parseAndOrder(raws: unknown[], limit: number): SongRecord[] {
 /* ============================================================================
    THE INTERFACE
 
-   Five operations. Everything the feature needs and nothing it does not, because
-   each one has to be implemented three times and a sixth would have to justify
+   Eight operations. Everything the feature needs and nothing it does not, because
+   each one has to be implemented three times and a ninth would have to justify
    itself three times over.
+
+   The reply trio mirrors the song trio exactly — same signatures, same ordering
+   guarantees, different key space. That symmetry is what lets the pages render one
+   card component for both halves of a day; an asymmetric reply API would have
+   leaked into an asymmetric UI.
+
+   Note what is NOT here: no composite "give me the whole day" read. It would have
+   to be written three times, and getExchange() at the bottom of this file composes
+   the primitives instead — one place, one behaviour, and the parallelism is visible
+   at the call site rather than buried in three backends.
    ========================================================================= */
 
 export interface Store {
@@ -285,6 +396,12 @@ export interface Store {
   getSong(date: string): Promise<SongRecord | null>;
   /** The `limit` most recent songs, newest first. */
   getSongs(limit: number): Promise<SongRecord[]>;
+  /** Write (or overwrite) one day's reply — HERS. Never a song. */
+  putReply(reply: ReplyRecord): Promise<void>;
+  /** One day's reply, or null when she has not answered that day. */
+  getReply(date: string): Promise<ReplyRecord | null>;
+  /** The `limit` most recent replies, newest first. */
+  getReplies(limit: number): Promise<ReplyRecord[]>;
   /** Set or clear one reaction for one day. */
   putReaction(date: string, key: string, on: boolean): Promise<void>;
   /** Which reactions exist, per date. Every date asked for gets an entry. */
@@ -305,8 +422,17 @@ function emptyReactions(dates: string[]): Record<string, string[]> {
 /** `us:` prefix matches ratelimit.ts's `us:rl:` so one Redis can hold both. */
 const SONG_KEY = (date: string) => `us:song:${date}`;
 const REACT_KEY = (date: string) => `us:react:${date}`;
+/**
+ * Her side, in its own key space. A separate prefix rather than a field inside
+ * the song blob, so that the endpoint holding only her session cookie writes keys
+ * that CANNOT collide with mine — see the header. It also means a reply exists on
+ * a day with no song, which is exactly the case where she went first.
+ */
+const REPLY_KEY = (date: string) => `us:reply:${date}`;
 /** Sorted set of every date that has a song, scored by dateScore(). */
 const INDEX_KEY = 'us:song:index';
+/** The same, for replies. Two indexes because they are two histories. */
+const REPLY_INDEX_KEY = 'us:reply:index';
 
 /** One Redis command as an argv array, e.g. `['GET', 'us:song:2026-08-21']`. */
 type Command = (string | number)[];
@@ -359,35 +485,43 @@ async function redis(url: string, token: string, cmds: Command[]): Promise<unkno
 function upstashStore(url: string, token: string): Store {
   const run = (cmds: Command[]) => redis(url, token, cmds);
 
-  return {
-    tier: 'upstash',
-
-    async putSong(song) {
+  /**
+   * A "shelf": one blob per date, plus a sorted-set index of the dates on it.
+   *
+   * Songs and replies are the same three operations over two different key
+   * spaces, so they are written ONCE and bound twice. Copy-pasting them would be
+   * six implementations of three behaviours, and the failure mode of that is the
+   * one this file already warns about elsewhere — a fix applied to the song path
+   * and forgotten on the reply path, visible only as "her answers sometimes do
+   * not show up in the archive".
+   */
+  const shelf = (keyFor: (date: string) => string, indexKey: string) => ({
+    async put(rec: TrackRecord): Promise<void> {
       // Overwriting is a feature: the realistic mistake is a typo in the note and
       // the fix has to be "post it again from my phone". ZADD on an existing
       // member updates its score instead of duplicating it, so re-posting the
       // same day never doubles up in the archive.
       await run([
-        ['SET', SONG_KEY(song.date), JSON.stringify(song)],
-        ['ZADD', INDEX_KEY, dateScore(song.date), song.date],
+        ['SET', keyFor(rec.date), JSON.stringify(rec)],
+        ['ZADD', indexKey, dateScore(rec.date), rec.date],
       ]);
     },
 
-    async getSong(date) {
-      const [raw] = await run([['GET', SONG_KEY(date)]]);
-      return parseSong(raw);
+    async get(date: string): Promise<TrackRecord | null> {
+      const [raw] = await run([['GET', keyFor(date)]]);
+      return parseTrack(raw);
     },
 
-    async getSongs(limit) {
+    async list(limit: number): Promise<TrackRecord[]> {
       // Two round trips, and deliberately not one: the index is read first so
       // that MGET only fetches the newest `limit` blobs. The alternative — one
       // hash holding every song ever — would drag the entire history across the
       // wire to render a single card, and would grow without bound.
-      const [rawDates] = await run([['ZRANGE', INDEX_KEY, 0, limit - 1, 'REV']]);
+      const [rawDates] = await run([['ZRANGE', indexKey, 0, limit - 1, 'REV']]);
       const dates = (Array.isArray(rawDates) ? rawDates : []).filter(isWingDate);
       if (dates.length === 0) return [];
 
-      const [rawBlobs] = await run([['MGET', ...dates.map(SONG_KEY)]]);
+      const [rawBlobs] = await run([['MGET', ...dates.map(keyFor)]]);
       const blobs = Array.isArray(rawBlobs) ? rawBlobs : [];
       // A date in the index with no blob behind it is dropped silently and on
       // purpose: it means a half-completed write or a manually deleted key, and
@@ -396,6 +530,21 @@ function upstashStore(url: string, token: string): Store {
       // anyway so this tier cannot drift from the other two.
       return parseAndOrder(blobs, limit);
     },
+  });
+
+  const songs = shelf(SONG_KEY, INDEX_KEY);
+  const replies = shelf(REPLY_KEY, REPLY_INDEX_KEY);
+
+  return {
+    tier: 'upstash',
+
+    putSong: (song) => songs.put(song),
+    getSong: (date) => songs.get(date),
+    getSongs: (limit) => songs.list(limit),
+
+    putReply: (reply) => replies.put(reply),
+    getReply: (date) => replies.get(date),
+    getReplies: (limit) => replies.list(limit),
 
     async putReaction(date, key, on) {
       // The one place a tier difference is visible in the outcome rather than
@@ -437,15 +586,25 @@ function upstashStore(url: string, token: string): Store {
 const R2_DOC_KEY = 'data/songs.json';
 
 interface SongDoc {
-  /** Schema version. Present from day one so a future migration has a hinge. */
+  /**
+   * Schema version. Present from day one so a future migration has a hinge.
+   *
+   * STILL 1 after replies were added, deliberately. `replies` is ADDITIVE and
+   * optional: an older document without the key reads as `{}` (see parseDoc), and
+   * an older deploy reading a newer document ignores a field it does not know
+   * about. Bumping the number would announce a break that does not exist, and the
+   * hinge is worth more when it has never been turned for a non-event.
+   */
   v: 1;
-  /** date -> song */
+  /** date -> song. MINE. Written only by the admin-authenticated endpoint. */
   songs: Record<string, SongRecord>;
+  /** date -> reply. HERS. Written only by the session-authenticated endpoint. */
+  replies: Record<string, ReplyRecord>;
   /** date -> reaction key -> epoch millis of the tap */
   reactions: Record<string, Record<string, number>>;
 }
 
-const EMPTY_DOC: SongDoc = { v: 1, songs: {}, reactions: {} };
+const EMPTY_DOC: SongDoc = { v: 1, songs: {}, replies: {}, reactions: {} };
 
 /**
  * A client per process, not per call.
@@ -494,8 +653,17 @@ function parseDoc(text: string): SongDoc | null {
   const obj = raw as Partial<SongDoc>;
   const songs = obj.songs && typeof obj.songs === 'object' ? obj.songs : null;
   const reactions = obj.reactions && typeof obj.reactions === 'object' ? obj.reactions : {};
+  // `replies` is MISSING from every document written before she could answer, so
+  // its absence is the normal case for the whole existing archive and must never
+  // make a document unreadable. Only `songs` is structural.
+  const replies = obj.replies && typeof obj.replies === 'object' ? obj.replies : {};
   if (!songs) return null;
-  return { v: 1, songs: songs as SongDoc['songs'], reactions: reactions as SongDoc['reactions'] };
+  return {
+    v: 1,
+    songs: songs as SongDoc['songs'],
+    replies: replies as SongDoc['replies'],
+    reactions: reactions as SongDoc['reactions'],
+  };
 }
 
 async function readDoc(): Promise<{ doc: SongDoc; existed: boolean; corrupt: boolean }> {
@@ -566,12 +734,31 @@ function r2Store(): Store {
 
     async getSong(date) {
       const { doc } = await readDoc();
-      return parseSong(doc.songs[date]);
+      return parseTrack(doc.songs[date]);
     },
 
     async getSongs(limit) {
       const { doc } = await readDoc();
       return parseAndOrder(Object.values(doc.songs), limit);
+    },
+
+    /* Her side. Same read-modify-write, same documented race, and note that it
+       touches ONLY `doc.replies` — a bug here cannot reach `doc.songs`, which is
+       the property the two key spaces exist to guarantee. */
+    async putReply(reply) {
+      await mutateDoc((doc) => {
+        doc.replies[reply.date] = reply;
+      });
+    },
+
+    async getReply(date) {
+      const { doc } = await readDoc();
+      return parseTrack(doc.replies[date]);
+    },
+
+    async getReplies(limit) {
+      const { doc } = await readDoc();
+      return parseAndOrder(Object.values(doc.replies), limit);
     },
 
     async putReaction(date, key, on) {
@@ -608,6 +795,8 @@ function r2Store(): Store {
 
 const memory = {
   songs: new Map<string, SongRecord>(),
+  /** Her replies. A separate Map, mirroring the separate key space above. */
+  replies: new Map<string, ReplyRecord>(),
   /** date -> (reaction key -> epoch millis) */
   reactions: new Map<string, Map<string, number>>(),
 };
@@ -621,11 +810,23 @@ function memoryStore(): Store {
     },
 
     async getSong(date) {
-      return parseSong(memory.songs.get(date) ?? null);
+      return parseTrack(memory.songs.get(date) ?? null);
     },
 
     async getSongs(limit) {
       return parseAndOrder([...memory.songs.values()], limit);
+    },
+
+    async putReply(reply) {
+      memory.replies.set(reply.date, reply);
+    },
+
+    async getReply(date) {
+      return parseTrack(memory.replies.get(date) ?? null);
+    },
+
+    async getReplies(limit) {
+      return parseAndOrder([...memory.replies.values()], limit);
     },
 
     async putReaction(date, key, on) {
@@ -724,6 +925,21 @@ export function getSongs(limit: number): Promise<SongRecord[]> {
   return store().getSongs(capped);
 }
 
+export function putReply(reply: ReplyRecord): Promise<void> {
+  return store().putReply(reply);
+}
+
+export function getReply(date: string): Promise<ReplyRecord | null> {
+  if (!isWingDate(date)) return Promise.resolve(null);
+  return store().getReply(date);
+}
+
+export function getReplies(limit: number): Promise<ReplyRecord[]> {
+  const capped = Math.max(0, Math.min(365, Math.floor(limit) || 0));
+  if (capped === 0) return Promise.resolve([]);
+  return store().getReplies(capped);
+}
+
 export function putReaction(date: string, key: string, on: boolean): Promise<void> {
   // Silently ignoring an unknown key would hide a typo in a caller; the caller
   // is expected to have validated already, so reaching here with garbage is a
@@ -737,4 +953,249 @@ export function getReactions(dates: string[]): Promise<Record<string, string[]>>
   const valid = dates.filter(isWingDate);
   if (valid.length === 0) return Promise.resolve(emptyReactions(valid));
   return store().getReactions(valid);
+}
+
+/**
+ * Everything a page needs to render a stretch of days as a CONVERSATION.
+ *
+ * WHY THIS IS ONE FUNCTION AND NOT THREE CALL SITES: every page that shows a day
+ * needs all three halves of it, and every page that assembled them itself would
+ * be free to forget one — the archive that shows songs but silently drops her
+ * replies is the exact bug this prevents.
+ *
+ * TWO ROUND TRIPS, NOT THREE, AND THAT IS THE MOST IT CAN BE. Songs and replies
+ * are independent, so they go in parallel. Reactions cannot: they are fetched BY
+ * DATE and the dates are not known until the songs come back. So the shape below
+ * is `Promise.all` then one dependent read, which is the minimum the data
+ * dependency allows.
+ *
+ * Reactions are requested for the SONG dates only. A reaction is something she
+ * does to a song I posted — the markup that writes one only ever exists on a card
+ * with a song in it — so a reply-only day (a day she went first) has no reactions
+ * to fetch and asking for them would be an extra Redis command per day forever, to
+ * be told `[]`.
+ *
+ * Failure is NOT swallowed here. The reasoning is the file header's: a page that
+ * quietly rendered an empty archive because one read failed would look exactly
+ * like a page whose archive is genuinely empty, and the caller is the only one who
+ * knows how to say "the shelf is not answering" in her language.
+ */
+export async function getExchange(
+  limit: number,
+): Promise<{
+  songs: SongRecord[];
+  replies: ReplyRecord[];
+  /** date -> reaction keys. Keyed for every song date, so no caller checks undefined. */
+  reactions: Record<string, string[]>;
+  /** date -> reply, for O(1) lookup while rendering an archive row. */
+  replyByDate: Record<string, ReplyRecord>;
+}> {
+  const [songs, replies] = await Promise.all([getSongs(limit), getReplies(limit)]);
+  const reactions = await getReactions(songs.map((s) => s.date));
+
+  const replyByDate: Record<string, ReplyRecord> = {};
+  for (const r of replies) replyByDate[r.date] = r;
+
+  return { songs, replies, reactions, replyByDate };
+}
+
+/* ============================================================================
+   THE DERIVATIONS
+
+   Everything below is a PURE FUNCTION over records that are already in memory.
+   No I/O, no clock of its own — `today` is passed in, because a function that
+   read the clock itself could not be reasoned about and would make the streak on
+   her page disagree with the streak on mine by one day for an hour every night.
+
+   THE RULE FOR ALL OF IT: never print a number the stored data does not support.
+   A "streak" that counts days nobody posted, or a total that quietly means "in
+   the last 60 records we happened to read", is worse than no number — it is a
+   number she would believe. Every field below says exactly what it counted, and
+   the window it counted over is the caller's `limit`, stated once at the call
+   site rather than implied here.
+   ========================================================================= */
+
+export interface Rhythm {
+  /** Distinct mornings with a song in them. */
+  mornings: number;
+  /** Of those mornings, how many she answered — a reaction, a reply, or both. */
+  answered: number;
+  /** Days she sent a song back. Includes days I never posted: she can go first. */
+  replies: number;
+  /**
+   * Consecutive days with a song, counting back from today.
+   *
+   * If nothing is posted today YET, this counts back from yesterday instead and
+   * `streakLive` is false — because at 7am on a Tuesday the Monday-ending run is
+   * the true answer, and resetting the number to zero every midnight would be
+   * both wrong and cruel.
+   */
+  streak: number;
+  /** Whether `streak` includes today. Drives the tense of the sentence. */
+  streakLive: boolean;
+  /** Longest run of consecutive days anywhere in the window. */
+  best: number;
+  /** Earliest date seen, songs or replies. '' when there is nothing at all. */
+  first: string;
+  /** Calendar days from `first` to `today` inclusive. 0 when empty. */
+  span: number;
+}
+
+const EMPTY_RHYTHM: Rhythm = {
+  mornings: 0,
+  answered: 0,
+  replies: 0,
+  streak: 0,
+  streakLive: false,
+  best: 0,
+  first: '',
+  span: 0,
+};
+
+/**
+ * Count what actually happened.
+ *
+ * Deliberately tolerant of a duplicated or out-of-order input array: the dates go
+ * into Sets before anything is counted, so a caller that concatenated two reads
+ * cannot inflate a total. That matters because `mornings` is a number she will
+ * read as a fact about us.
+ */
+export function summarize(input: {
+  /** Today in WING_TZ. Passed, never read from the clock. See the section header. */
+  today: string;
+  songs: readonly SongRecord[];
+  replies: readonly ReplyRecord[];
+  reactions: Record<string, string[]>;
+}): Rhythm {
+  const { today } = input;
+  if (!isWingDate(today)) return EMPTY_RHYTHM;
+
+  const songDates = new Set(input.songs.map((s) => s.date).filter(isWingDate));
+  const replyDates = new Set(input.replies.map((r) => r.date).filter(isWingDate));
+
+  if (songDates.size === 0 && replyDates.size === 0) return EMPTY_RHYTHM;
+
+  // A morning counts as answered if she reacted OR replied. Both is still one
+  // morning: this is "did she show up", not "how many taps".
+  let answered = 0;
+  for (const date of songDates) {
+    const reacted = (input.reactions[date] ?? []).length > 0;
+    if (reacted || replyDates.has(date)) answered += 1;
+  }
+
+  // Walk back one day at a time. Bounded by the window the caller read rather
+  // than by a `while (true)`: the loop can only ever run as many times as there
+  // are records, because the first gap ends it.
+  let cursor = songDates.has(today) ? today : shiftDate(today, -1);
+  const streakLive = songDates.has(today);
+  let streak = 0;
+  while (songDates.has(cursor)) {
+    streak += 1;
+    cursor = shiftDate(cursor, -1);
+  }
+
+  // Longest run ever. Ascending order so a run is "each date's predecessor was
+  // also posted", which is one pass and no lookahead.
+  const ascending = [...songDates].sort();
+  let best = 0;
+  let run = 0;
+  let previous = '';
+  for (const date of ascending) {
+    run = previous && shiftDate(previous, 1) === date ? run + 1 : 1;
+    if (run > best) best = run;
+    previous = date;
+  }
+
+  const everything = [...songDates, ...replyDates].sort();
+  const first = everything[0] ?? '';
+
+  return {
+    mornings: songDates.size,
+    answered,
+    replies: replyDates.size,
+    streak,
+    streakLive,
+    best,
+    first,
+    span: first ? Math.max(1, daysBetween(first, today)) : 0,
+  };
+}
+
+/**
+ * How long ago a stored day was, in words. Presentation only.
+ *
+ * Rounded DOWN and hedged with "about" past a fortnight, because the alternative
+ * is a card that claims "3 weeks ago" about something 18 days old. The unit gets
+ * coarser as it recedes, which is how people actually talk about time.
+ */
+export function agoLabel(date: string, today: string): string {
+  if (!isWingDate(date) || !isWingDate(today)) return '';
+  const days = daysBetween(date, today) - 1;
+  if (days <= 0) return 'today';
+  if (days === 1) return 'yesterday';
+  if (days < 14) return `${days} days ago`;
+  if (days < 60) return `about ${Math.floor(days / 7)} weeks ago`;
+  const months = Math.floor(days / 30);
+  if (months < 24) return `about ${months} months ago`;
+  return `about ${Math.floor(days / 365)} years ago`;
+}
+
+/** `3:42` from milliseconds. '' when the duration is unknown — see TrackRecord. */
+export function durationLabel(ms: number | undefined): string {
+  if (!ms || !Number.isFinite(ms) || ms <= 0) return '';
+  const total = Math.round(ms / 1000);
+  const minutes = Math.floor(total / 60);
+  const seconds = total % 60;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
+/**
+ * How old a morning has to be before it is worth playing again.
+ *
+ * Two weeks. Short enough that this has something to show inside the first month,
+ * long enough that "remember this one?" is not pointing at last Thursday — which
+ * is still in the visible archive and would make the whole block look broken.
+ */
+const RESURFACE_MIN_AGE_DAYS = 14;
+
+/**
+ * Pick one old morning to bring back, or null when there is not one worth it.
+ *
+ * DETERMINISTIC PER DAY, and that is the requirement that shapes it. A random
+ * pick would change on every reload, so the one she wanted to come back to after
+ * making coffee would be gone and unfindable — a memory feature whose memories
+ * move is actively worse than no feature. Keying the choice off `today` means it
+ * is stable for the whole day and different tomorrow.
+ *
+ * PREFERS THE ONES SHE ANSWERED. If any old morning has a reaction or a reply on
+ * it, the pick comes only from those. "Worth playing again" is a claim, and the
+ * only evidence in the store for it is that she responded the first time. With no
+ * such evidence anywhere, it falls back to any old morning rather than showing
+ * nothing, because on day 20 of the archive that evidence may simply not exist yet.
+ */
+export function resurface(input: {
+  today: string;
+  songs: readonly SongRecord[];
+  reactions: Record<string, string[]>;
+  replyByDate: Record<string, ReplyRecord>;
+}): SongRecord | null {
+  const { today } = input;
+  if (!isWingDate(today)) return null;
+
+  const cutoff = shiftDate(today, -RESURFACE_MIN_AGE_DAYS);
+  // String comparison is correct for ISO dates, and `<=` excludes the cutoff day
+  // itself so the boundary is "at least this old".
+  const old = input.songs.filter((s) => isWingDate(s.date) && s.date <= cutoff);
+  if (old.length === 0) return null;
+
+  const loved = old.filter(
+    (s) => (input.reactions[s.date] ?? []).length > 0 || Boolean(input.replyByDate[s.date]),
+  );
+  const pool = loved.length > 0 ? loved : old;
+
+  // Sorted by date so the pool's ORDER does not depend on how the store happened
+  // to hand the records back — otherwise the "deterministic" pick would quietly
+  // differ between the R2 tier (object key order) and Redis (index order).
+  const ordered = [...pool].sort((a, b) => a.date.localeCompare(b.date));
+  return ordered[dateScore(today) % ordered.length] ?? null;
 }

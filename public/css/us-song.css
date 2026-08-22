@@ -540,10 +540,404 @@ a.archive-item:focus-visible {
     letter-spacing: 0.12em;
 }
 
+/* Her reply, named inside the row. Not a link: an <a> inside an
+   <a> is invalid and browsers drop one of them unpredictably, so
+   this is text and the words are also in the row's aria-label. */
+.archive-reply {
+    display: block;
+    font-family: var(--us-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    color: var(--blue-glow);
+    margin: 4px 0 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .archive-empty {
     font-size: 0.95rem;
     color: var(--concrete-3);
     margin: 0;
+}
+
+/* ============================================================
+   THE EXCHANGE — HER HALF OF A DAY
+
+   The feature stopped being a broadcast when she got a way to
+   answer with a song of her own. The visual job here is
+   SYMMETRY WITHOUT SAMENESS: her card must not read as a
+   footnote stapled under mine, and it must not read as a second
+   copy of mine either. So it is the same card — same grid, same
+   type, same art treatment — set one step deeper into the room
+   and lit from the other side.
+
+   THE ONE RULE STILL HOLDS. Her album art gets no filter, no
+   tint, no blend mode, exactly like mine. The only thing that
+   differs is the LIGHT AROUND IT: a blue edge on the left rather
+   than a rim along the top, which is what a fixture on the
+   opposite wall would actually do.
+   ============================================================ */
+
+/* Deeper into the room: void ground instead of machine, so it
+   sits behind my card in the same way a reply sits after a
+   statement. The left edge is the light source. */
+.song--reply {
+    background: var(--void);
+    border-left: 2px solid var(--blue-light);
+    /* Replaces the top rim light rather than adding to it — two
+       light sources on one small card is a lighting rig, not a
+       room. */
+    box-shadow: inset 1px 0 0 rgba(62, 123, 255, 0.22);
+}
+
+/* Her byline. --blue-glow rather than the --blue-light my own
+   card uses: the hotter end of the same light, so the two lines
+   are obviously a pair and obviously not the same speaker. */
+.song-day--reply {
+    color: var(--blue-glow);
+}
+
+/* The prompt when she has not answered yet. Prose, not a label:
+   it is asking for something. */
+.reply-lede {
+    margin: 0 0 clamp(16px, 3vw, 22px);
+    font-family: var(--us-display);
+    font-size: clamp(1rem, 2.6vw, 1.12rem);
+    line-height: 1.6;
+    color: var(--concrete-5);
+    max-width: 46ch;
+}
+
+/* ---------- the send form ----------------------------------
+   <details> so a day she has already answered is a card and not
+   a big empty form, and so it collapses with no JavaScript at
+   all. The summary is the disclosure control, which means it has
+   to obey the same rules as a button: 44px of target, a visible
+   focus ring, and a state that is not carried by colour alone
+   (the marker rotates, and the words change). */
+
+.reply-details {
+    margin: clamp(18px, 3.5vw, 26px) 0 0;
+}
+
+.reply-summary {
+    /* list-item display keeps the native disclosure triangle,
+       which is the free non-colour affordance for open/closed.
+       `list-style-position: inside` puts it next to the text
+       rather than hanging outside the padded box. */
+    display: list-item;
+    list-style-position: inside;
+    /* 44px floor, stated explicitly AND reached by the padding.
+       The min-height is not redundant: this text is 0.78rem, so
+       padding alone lands at ~41px and the target would quietly
+       fail on any browser whose default line-height is tighter
+       than expected. */
+    min-height: 44px;
+    box-sizing: border-box;
+    padding: 13px 14px;
+    line-height: 1.4;
+    background: var(--machine);
+    border: 1px solid var(--concrete-2);
+    border-radius: 2px;
+    font-family: var(--us-mono);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--concrete-5);
+    cursor: pointer;
+}
+
+.reply-summary:hover {
+    color: var(--chalk-dim);
+    border-color: var(--concrete-4);
+}
+
+.reply-summary:focus-visible {
+    outline: 2px solid var(--blue-light);
+    outline-offset: 2px;
+}
+
+/* Open: the form below is the point, so the summary steps back
+   and becomes a header for it rather than competing with it. */
+.reply-details[open] .reply-summary {
+    border-color: var(--blue-light);
+    color: var(--blue-glow);
+    margin-bottom: 18px;
+}
+
+/* Reuses .dj-form / .dj-field / .dj-input / .dj-textarea /
+   .dj-submit wholesale — see the FORMS section below, which is
+   shared by both sides on purpose. The only difference is the
+   measure: her form sits in the full-width vault page, and a
+   text input eight hundred pixels wide is a text input nobody
+   can see the start of. */
+.reply-form {
+    max-width: 560px;
+}
+
+/* ---------- the resurfaced morning -------------------------
+   A callout, not a ledger row: it is one thing being singled
+   out, so it gets a box where the archive gets hairlines. A
+   LINK and not an embed — see .song-player. */
+
+.again {
+    display: grid;
+    grid-template-columns: 72px minmax(0, 1fr);
+    gap: 16px;
+    align-items: center;
+    padding: 14px;
+    background: var(--machine);
+    border: 1px solid var(--concrete-1);
+    border-left: 2px solid var(--concrete-4);
+    border-radius: 2px;
+    text-decoration: none;
+    color: inherit;
+    min-height: 56px;
+    transition: border-color 160ms ease, background 160ms ease;
+}
+
+.again:hover {
+    background: var(--machine-2);
+    border-left-color: var(--blue-light);
+}
+
+.again:focus-visible {
+    outline: 2px solid var(--blue-light);
+    outline-offset: 2px;
+}
+
+/* Warm, unfiltered, untouched. Same rule as every other piece
+   of album art in this file. */
+.again-thumb {
+    width: 72px;
+    height: 72px;
+    object-fit: cover;
+    display: block;
+    background: var(--void);
+    border: 1px solid var(--concrete-1);
+    border-radius: 2px;
+}
+
+.again-thumb--empty {
+    display: grid;
+    place-items: center;
+    background: var(--concrete-1);
+    border-color: var(--concrete-2);
+    font-family: var(--us-mono);
+    font-size: 0.72rem;
+    color: var(--concrete-3);
+}
+
+.again-body {
+    min-width: 0;
+}
+
+.again-day {
+    display: block;
+    font-family: var(--us-mono);
+    font-size: 0.64rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--concrete-3);
+}
+
+.again-title {
+    display: block;
+    font-family: var(--us-display);
+    font-size: 1.05rem;
+    font-weight: 500;
+    letter-spacing: -0.015em;
+    color: var(--chalk);
+    margin: 4px 0 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.again-note {
+    /* Two lines of the note, then stop. A resurfaced morning is a
+       nudge to go and read it again, not the reading itself.
+       -webkit-box is still the only interoperable way to clamp by
+       line count; it is prefixed but universally supported, and
+       the graceful failure is an unclamped note. */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    font-size: 0.84rem;
+    line-height: 1.4;
+    color: var(--concrete-4);
+    margin: 4px 0 0;
+}
+
+/* ============================================================
+   THE NUMBERS
+
+   A <dl> of counted facts: mornings, days in a row, how many she
+   answered. Every one of them is COUNTED from stored records by
+   summarize() in kv.ts — nothing here is estimated, and a cell
+   that would print a zero is not rendered at all, so a first-day
+   page shows no strip rather than a row of noughts.
+
+   Typeset as instrument readouts rather than as marketing
+   statistics: mono, letterspaced label above a display-face
+   number, on the same machined plates as everything else. The
+   number is the only bright thing in the cell.
+   ============================================================ */
+
+.rhythm {
+    display: grid;
+    /* auto-fit so two cells centre themselves and four wrap to
+       2x2 on a phone, without a media query per count. 132px is
+       wide enough for "you were here" plus a three-digit value. */
+    grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+    gap: 1px;
+    margin: 0 0 clamp(20px, 4vw, 30px);
+    padding: 0;
+    /* The 1px gap plus this background IS the rule between
+       cells: no borders to double up, no collapsing to reason
+       about. */
+    background: var(--concrete-1);
+    border: 1px solid var(--concrete-1);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.rhythm-cell {
+    padding: 12px 14px;
+    background: var(--machine);
+}
+
+.rhythm-label {
+    font-family: var(--us-mono);
+    font-size: 0.62rem;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--concrete-4);
+    margin: 0;
+}
+
+.rhythm-value {
+    font-family: var(--us-display);
+    font-size: clamp(1.5rem, 5vw, 1.9rem);
+    font-weight: 600;
+    letter-spacing: -0.03em;
+    line-height: 1.05;
+    color: var(--chalk);
+    /* <dd> has a default margin-inline-start of 40px. */
+    margin: 6px 0 0;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+/* "since 3 Jul 2026", "through yesterday". The qualifier that
+   keeps the number honest, so it is never dropped on a narrow
+   screen — it wraps under instead. */
+.rhythm-hint {
+    font-family: var(--us-mono);
+    font-size: 0.62rem;
+    font-weight: 400;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--concrete-3);
+}
+
+/* ---------- album, year, length ----------------------------
+   The enriched fields, which exist ONLY when the Spotify Web API
+   credentials do. Rendered as a list of three facts rather than
+   one pre-joined string so a screen reader reads three facts;
+   the middot separator is generated CSS on the second and later
+   items and is therefore never announced. */
+
+.song-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 8px;
+    margin: 8px 0 0;
+    padding: 0;
+    list-style: none;
+    font-family: var(--us-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    color: var(--concrete-4);
+}
+
+/* The separator. --concrete-3 and not --concrete-2, even though
+   this is a middot: --concrete-2 is a BORDER token and drops
+   under 4:1 on void, and the wing's floor for anything rendered
+   as text is --concrete-3. One step dimmer than the facts
+   themselves (--concrete-4) is enough hierarchy. */
+.song-meta li + li::before {
+    content: "\00b7";
+    margin-right: 8px;
+    color: var(--concrete-3);
+}
+
+/* ============================================================
+   /stronger/dj — WHAT CAME BACK
+
+   Her reactions, on my side of the wall. This block exists
+   because the round trip the whole feature is built around was
+   previously invisible to me: reactions are written by her page,
+   which needs a SESSION token that my admin cookie deliberately
+   is not, so there was nowhere I could ever see one.
+   ============================================================ */
+
+.her {
+    margin: clamp(18px, 3.5vw, 26px) 0 0;
+}
+
+.her-reacts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.her-reacts li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--machine-2);
+    border: 1px solid var(--blue-light);
+    border-radius: 2px;
+    font-size: 1.05rem;
+    line-height: 1;
+}
+
+/* The words, always paired with the emoji. Never the glyph
+   alone: an emoji is not a label. */
+.her-react-label {
+    font-family: var(--us-mono);
+    font-size: 0.62rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--blue-glow);
+}
+
+.her-quiet {
+    margin: 0;
+    font-family: var(--us-mono);
+    font-size: 0.74rem;
+    color: var(--concrete-3);
+}
+
+/* The habit, as one sentence. A sentence and not a dashboard,
+   because this page is a form and a dashboard above a form is a
+   dashboard I would stop reading. */
+.dj-rhythm {
+    margin: 0 0 clamp(16px, 3vw, 22px);
+    font-family: var(--us-mono);
+    font-size: 0.76rem;
+    line-height: 1.6;
+    color: var(--concrete-4);
+    max-width: 54ch;
 }
 
 /* ============================================================
@@ -578,14 +972,22 @@ a.archive-item:focus-visible {
 }
 
 /* ============================================================
-   /stronger/dj — MY SIDE
+   FORMS — BOTH SIDES
 
-   Phone-first and unapologetically utilitarian. This page is
-   opened one-handed, half awake, on a train. Every input is
-   16px+ (anything smaller and iOS Safari zooms the viewport on
-   focus, which then has to be pinched back out — a genuine bug,
-   not a style choice), every control clears 44px, and the labels
-   are real <label for> elements rather than placeholders.
+   Written for /stronger/dj first and now shared by her reply
+   form on /stronger/vault/today. The `.dj-` prefix is kept
+   deliberately: renaming these to something neutral would touch
+   every field on both pages for the sake of a nicer word, and
+   the comment you are reading is cheaper than that diff. Treat
+   them as the wing's form primitives.
+
+   Phone-first and unapologetically utilitarian. Both pages are
+   opened one-handed, half awake, in bed or on a train. Every
+   input is 16px+ (anything smaller and iOS Safari zooms the
+   viewport on focus, which then has to be pinched back out — a
+   genuine bug, not a style choice), every control clears 44px,
+   and the labels are real <label for> elements rather than
+   placeholders.
    ============================================================ */
 
 .dj-wrap {
@@ -732,6 +1134,7 @@ a.archive-item:focus-visible {
 @media (prefers-reduced-motion: reduce) {
     .react,
     .archive-item,
+    .again,
     .dj-submit {
         transition: none;
     }

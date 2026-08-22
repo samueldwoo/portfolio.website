@@ -49,12 +49,18 @@ import { readCookie, verify } from '../../../lib/us/session';
 import {
   REACTIONS,
   WING_TZ,
-  getReactions,
-  getSongs,
+  agoLabel,
+  durationLabel,
+  getExchange,
+  resurface,
   storeTier,
+  summarize,
   wingDate,
   wingDateLabel,
+  type ReplyRecord,
+  type Rhythm,
   type SongRecord,
+  type TrackRecord,
 } from '../../../lib/us/kv';
 
 export const prerender = false;
@@ -66,11 +72,28 @@ if (!session) return Astro.redirect('/stronger', 302);
 const her = HER_NAME();
 const today = wingDate();
 
-/** How far back the archive goes. Matches ARCHIVE_LIMIT in /api/us/song. */
+/** How many rows the archive RENDERS. Matches ARCHIVE_LIMIT in /api/us/song. */
 const ARCHIVE_LIMIT = 60;
 
 /**
- * Everything, in one read, then split.
+ * How far back the COUNTING goes. 365, which is also the ceiling getSongs()
+ * enforces, so this is "everything there is" rather than an arbitrary window.
+ *
+ * Deliberately larger than ARCHIVE_LIMIT, and the reason is honesty: a "mornings"
+ * total computed over the sixty rows we happened to render would silently mean
+ * "sixty" forever once the archive passed sixty days, and a number she reads as a
+ * fact about us must not quietly be a fact about a page-size constant.
+ *
+ * The cost is real but small, and it is smallest on the tier that is actually
+ * live: R2 stores the entire history in ONE JSON object, so reading 365 days costs
+ * exactly what reading 60 does. On the Upstash tier it widens one MGET and one
+ * pipeline of HKEYS — still two round trips, more bytes. That is the price of a
+ * true total and it is worth it.
+ */
+const HISTORY_WINDOW = 365;
+
+/**
+ * Everything, in one composite read, then split.
  *
  * `today` is whatever is filed under today's date — never "the most recent
  * song". Promoting yesterday's card to today would be a small lie that makes the
@@ -79,31 +102,59 @@ const ARCHIVE_LIMIT = 60;
  * quietly stale one.
  */
 let songs: SongRecord[] = [];
+let replies: ReplyRecord[] = [];
 let reactions: Record<string, string[]> = {};
+let replyByDate: Record<string, ReplyRecord> = {};
 let storeUnreachable = false;
 try {
-  songs = await getSongs(ARCHIVE_LIMIT);
-  reactions = await getReactions(songs.map((s) => s.date));
+  ({ songs, replies, reactions, replyByDate } = await getExchange(HISTORY_WINDOW));
 } catch (err) {
   console.error('[us] today page could not read the store:', err);
   storeUnreachable = true;
 }
 
 const current = songs.find((s) => s.date === today) ?? null;
-const archive = songs.filter((s) => s.date !== today);
+const archive = songs.filter((s) => s.date !== today).slice(0, ARCHIVE_LIMIT);
 const currentReactions = new Set(reactions[today] ?? []);
 
-/* Outcomes from the no-JavaScript reaction path, which arrives back here as a
-   303 with ?e=<code>. Written in her language, not in HTTP: she does not need to
-   know what a 502 is, only that it was not her fault and it is worth another tap. */
+/** What she sent back today, if she has. Rendered next to my card, not after it. */
+const herReply = replyByDate[today] ?? null;
+
+/**
+ * The numbers, derived in kv.ts rather than here.
+ *
+ * Same reason the calendar lives there: /stronger/dj shows a streak too, and two
+ * implementations of "how many days in a row" would eventually disagree by one and
+ * there would be no way to tell which page was lying.
+ */
+const rhythm: Rhythm = summarize({ today, songs, replies, reactions });
+
+/**
+ * One old morning, brought back. Null when the archive is too young for it to
+ * mean anything — see RESURFACE_MIN_AGE_DAYS in kv.ts.
+ */
+const again = resurface({ today, songs, reactions, replyByDate });
+
+/* Outcomes from the no-JavaScript reaction and reply paths, which arrive back
+   here as a 303 with ?e=<code>. Written in her language, not in HTTP: she does not
+   need to know what a 502 is, only that it was not her fault and it is worth
+   another try. Both endpoints land here, so every message has to make sense for a
+   tapped emoji AND for a pasted link. */
 const errorCode = Astro.url.searchParams.get('e') ?? '';
 const ERRORS: Record<string, string> = {
-  store: "that didn't save — not your fault. try tapping it again?",
+  store: "that didn't save — not your fault. try it again?",
   rate: 'okay, easy on the buttons. give it a minute.',
   unauthorized: 'your session ran out. answer the questions again and you are back in.',
   unconfigured: 'something is unplugged on my end. not your fault.',
+  'bad-url': "that isn't a spotify TRACK link — use Share, then Copy link, from the song itself.",
+  'bad-request': "the server couldn't read that. try again?",
+  'bad-date': 'that day is not a real day.',
+  'future-date': "that day hasn't happened yet.",
 };
 const errorText = errorCode ? (ERRORS[errorCode] ?? "that didn't go through. try again?") : '';
+
+/* The reply's own success path: /api/us/reply 303s back with ?sent=<date>. */
+const sentDate = Astro.url.searchParams.get('sent') ?? '';
 
 /** e.g. `7:42 am`. Only shown when we actually recorded a time. */
 function postedAtLabel(ms: number): string {
@@ -117,6 +168,20 @@ function postedAtLabel(ms: number): string {
     .toLowerCase();
 }
 
+/**
+ * Album, year, length — whichever of them we actually know.
+ *
+ * Returns an ARRAY rather than a joined string so the template can decide the
+ * separator, and returns an EMPTY array rather than placeholders when nothing is
+ * known. That is the whole contract of these fields: they exist only when the
+ * Spotify Web API credentials do, so the entire pre-credential archive has none of
+ * them and the correct rendering of "unknown" is no line at all — never "Unknown
+ * album · —".
+ */
+function metaBits(track: TrackRecord): string[] {
+  return [track.album ?? '', track.year ?? '', durationLabel(track.durationMs)].filter(Boolean);
+}
+
 /** Reaction glyphs for an archive row, plus the words for a screen reader. */
 function reactionGlyphs(date: string): { glyphs: string; words: string } {
   const chosen = REACTIONS.filter((r) => (reactions[date] ?? []).includes(r.key));
@@ -124,6 +189,46 @@ function reactionGlyphs(date: string): { glyphs: string; words: string } {
     glyphs: chosen.map((r) => r.emoji).join(' '),
     words: chosen.map((r) => r.label).join(', '),
   };
+}
+
+/**
+ * The stat strip, assembled here so the markup stays a loop.
+ *
+ * EVERY CELL IS CONDITIONAL, AND THAT IS THE REQUIREMENT RATHER THAN A FLOURISH.
+ * A first-day page must not read "0 mornings · 0 in a row · you answered 0 of 0".
+ * Four zeroes is a page telling her this is empty and probably broken. So a cell
+ * that would print a zero is not rendered at all, and when nothing qualifies the
+ * whole strip disappears and the honest empty states below carry the page.
+ */
+const stats: Array<{ label: string; value: string; hint?: string }> = [];
+if (rhythm.mornings > 0) {
+  stats.push({
+    label: rhythm.mornings === 1 ? 'morning' : 'mornings',
+    value: String(rhythm.mornings),
+    hint: rhythm.first ? `since ${wingDateLabel(rhythm.first, { withYear: true })}` : undefined,
+  });
+}
+if (rhythm.streak > 1) {
+  // `> 1` and not `> 0`: "1 in a row" is not a streak, it is a Tuesday.
+  stats.push({
+    label: 'in a row',
+    value: String(rhythm.streak),
+    hint: rhythm.streakLive ? undefined : 'through yesterday',
+  });
+}
+if (rhythm.answered > 0) {
+  stats.push({
+    label: 'you were here',
+    value: String(rhythm.answered),
+    hint: rhythm.mornings > rhythm.answered ? `of ${rhythm.mornings}` : 'every one',
+  });
+}
+if (rhythm.replies > 0) {
+  stats.push({
+    label: 'you sent back',
+    value: String(rhythm.replies),
+    hint: rhythm.replies === 1 ? 'the first one' : undefined,
+  });
 }
 ---
 
@@ -162,6 +267,12 @@ function reactionGlyphs(date: string): { glyphs: string; words: string } {
         <p class="notice" data-kind="bad" role="status">hm &mdash; {errorText}</p>
     )}
 
+    {sentDate && !errorText && (
+        <p class="notice" data-kind="ok" role="status">
+            sent &mdash; that's on the shelf for {wingDateLabel(sentDate, { withYear: true })}. I'll see it.
+        </p>
+    )}
+
     {storeUnreachable && (
         <p class="notice" data-kind="bad" role="status">
             hm &mdash; I cannot reach the shelf where these live. Nothing is lost,
@@ -176,6 +287,32 @@ function reactionGlyphs(date: string): { glyphs: string; words: string } {
         <p class="notice" data-kind="warn">
             dev &mdash; in-process store. Non-durable, per-instance.
         </p>
+    )}
+
+    {/* ------------------------------------------------------------------
+        THE STAT STRIP
+
+        A <dl>, because these are label/value pairs and that is what a
+        description list is for — a row of <div>s would read to a screen
+        reader as four unlabelled numbers. The <div> wrappers inside are
+        valid HTML5 dl grouping and are what make each pair one grid cell.
+
+        Every number here is COUNTED from stored records by summarize() in
+        kv.ts. Nothing is estimated, nothing is rounded, and a cell that
+        would say zero is absent instead. See the `stats` builder above.
+        ------------------------------------------------------------------ */}
+    {stats.length > 0 && (
+        <dl class="rhythm">
+            {stats.map((cell) => (
+                <div class="rhythm-cell">
+                    <dt class="rhythm-label">{cell.label}</dt>
+                    <dd class="rhythm-value">
+                        {cell.value}
+                        {cell.hint && <span class="rhythm-hint">{cell.hint}</span>}
+                    </dd>
+                </div>
+            ))}
+        </dl>
     )}
 
     {current ? (
@@ -224,6 +361,24 @@ function reactionGlyphs(date: string): { glyphs: string; words: string } {
                     )}
 
                     {current.artist && <p class="song-artist">{current.artist}</p>}
+
+                    {/* Album, year, length. Rendered ONLY for what we actually
+                        know: these three come from the Spotify Web API, which
+                        needs credentials that may not exist, so on the whole
+                        pre-credential archive metaBits() returns [] and this
+                        line is simply not there. A "—" placeholder would be a
+                        worse answer than silence, and an "Unknown album" label
+                        would be a lie with a straight face.
+
+                        <ul> rather than one string because a screen reader
+                        should read three facts as three facts. The separator is
+                        a CSS ::before on the second and later items, so it is
+                        never announced. */}
+                    {metaBits(current).length > 0 && (
+                        <ul class="song-meta">
+                            {metaBits(current).map((bit) => <li>{bit}</li>)}
+                        </ul>
+                    )}
 
                     {current.note ? (
                         <p class="song-note">{current.note}</p>
@@ -319,16 +474,263 @@ function reactionGlyphs(date: string): { glyphs: string; words: string } {
 
     <hr class="studio-rule">
 
+    {/* ==================================================================
+        THE EXCHANGE — her side of today
+
+        RENDERED OUTSIDE THE `current ?` TERNARY ABOVE, on purpose and for
+        two reasons.
+
+        One: there is then exactly ONE reply form on the page. Putting it
+        inside both branches would have meant two copies of a form, two
+        ids, and a script that has to guess which one it is wired to.
+
+        Two, and more important: SHE CAN GO FIRST. A morning I have not
+        posted yet is exactly the morning she might want to start, and the
+        endpoint deliberately does not require a song to exist that day.
+        Hiding her half of the page whenever mine is empty would have made
+        this a reply feature instead of a two-way one.
+        ================================================================== */}
+
+    <p class="song-eyebrow">
+        {herReply ? 'what you sent back' : current ? 'your turn' : 'your side of today'}
+    </p>
+
+    {herReply ? (
+        /* Her card, rendered by the SAME markup and the same classes as
+           mine, with one modifier for the mirrored accent. That symmetry is
+           the feature: a day is an exchange, so her half must not look like
+           a receipt stapled to the bottom of my half. */
+        <div class="song song--reply">
+            <span class="song-frame">
+                {herReply.art ? (
+                    <img
+                        class="song-art"
+                        src={herReply.art}
+                        alt=""
+                        width="320"
+                        height="320"
+                        loading="lazy"
+                        decoding="async"
+                        referrerpolicy="no-referrer"
+                    >
+                ) : (
+                    <span class="song-art--empty" aria-hidden="true">[ ]</span>
+                )}
+            </span>
+
+            <div class="song-body">
+                <p class="song-day song-day--reply">
+                    you sent this
+                    {postedAtLabel(herReply.postedAt) && (
+                        <> &middot; {postedAtLabel(herReply.postedAt)}</>
+                    )}
+                </p>
+
+                {herReply.title ? (
+                    <h2 class="song-title">{herReply.title}</h2>
+                ) : (
+                    <h2 class="song-title song-title--unknown">a song Spotify would not name</h2>
+                )}
+
+                {herReply.artist && <p class="song-artist">{herReply.artist}</p>}
+
+                {metaBits(herReply).length > 0 && (
+                    <ul class="song-meta">
+                        {metaBits(herReply).map((bit) => <li>{bit}</li>)}
+                    </ul>
+                )}
+
+                {herReply.note && <p class="song-note">{herReply.note}</p>}
+
+                {/* Her reply gets a real player too. The id has been through
+                    /^[A-Za-z0-9]{22}$/ twice — once in extractTrackId when
+                    she pasted it, once in parseTrack when it was read back
+                    out of the store — before it reaches this src, which is
+                    the only reason interpolating it here is safe.
+
+                    `allow` omits autoplay for the same reason as mine: two
+                    embeds on one page that could both start on their own is
+                    a page that ambushes you. */}
+                <div class="song-player">
+                    <iframe
+                        src={`https://open.spotify.com/embed/track/${herReply.id}`}
+                        title={herReply.title ? `Spotify player: ${herReply.title}` : 'Spotify player'}
+                        width="100%"
+                        height="152"
+                        loading="lazy"
+                        allow="encrypted-media; clipboard-write; fullscreen; picture-in-picture"
+                        referrerpolicy="no-referrer"
+                    ></iframe>
+                </div>
+            </div>
+        </div>
+    ) : (
+        <p class="reply-lede">
+            {current
+                ? `Send one back, ${her}. Same shelf, same day — that is the whole idea.`
+                : `Nothing from me yet today. You can still go first.`}
+        </p>
+    )}
+
+    {/* ------------------------------------------------------------------
+        THE FORM
+
+        A real <form method="post" action="/api/us/reply"> that 303s back
+        here, exactly like the reaction forms. It works with JavaScript
+        switched off; the script at the bottom upgrades it to a fetch for
+        ONE reason that actually matters — a native submit that fails has
+        already navigated away and taken the note she just typed with it,
+        and retyping a paragraph on a phone is the difference between doing
+        this and not.
+
+        <details> rather than two markup paths: `open` when she has not
+        answered yet, closed once she has, so a day she has already
+        answered is a card and not a big empty form. It collapses natively
+        with no JavaScript at all.
+
+        The hidden `date` is the day of the card above, not always today, so
+        answering last night's song after midnight files it against the
+        right morning. The server validates it anyway — it is a primary key
+        and this page is not trusted to have got it right.
+        ------------------------------------------------------------------ */}
+    <details class="reply-details" open={!herReply}>
+        <summary class="reply-summary">
+            {herReply ? 'send a different one' : 'pick one'}
+        </summary>
+
+        <form class="dj-form reply-form" id="reply-form" method="post" action="/api/us/reply">
+            <input type="hidden" name="date" value={current?.date ?? today}>
+
+            <div class="dj-field">
+                <label class="dj-label" for="reply-url">Spotify link</label>
+                {/* type="text" with inputmode="url", NOT type="url": the
+                    native URL validator rejects `spotify:track:...`, which
+                    the endpoint accepts, so type="url" would block a valid
+                    paste before it ever reached the server. */}
+                <input
+                    class="dj-input"
+                    id="reply-url"
+                    name="url"
+                    type="text"
+                    inputmode="url"
+                    autocomplete="off"
+                    autocapitalize="none"
+                    autocorrect="off"
+                    spellcheck="false"
+                    placeholder="open.spotify.com/track/..."
+                    aria-describedby="reply-url-hint"
+                    required
+                >
+                <p class="dj-hint" id="reply-url-hint">
+                    Share &rarr; Copy link, from the SONG. Album and playlist links
+                    are rejected.
+                </p>
+            </div>
+
+            <div class="dj-field">
+                <label class="dj-label" for="reply-note">
+                    Your note <span class="dj-opt">&mdash; why this one</span>
+                </label>
+                {/* maxlength matches MAX_NOTE in the endpoint. The browser
+                    stopping her at 600 is friendlier than the server
+                    silently truncating what she wrote. */}
+                <textarea
+                    class="dj-textarea"
+                    id="reply-note"
+                    name="note"
+                    rows="4"
+                    maxlength="600"
+                ></textarea>
+            </div>
+
+            <button class="dj-submit" id="reply-submit" type="submit">
+                {herReply ? 'replace it' : 'send it'}
+            </button>
+
+            {/* The enhancement script's channel. aria-live so the outcome is
+                announced without moving focus; hidden until there is
+                something to say. */}
+            <p class="notice" id="reply-status" role="status" aria-live="polite" hidden></p>
+        </form>
+    </details>
+
+    {/* ==================================================================
+        ONE OLD MORNING, BROUGHT BACK
+
+        Absent entirely until the archive is old enough for it to mean
+        something (see RESURFACE_MIN_AGE_DAYS in kv.ts), which is also why
+        there is no empty state for it: a "nothing to resurface yet" box
+        would be a box explaining its own absence.
+
+        A link, not an embed. Sixty players on a page is a page that never
+        finishes loading, and this is the same reasoning that keeps iframes
+        out of the archive below.
+        ================================================================== */}
+    {again && (
+        <>
+            <hr class="studio-rule">
+
+            <p class="song-eyebrow">worth playing again</p>
+
+            <a
+                class="again"
+                href={`https://open.spotify.com/track/${again.id}`}
+                target="_blank"
+                rel="noreferrer noopener"
+                aria-label={[
+                    'From ' + wingDateLabel(again.date, { withYear: true }),
+                    agoLabel(again.date, today),
+                    again.title || 'a song I could not name',
+                    'opens in Spotify',
+                ].filter(Boolean).join('. ')}
+            >
+                {again.art ? (
+                    <img
+                        class="again-thumb"
+                        src={again.art}
+                        alt=""
+                        width="72"
+                        height="72"
+                        loading="lazy"
+                        decoding="async"
+                        referrerpolicy="no-referrer"
+                    >
+                ) : (
+                    <span class="again-thumb again-thumb--empty" aria-hidden="true">[ ]</span>
+                )}
+                <span class="again-body">
+                    {/* aria-hidden on the visible day line: the same words are
+                        already in the row's aria-label, and hearing them twice
+                        is worse than not hearing them once. */}
+                    <span class="again-day" aria-hidden="true">
+                        {wingDateLabel(again.date, { withYear: true })} &middot; {agoLabel(again.date, today)}
+                    </span>
+                    <span class="again-title" aria-hidden="true">{again.title || 'a song I could not name'}</span>
+                    {again.note && <span class="again-note" aria-hidden="true">{again.note}</span>}
+                </span>
+            </a>
+        </>
+    )}
+
+    <hr class="studio-rule">
+
     <p class="song-eyebrow">every morning before this one</p>
 
     {archive.length > 0 ? (
         <ul class="archive">
             {archive.map((s) => {
                 const { glyphs, words } = reactionGlyphs(s.date);
+                /* Her reply for that day, if there was one. Named in the
+                   aria-label as words and shown as a line in the row, NOT as a
+                   nested link: an <a> inside an <a> is invalid HTML and browsers
+                   resolve it by dropping one of them, unpredictably. The day is
+                   still one row, and her half of it is still stated. */
+                const reply = replyByDate[s.date] ?? null;
                 const label = [
                     wingDateLabel(s.date, { withYear: true }),
                     s.title || 'a song I could not name',
                     words ? `you said: ${words}` : '',
+                    reply ? `you sent back: ${reply.title || 'a song'}` : '',
                     'opens in Spotify',
                 ]
                     .filter(Boolean)
@@ -362,6 +764,11 @@ function reactionGlyphs(date: string): { glyphs: string; words: string } {
                                 {s.note && <span class="archive-note">{s.note}</span>}
                                 {/* aria-hidden: the same information is already
                                     in the row's aria-label, as words. */}
+                                {reply && (
+                                    <span class="archive-reply" aria-hidden="true">
+                                        &#8617; you sent back {reply.title || 'a song'}
+                                    </span>
+                                )}
                                 {glyphs && <span class="archive-reacts" aria-hidden="true">{glyphs}</span>}
                             </span>
                         </a>
@@ -387,7 +794,7 @@ function reactionGlyphs(date: string): { glyphs: string; words: string } {
 
 <script is:inline define:vars={{ renderedDate: today, wingTz: WING_TZ }}>
 /* --------------------------------------------------------------------------
-   Two jobs, and deliberately no more.
+   Three jobs, and deliberately no more.
 
    Rendered unconditionally rather than wrapped in a template expression: a
    <script> inside `{...}` asks the Astro compiler to read JavaScript braces as
@@ -397,7 +804,12 @@ function reactionGlyphs(date: string): { glyphs: string; words: string } {
    1. REACTIONS WITHOUT A PAGE JUMP. The forms already work without this — 303,
       re-render, done. This only removes the navigation.
 
-   2. THE DAY ROLLOVER. Her phone will keep this tab alive for a week. Without
+   2. HER REPLY, WITHOUT LOSING WHAT SHE TYPED. This one is not cosmetic. A
+      native form submit that fails has already navigated away, and the note is
+      gone with it. Everything this block buys is: on failure, the paragraph is
+      still in the textarea.
+
+   3. THE DAY ROLLOVER. Her phone will keep this tab alive for a week. Without
       this, coming back to it on Tuesday shows Monday's song with no hint that it
       is stale.
    -------------------------------------------------------------------------- */
@@ -482,7 +894,95 @@ function reactionGlyphs(date: string): { glyphs: string; words: string } {
         });
     });
 
-    /* ---- 2. the day rollover ------------------------------------------ */
+    /* ---- 2. her reply -------------------------------------------------- */
+
+    (function () {
+        var form = document.getElementById('reply-form');
+        var submit = document.getElementById('reply-submit');
+        var out = document.getElementById('reply-status');
+        // Bails out rather than throwing if the markup is ever absent. Everything
+        // below is an enhancement over a form that already works.
+        if (!form || !submit || !out) return;
+
+        var MESSAGES = {
+            'bad-url': "that isn't a spotify TRACK link — copy the link from the song itself.",
+            'bad-date': 'that day is not a real day.',
+            'future-date': "that day hasn't happened yet.",
+            'bad-request': "the server couldn't read that.",
+            unauthorized: 'your session ran out. answer the questions again and you are back in.',
+            unconfigured: 'something is unplugged on my end. not your fault.',
+            store: "that didn't save. nothing was sent. try again?",
+            rate: 'give it a minute.'
+        };
+
+        function say(kind, text) {
+            // The word is part of the message, so this never depends on colour.
+            out.dataset.kind = kind;
+            out.textContent = (kind === 'bad' ? 'hm — ' : 'sent — ') + text;
+            out.hidden = false;
+        }
+
+        var label = submit.textContent;
+
+        form.addEventListener('submit', async function (event) {
+            event.preventDefault();
+
+            var body = {
+                url: form.elements.url.value.trim(),
+                note: form.elements.note.value,
+                date: form.elements.date.value
+            };
+            if (!body.url) {
+                say('bad', 'paste a link first.');
+                form.elements.url.focus();
+                return;
+            }
+
+            submit.disabled = true;
+            submit.textContent = 'sending';
+
+            var res, data;
+            try {
+                res = await fetch('/api/us/reply', {
+                    // JSON in, JSON out. The endpoint keys its response shape off
+                    // this header, so the no-JS form POST still gets its redirect.
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify(body)
+                });
+                data = await res.json();
+            } catch (err) {
+                say('bad', 'the server did not answer. nothing was sent. try again.');
+                return;
+            } finally {
+                submit.disabled = false;
+                submit.textContent = label;
+            }
+
+            if (!res.ok || !data || data.ok !== true) {
+                var code = (data && data.error) || 'no';
+                say('bad', MESSAGES[code] || 'that did not go through. nothing was sent.');
+                return;
+            }
+
+            say('ok', data.degraded
+                ? "it's on the shelf, though Spotify would not name it. The player still will."
+                : "it's on the shelf. I'll see it.");
+
+            /* Hand control back to the SERVER rather than painting her card from
+               this response. Patching it here would mean a second renderer in
+               JavaScript — art vs placeholder, title vs the unnamed fallback, the
+               embed, the meta line — that can disagree with the Astro one, and a
+               card that disagrees with the store is worse than a reload. The short
+               pause is so the line above is readable first. */
+            setTimeout(function () {
+                window.location.assign('/stronger/vault/today?sent=' + encodeURIComponent(data.date));
+            }, 700);
+        });
+    })();
+
+    /* ---- 3. the day rollover ------------------------------------------ */
 
     /** The same calendar rule the server used, so the two cannot disagree. */
     function clientWingDate() {
@@ -521,7 +1021,11 @@ function reactionGlyphs(date: string): { glyphs: string; words: string } {
             });
             if (!res.ok) return;
             var data = await res.json();
-            if (data && data.ok && data.today && data.today.date !== renderedDate) {
+            // Reload only when the SERVER also agrees the day rolled over AND
+            // there is something new to show. `data.reply` is in that test
+            // because she may have gone first: a new day whose only content is
+            // her own reply is still a page that is showing the wrong day.
+            if (data && data.ok && data.date !== renderedDate && (data.today || data.reply)) {
                 window.location.reload();
             }
         } catch (err) {

@@ -121,8 +121,23 @@
     background-repeat: no-repeat;
     transform: scale(var(--backdrop-zoom, 1));
     transform-origin: 50% var(--backdrop-origin-y, 44%);
-    /* Promote once, so the per-frame zoom never triggers a repaint. */
-    will-change: transform;
+    /* THE LIGHTS COMING UP.
+
+       `--backdrop-lit` is written by StudioRoom.tsx from the WAKE_* constants: the
+       room sits at a fraction of its brightness until she starts scrolling, then
+       comes up. Opacity rather than `filter: brightness()` deliberately — this
+       element's own background-color is var(--void), so fading it reveals BLACK,
+       which is what a dark room actually looks like. A brightness filter would
+       instead crush toward grey.
+
+       It cannot touch a photograph: this layer is z-index 0 and the canvas
+       carrying the memories is z-index 2. Defaults to 1, so a browser that never
+       runs the island still sees the room fully lit.
+
+       `opacity` in will-change alongside transform, because both change together
+       during the wake and promoting for only one still repaints for the other. */
+    opacity: var(--backdrop-lit, 1);
+    will-change: transform, opacity;
     backface-visibility: hidden;
 }
 
@@ -227,14 +242,22 @@
 
    `--haze` is set by StudioRoom.tsx from HAZE_STRENGTH, and is turned
    well down in image mode: the photograph already carries the LED bloom
-   and doubling it goes muddy. */
+   and doubling it goes muddy.
+
+   `--haze-lit` is the WAKE: the haze is light, so it comes up with the
+   rest of the room's lights. Two SEPARATE properties multiplied rather
+   than one combined value, because they answer different questions —
+   HAZE_STRENGTH is art direction that never changes at runtime, and the
+   wake changes sixty times a second during the first tenth of the
+   scroll. Folding them would mean recomputing the art direction on
+   every frame of the ramp. */
 .room-sticky::before {
     content: '';
     position: absolute;
     inset: 0;
     z-index: 3;
     pointer-events: none;
-    opacity: var(--haze, 1);
+    opacity: calc(var(--haze, 1) * var(--haze-lit, 1));
     background:
         radial-gradient(58% 38% at 13% -8%, rgba(62, 123, 255, 0.20), transparent 70%),
         radial-gradient(50% 32% at 89% -4%, rgba(30, 58, 224, 0.16), transparent 72%);
@@ -287,9 +310,32 @@
     gap: 12px;
 }
 
+/* The room behind this layer must stay pressable — a hold anywhere in it is
+   the primary gesture — so only the real controls opt back in. `textarea`
+   and `form` are here because the reply is a real form: without them the
+   textarea takes focus from the keyboard and then cannot be clicked into,
+   which is the worst of both. */
 .room-hud a,
-.room-hud button {
+.room-hud button,
+.room-hud form,
+.room-hud textarea {
     pointer-events: auto;
+}
+
+/* Visually hidden, still announced. Same technique as .room-live but a
+   separate class on purpose: that one is a live region and this one is a
+   label, and giving them one name would invite someone to put a live
+   region attribute on a <label>. */
+.room-sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
 }
 
 /* ---------- top bar ---------------------------------------- */
@@ -317,6 +363,71 @@
 .room-mark-bracket { color: var(--blue-light); }
 
 .room-where { flex: 1 1 auto; }
+
+/* THE VISIT COUNTER. "the 7th time you've been in here."
+
+   Sentence case and not the top bar's uppercase mono, because it is the
+   only thing in this bar that is addressed TO her rather than being a
+   label. --concrete-4 (#9a9ca1) rather than --concrete-3, since this is
+   small type carrying a real sentence.
+
+   Hidden below the phone breakpoint: four items do not fit across 390px
+   next to the wordmark, and of the four this is the one whose absence
+   costs the least. It is still in the static fallback, in full. */
+.room-visits {
+    font-family: var(--us-display);
+    font-size: 0.72rem;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--concrete-4);
+    /* It arrives with the page and never changes, so it must not be able to
+       push "exit" off the edge on a medium viewport. */
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* ROOM TONE — opt-in, off by default, never autoplayed (PLAN.md section 2).
+
+   Deliberately quiet: it is a toggle for something most visits will never
+   want, so it should read as available rather than as offered. It lights
+   up only when it is ON, which is the one state worth signalling. */
+.room-tone {
+    font-family: var(--us-mono);
+    font-size: 0.64rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--concrete-3);
+    background: none;
+    border: 0;
+    border-bottom: 1px solid var(--concrete-1);
+    /* 44px of pressable height without 44px of visual weight — the same
+       trick .room-exit uses, and the reason this is padding plus a
+       negative margin rather than a min-height, which would grow the
+       baseline-aligned top bar for every item in it.
+
+       16px, not 13px: at 0.64rem the text box is ~12px, so 12 + 32 = 44.3.
+       13px would have come to 38 and quietly missed the floor. */
+    padding: 16px 8px;
+    margin: -16px 0;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: color 180ms ease, border-color 180ms ease;
+}
+.room-tone:hover { color: var(--chalk-dim); border-bottom-color: var(--concrete-3); }
+.room-tone:focus-visible {
+    outline: 2px solid var(--blue-light);
+    outline-offset: 3px;
+}
+/* State is never colour alone: the button's TEXT changes to "room tone on"
+   as well, written by StudioRoom.tsx alongside aria-pressed. */
+.room-tone[aria-pressed='true'] {
+    color: var(--blue-light);
+    border-bottom-color: var(--blue-light);
+}
+.room-tone[hidden] { display: none; }
 
 .room-exit {
     color: var(--concrete-4);
@@ -478,13 +589,243 @@
 }
 .room-tension[data-max='true'] .room-tension-state { color: var(--blue-glow); }
 
+/* FULL RANGE OF MOTION — the second bar, drawn over the first.
+
+   `--over` is set on `.room-tension` rather than on this element, because
+   the component writes one property and two bars read it; a custom
+   property is only visible to descendants, so the shared ancestor is the
+   only place one write can feed both.
+
+   White, not blue. The first bar is the room's light filling up; this one
+   is past the top of the rep, and going whiter is the same wash-to-glow
+   direction the palette already uses for load — one more step along it. */
+.room-tension-over {
+    position: absolute;
+    inset: 0;
+    transform: scaleX(var(--over, 0));
+    transform-origin: left center;
+    background: var(--chalk);
+    box-shadow: 0 0 14px rgba(255, 255, 255, 0.7);
+}
+
+/* Reached the top of the range. The track itself lifts, so the state is
+   legible from the shape and not only from the colour. */
+.room-tension[data-range='true'] { color: var(--chalk-dim); }
+.room-tension[data-range='true'] .room-tension-track {
+    box-shadow: 0 0 22px rgba(255, 255, 255, 0.45);
+}
+.room-tension[data-range='true'] .room-tension-state { color: var(--chalk); }
+
+/* ---------- what SHE can do: keep, and note back --------------- */
+
+/* The marks. See src/lib/us/marks.ts for the store and why any of this
+   exists; the short version is that the room used to be read-only, so it
+   could not tell afterwards that she had ever been in it.
+
+   These two controls are ALSO the plain route to the two gestures — keep
+   is exactly what holding past max tension does — which is what keeps the
+   gesture from being the only path to anything. */
+.room-marks {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 10px;
+    margin-top: 2px;
+}
+
+/* Shared shape for the two mark buttons and the reveal button. Written out
+   per selector rather than as one grouped rule with .room-reveal, because
+   .room-reveal is above in the tension block and moving it here would put
+   the accessible-floor button inside a section about optional extras. */
+.room-keep,
+.room-reply-open {
+    min-height: 44px;
+    padding: 10px 16px;
+    font-family: var(--us-mono);
+    font-size: 0.64rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--concrete-4);
+    background: rgba(10, 11, 14, 0.72);
+    border: 1px solid var(--concrete-2);
+    border-radius: 2px;
+    cursor: pointer;
+    transition: color 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+.room-keep:hover,
+.room-reply-open:hover { color: var(--chalk-dim); border-color: var(--concrete-3); }
+.room-keep:focus-visible,
+.room-reply-open:focus-visible {
+    outline: 2px solid var(--blue-light);
+    outline-offset: 2px;
+}
+
+/* KEPT. The one warm-adjacent state in the HUD, and it is on purpose: a
+   keep is hers, and the room's blue is his. It is still not colour alone —
+   the button's text becomes "kept" and the accessible name of its index
+   marker gains the word. */
+.room-keep[aria-pressed='true'] {
+    color: var(--chalk);
+    border-color: var(--blue-glow);
+    background: rgba(30, 58, 224, 0.24);
+}
+
+.room-reply-open[hidden] { display: none; }
+
+/* The reply form. Full width of the plate, because it holds sentences. */
+.room-reply {
+    flex: 1 1 100%;
+    display: grid;
+    gap: 8px;
+    padding: 12px;
+    background: rgba(21, 22, 26, 0.94);
+    border: 1px solid var(--concrete-1);
+    border-radius: 2px;
+}
+.room-reply[hidden] { display: none; }
+
+.room-reply-text {
+    width: 100%;
+    box-sizing: border-box;
+    resize: vertical;
+    min-height: 66px;
+    padding: 10px;
+    font-family: var(--us-display);
+    font-size: 0.95rem;
+    line-height: 1.5;
+    color: var(--chalk);
+    background: var(--void);
+    border: 1px solid var(--concrete-2);
+    border-radius: 2px;
+}
+/* --concrete-3 (#84868b, 5.76:1 on void) and not --concrete-2 (4.00:1):
+   placeholder text is text, and it has to clear 4.5:1 like any other. */
+.room-reply-text::placeholder { color: var(--concrete-3); opacity: 1; }
+.room-reply-text:focus-visible {
+    outline: 2px solid var(--blue-light);
+    outline-offset: 1px;
+    border-color: var(--blue-light);
+}
+
+.room-reply-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.room-reply-save,
+.room-reply-cancel {
+    min-height: 44px;
+    padding: 10px 18px;
+    font-family: var(--us-mono);
+    font-size: 0.64rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: border-color 160ms ease, background 160ms ease;
+}
+.room-reply-save {
+    color: var(--chalk);
+    background: var(--blue-brand);
+    border: 1px solid var(--blue-light);
+}
+.room-reply-save:hover { background: var(--blue-light); }
+.room-reply-cancel {
+    color: var(--concrete-4);
+    background: var(--machine);
+    border: 1px solid var(--concrete-2);
+}
+.room-reply-cancel:hover { color: var(--chalk-dim); border-color: var(--concrete-3); }
+.room-reply-save:focus-visible,
+.room-reply-cancel:focus-visible {
+    outline: 2px solid var(--blue-glow);
+    outline-offset: 2px;
+}
+
+/* HER note. Deliberately NOT styled the same as his: the room now holds
+   two voices and they must not read as one. His note has a blue-glow left
+   rule (see .room-note); hers is set apart by a label and a chalk rule,
+   which is the only place in the room where a border is not blue. */
+.room-hers {
+    flex: 1 1 100%;
+    padding: 12px 14px;
+    background: rgba(14, 15, 18, 0.92);
+    border: 1px solid var(--concrete-1);
+    border-left: 2px solid var(--chalk-dim);
+    border-radius: 2px;
+}
+.room-hers[hidden] { display: none; }
+.room-hers-label {
+    margin: 0 0 4px;
+    font-family: var(--us-mono);
+    font-size: 0.6rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--concrete-4);
+}
+.room-hers-text {
+    margin: 0;
+    font-size: 0.95rem;
+    line-height: 1.5;
+    color: var(--chalk);
+    /* Her newlines survive the round trip (marks.ts normalises CRLF to LF but
+       keeps the breaks), so honour them rather than collapsing a two-line note
+       into one. */
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+/* Save feedback. Not a live region — it is written on every optimistic
+   keep and a polite announcement per tap would talk over her; the outcomes
+   that matter are announced through .room-live instead. */
+.room-mark-state {
+    flex: 1 1 100%;
+    margin: 0;
+    min-height: 1em;
+    font-family: var(--us-mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--concrete-4);
+}
+/* A failure is the one message that has to be unmissable, and it is also
+   the one that does not clear itself. --blue-glow rather than a red, which
+   this palette does not have and should not gain for one string. */
+.room-mark-state[data-error='true'] {
+    color: var(--blue-glow);
+}
+
 /* Under reduced motion the meter never animates, so presenting it as a
    thing to watch would be a lie. The reveal button carries the whole
    interaction instead. */
 .room-tension[data-reduced='true'] { display: none; }
 
-/* The non-timed route to the note. This button is why the hold is
-   allowed to exist: hold-to-reveal as the only path fails WCAG. */
+/* THE MODIFICATION — the non-timed route to the note, and the reason the
+   hold is allowed to exist at all: hold-to-reveal as the only path fails
+   WCAG 2.1.1 and 2.5.x.
+
+   "Modification" is solidcore's own word for it, and using theirs is the
+   point: a modification is the same work made available, not a lesser
+   version of it. Labelling this route with their vocabulary puts it inside
+   the room's fiction instead of leaving it looking like an apology. */
+.room-modification {
+    display: grid;
+    justify-items: start;
+    gap: 4px;
+}
+.room-modification[hidden] { display: none; }
+
+.room-modification-label {
+    margin: 0;
+    font-family: var(--us-mono);
+    font-size: 0.6rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    /* --concrete-3 is 5.76:1 on void, which is the floor for real text.
+       --concrete-2 (4.00:1) would fail, and this is a sentence, not a rule. */
+    color: var(--concrete-3);
+}
+
 .room-reveal {
     justify-self: start;
     min-height: 44px;
@@ -544,17 +885,23 @@
 
 .room-index-item { display: block; }
 
+/* A round marker, not a calendar cell.
+   This was a two-line grid carrying `01` over `JAN 2024`, laid out as a 12-cell
+   month grid. The dates are gone and so is the grid feeling: circular, 44px,
+   just the number. It reads as "there are more of these" instead of as a filing
+   system, which is the point of the de-structuring.
+   Still 44x44 for touch, still a real <button>, still in the tab order. */
 .room-index-btn {
     display: grid;
-    gap: 2px;
-    min-width: 44px;
-    min-height: 44px;
-    padding: 6px 8px;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
     font-family: var(--us-mono);
     color: var(--concrete-4);
     background: rgba(10, 11, 14, 0.72);
-    border: 1px solid var(--concrete-1);
-    border-radius: 2px;
+    border: 1px solid var(--concrete-2);
+    border-radius: 999px;
     cursor: pointer;
     /* Holding Enter on this must not also scroll or select. */
     user-select: none;
@@ -562,14 +909,9 @@
     transition: border-color 160ms ease, color 160ms ease, background 160ms ease;
 }
 .room-index-n {
-    font-size: 0.66rem;
-    letter-spacing: 0.1em;
-}
-.room-index-month {
-    font-size: 0.56rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--concrete-3);
+    font-size: 0.72rem;
+    letter-spacing: 0.02em;
+    font-variant-numeric: tabular-nums;
 }
 
 .room-index-btn:hover { border-color: var(--concrete-3); color: var(--chalk-dim); }
@@ -582,7 +924,40 @@
     border-color: var(--blue-light);
     background: rgba(30, 58, 224, 0.22);
 }
-.room-index-btn[aria-current='true'] .room-index-month { color: var(--blue-glow); }
+
+
+/* KEPT. A memory she has marked.
+
+   A filled ring rather than a badge, because the marker is 44px and a
+   badge on it would be under 10px. It reads at a glance as "these are the
+   ones she came back for", which is the whole point of showing it here
+   rather than only in the plate.
+
+   NEVER colour alone: applyKeptToIndex() in StudioRoom.tsx also appends
+   ", kept" to the button's accessible name, and the ring is a different
+   WEIGHT as well as a different colour so it survives being looked at by
+   someone who cannot tell these two blues apart.
+
+   The weight comes from an INSET BOX-SHADOW and not from border-width, and
+   that is a real bug avoided rather than a preference. This repo has no
+   global `box-sizing: border-box`, so `.room-index-btn` is 44x44 of CONTENT
+   plus its border — 46px at 1px, 48px at 2px. Widening the border on keep
+   would therefore resize the marker by 2px and nudge every marker after it
+   along the row, which on the phone's single scrollable row is a visible
+   jump on every tap. An inset shadow paints inside the box and costs no
+   layout at all. */
+.room-index-btn[data-kept='true'] {
+    color: var(--chalk);
+    border-color: var(--blue-glow);
+    box-shadow:
+        inset 0 0 0 2px var(--blue-glow),
+        inset 0 0 8px rgba(127, 178, 255, 0.3);
+}
+/* Selected AND kept: the selection still has to win, or she cannot tell
+   which one she is standing in front of. */
+.room-index-btn[data-kept='true'][aria-current='true'] {
+    background: rgba(30, 58, 224, 0.34);
+}
 
 /* "still one more" — present in the tab order from the start, because
    hiding a control from the keyboard to preserve a surprise is just
@@ -591,6 +966,26 @@
     border-style: dashed;
     border-color: var(--concrete-2);
 }
+/* Kept beats hidden: a dashed border on a memory she has marked would
+   read as "provisional", which is the opposite of what a keep means. */
+.room-index-btn[data-hidden='true'][data-kept='true'] {
+    border-style: solid;
+    border-color: var(--blue-glow);
+}
+
+/* A NOTE ON box-sizing, because it decided two things above.
+
+   This repo has NO global `box-sizing: border-box`. So `min-height: 44px` on
+   the buttons in this file is the CONTENT height, and with 10px of padding
+   and a 1px border they come out 66px tall. That is deliberately LEFT ALONE:
+   `.room-reveal` has always been 66px, it passed a design review at that
+   size, and making the new keep and reply buttons 44px would leave three
+   buttons of two different heights sitting in one row. Over the 44px floor
+   is not a problem; inconsistent is.
+
+   Where it DID matter is the kept states: widening a border on toggle grows
+   the box, so both of those use an inset box-shadow for their extra weight
+   instead. See the two comments above. */
 
 /* ---------- hints ----------------------------------------- */
 
@@ -629,6 +1024,38 @@
 /* ---------- narrow viewports ------------------------------ */
 
 @media (max-width: 760px) {
+    /* The wordmark, "the studio", the visit line, the tone toggle and "exit"
+       do not fit across 390px. Of the five, the visit line is the one whose
+       absence costs least — it is a nice sentence, not a control — and it is
+       still in the static fallback below in full. "the studio" goes too: the
+       page's title says so and the room is unmistakable. */
+    .room-visits,
+    .room-where { display: none; }
+    /* .room-where was the flex spacer that pushed "exit" to the right edge, so
+       something has to replace it. space-between rather than `margin-left: auto`
+       on .room-tone, because the component REMOVES the tone button entirely when
+       there is no AudioContext — and an auto margin on a display:none element
+       pushes nothing, which would leave the wordmark and "exit" bunched at the
+       left on exactly the devices that cannot play audio. */
+    .room-top { justify-content: space-between; }
+
+    /* The caption plate is the content on a phone, so the marks stack under
+       it rather than sitting beside it, and the two buttons share the width
+       instead of wrapping one onto its own line. */
+    .room-keep,
+    .room-reply-open {
+        flex: 1 1 0;
+        padding: 10px 8px;
+        text-align: center;
+    }
+
+    /* The plate's row is `auto` in the HUD grid, so an open reply form grows it
+       and squeezes the middle row. Three rows of textarea plus two buttons plus
+       her saved note is a lot of vertical on a 390x844 phone, so the box starts
+       shorter here — it is still resizable, and the static grid below has the
+       roomier version of the same form. */
+    .room-reply-text { min-height: 52px; }
+
     /* Four labelled rail positions do not fit next to a caption on a
        phone, and the caption is the content. Numbers only. */
     .room-lines {
@@ -697,11 +1124,23 @@
 }
 
 .room-fallback-note {
-    margin: 0 0 30px;
+    margin: 0 0 8px;
     max-width: 52ch;
     font-size: 0.95rem;
     line-height: 1.6;
     color: var(--concrete-4);
+}
+
+/* The visit line, in full here rather than truncated as it is in the HUD's
+   top bar. Same persisted counter, so this page says the same thing the 3D
+   room does — and says it even when the 3D room never runs. */
+.room-fallback-visits {
+    margin: 0 0 30px;
+    font-family: var(--us-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--blue-light);
 }
 
 .room-fallback-chapter {
@@ -752,7 +1191,7 @@
 
 .room-card-body { padding: 12px 14px 14px; }
 
-.room-card-month {
+.room-card-when {
     margin: 0 0 4px;
     font-family: var(--us-mono);
     font-size: 0.62rem;
@@ -796,6 +1235,139 @@
     color: var(--chalk-dim);
     border-left: 2px solid var(--blue-glow);
     padding-left: 10px;
+}
+
+/* ---------- her marks, in the static grid -------------------- */
+
+/* THE NO-JAVASCRIPT ROUTE to keeping a memory and writing back on it.
+
+   This grid is the room whenever WebGL, JS or hydration fails, so these
+   have to be real controls rather than a nicety — a keep that only worked
+   with the island running would mean the accessible version of the room is
+   read-only while the pretty one is not.
+
+   Every button here clears 44px and carries a visible focus ring, same as
+   the HUD's. `.room-card-note > summary` above already establishes the
+   44px-target-without-44px-of-type pattern for the disclosures. */
+.room-card-keep {
+    margin-top: 10px;
+}
+.room-card-keep > button {
+    min-height: 44px;
+    width: 100%;
+    padding: 10px 12px;
+    font-family: var(--us-mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--concrete-4);
+    background: var(--machine-2);
+    border: 1px solid var(--concrete-2);
+    border-radius: 2px;
+    cursor: pointer;
+}
+.room-card-keep > button:hover { color: var(--chalk-dim); border-color: var(--concrete-3); }
+.room-card-keep > button:focus-visible {
+    outline: 2px solid var(--blue-light);
+    outline-offset: 2px;
+}
+/* Kept. Text AND border AND weight, never colour alone — and the button's
+   own label already reads "kept", which is the signal a screen reader gets.
+   Weight via an inset shadow rather than border-width, for the same
+   no-global-border-box reason as the index marker: widening the border
+   would grow the button by 2px and shove the card's content down on toggle. */
+.room-card-keep > button[aria-pressed='true'] {
+    color: var(--chalk);
+    border-color: var(--blue-glow);
+    box-shadow: inset 0 0 0 2px var(--blue-glow);
+    background: rgba(30, 58, 224, 0.24);
+}
+
+/* HER note, set apart from his. His has a blue-glow rule (.room-card-note);
+   hers is chalk and labelled. The room holds two voices now. */
+.room-card-hers {
+    margin-top: 10px;
+    padding: 10px 12px;
+    background: rgba(10, 11, 14, 0.6);
+    border-left: 2px solid var(--chalk-dim);
+}
+.room-card-hers-label {
+    margin: 0 0 3px;
+    font-family: var(--us-mono);
+    font-size: 0.58rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--concrete-4);
+}
+.room-card-hers-text {
+    margin: 0;
+    font-size: 0.92rem;
+    line-height: 1.5;
+    color: var(--chalk);
+    /* Her line breaks survive the round trip, so honour them. */
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.room-card-reply {
+    margin-top: 8px;
+    font-size: 0.9rem;
+}
+.room-card-reply > summary {
+    cursor: pointer;
+    font-family: var(--us-mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--concrete-4);
+    /* 44px target without 44px of type. */
+    padding: 12px 0;
+    margin: -12px 0 0;
+}
+.room-card-reply > summary:focus-visible {
+    outline: 2px solid var(--blue-light);
+    outline-offset: 2px;
+}
+.room-card-reply textarea {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    margin: 10px 0 8px;
+    padding: 9px;
+    resize: vertical;
+    font-family: var(--us-display);
+    font-size: 0.92rem;
+    line-height: 1.5;
+    color: var(--chalk);
+    background: var(--void);
+    border: 1px solid var(--concrete-2);
+    border-radius: 2px;
+}
+/* --concrete-3 (5.76:1 on void), not --concrete-2 (4.00:1): a placeholder
+   is text and has to clear 4.5:1 like any other. */
+.room-card-reply textarea::placeholder { color: var(--concrete-3); opacity: 1; }
+.room-card-reply textarea:focus-visible {
+    outline: 2px solid var(--blue-light);
+    outline-offset: 1px;
+    border-color: var(--blue-light);
+}
+.room-card-reply button {
+    min-height: 44px;
+    padding: 10px 20px;
+    font-family: var(--us-mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--chalk);
+    background: var(--blue-brand);
+    border: 1px solid var(--blue-light);
+    border-radius: 2px;
+    cursor: pointer;
+}
+.room-card-reply button:hover { background: var(--blue-light); }
+.room-card-reply button:focus-visible {
+    outline: 2px solid var(--blue-glow);
+    outline-offset: 2px;
 }
 
 .room-fallback-foot {
@@ -855,8 +1427,25 @@
     .room-line,
     .room-line-blurb,
     .room-reveal,
+    .room-keep,
+    .room-reply-open,
+    .room-tone,
     .room-index-btn { transition: none; }
     /* The index still selects and reveals; it just does not scroll
        anywhere, because there is nowhere to scroll. */
     .room-hint { display: none; }
+
+    /* FULL RANGE OF MOTION is a 0.9-second hold, which is motion, so it
+       does not exist under this media query — StudioRoom.tsx's startHold()
+       reveals immediately and never sets `holding`, so the bar can never
+       fill. Hidden rather than left at zero, because a meter that cannot
+       move is a control that lies about what is available. Keeping a
+       memory is still fully reachable: the keep button does exactly what
+       the gesture does. */
+    .room-tension-over { display: none; }
+
+    /* The lights are already up: progress is pinned at 1 under reduced
+       motion, so the wake resolves to fully lit on the first frame. These
+       defaults matter for the case where the island never runs at all. */
+    .room-backdrop { opacity: 1; }
 }

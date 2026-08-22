@@ -313,13 +313,19 @@ function chooseDpr(cssW: number, cssH: number, rawDpr: number, hardCap: number, 
    scene graph only ever reads names from here. Reload the page after a change —
    there is no state to lose.
 
-   THE FIVE TO TRY FIRST, in order of how much they change the look:
+   THE SEVEN TO TRY FIRST, in order of how much they change the look:
 
      1. BACKDROP              'image' (photographic room) or 'procedural' (built)
      2. BACKDROP_IMAGE        swap the file to re-shoot the room
-     3. SPRING_COLORS         the reformer springs (see the note on that line)
-     4. LED_COLOR / LED_LOW_Y the blue that lights everything
-     5. BACKDROP_DOLLY        how much the room zooms as the carriage advances
+     3. LED_COLOR             the blue that lights everything. Now matched to the
+                              reference's near-pure electric royal, which is far
+                              more saturated than the old value.
+     4. WAKE_END_P            how far she scrolls before the lights are fully up
+     5. PANEL_POOL            the light a photograph throws onto the floor. This
+                              is the single biggest change to how a memory READS
+                              on the rail — 0 turns it off.
+     6. SPRING_COLORS         the reformer springs (see the note on that line)
+     7. BACKDROP_DOLLY        how much the room zooms as the carriage advances
 
    =========================================================================== */
 
@@ -546,12 +552,70 @@ const FOG_ENABLED = BACKDROP === 'procedural';
    and one at the base of the mirror wall. The low one is the important one — it
    is what throws the blue wash across the floor.
    --------------------------------------------------------------------------- */
-const LED_COLOR = 0x2f6bff;
-/** The hot core of the strip itself, which reads brighter than its wash. */
-const LED_CORE_COLOR = 0x9cc4ff;
+/**
+ * RETUNED AGAINST THE REFERENCE PHOTOGRAPH, which is more saturated than either
+ * the palette token or the old value here.
+ *
+ * This was 0x2f6bff — essentially `--blue-light` (#3e7bff), a mid azure. Sampled
+ * off solidcore/sample3.png, the strips and their wash are close to a pure
+ * electric royal with almost no green in them: the wall wash sits around #1a2ce6
+ * and the hot line itself blows out to near-white. A mid azure next to that reads
+ * washed and slightly cyan, which is exactly how the room looked wrong.
+ *
+ * Note this drives the WASH POINT LIGHTS as well as the strips, so it is the
+ * colour of the whole room's light and not a decal. The panel rim is deliberately
+ * NOT this colour any more — see PANEL_RIM_COLOR.
+ */
+const LED_COLOR = 0x1f34ff;
+/**
+ * The hot core of the strip itself, which reads brighter than its wash.
+ *
+ * Nearly white with a blue cast, because that is what an over-exposed LED does to
+ * a sensor and what it does to an eye. 0x9cc4ff was a pale blue, which reads as a
+ * painted stripe rather than as a light source.
+ */
+const LED_CORE_COLOR = 0xd2e2ff;
 const LED_HIGH_Y = 5.5;
 const LED_LOW_Y = 0.62;
 const LED_THICKNESS = 0.085;
+
+/* ---- the strips' bloom -----------------------------------------------------
+   The reference's LEDs are not thin lines, they are lines wrapped in an enormous
+   soft halo that reaches metres up the wall and down onto the floor. One additive
+   quad could not do that: a single wide, dim box reads as a grey band, because
+   additive blending is linear and a real bloom falls off on a curve.
+
+   So the bloom is STACKED — LED_BLOOM_LAYERS boxes, each wider and dimmer than
+   the last, which sums to an approximately exponential falloff for the cost of
+   two extra draw calls per strip. This is the cheap stand-in for a bloom pass,
+   and it is a legitimate one rather than a compromise: a real post-processing
+   bloom would also brighten the PHOTOGRAPHS, and THE ONE RULE forbids that. Light
+   that lives on the architecture can never touch a memory.
+   -------------------------------------------------------------------------- */
+const LED_BLOOM_LAYERS = 3;
+/**
+ * Width of the FIRST (tightest) bloom layer, in multiples of LED_THICKNESS.
+ *
+ * This has a constraint on it, and my first value broke it. The widest layer is
+ * LED_THICKNESS * LED_BLOOM_WIDTH * LED_BLOOM_FALLOFF^(LAYERS-1), so at 4 the
+ * outer halo came out 3.48 world units tall against a room 6.2 tall — more than
+ * half the wall height, which stops reading as a glow around a line and starts
+ * reading as a painted band with a bright edge. At 3 it is 2.61 units, about 42%
+ * of the wall, which is close to what the reference photograph actually shows.
+ * The assertion in the test harness is what keeps it there.
+ */
+const LED_BLOOM_WIDTH = 3;
+/** Each successive layer is this much wider and this much dimmer. */
+const LED_BLOOM_FALLOFF = 3.2;
+/**
+ * Opacity of the tightest layer.
+ *
+ * The STACK's total matters more than this number does: additive blending sums, so
+ * LED_BLOOM_OPACITY * (1 + 1/f + 1/f^2) has to stay under 1 or the strip clips to
+ * flat white and stops looking like a light at all. At 0.42 with a falloff of 3.2
+ * the sum is 0.59, which leaves headroom for the hot core drawn over it.
+ */
+const LED_BLOOM_OPACITY = 0.42;
 /**
  * Wash intensity, in candela. Physically-correct falloff, so this number is
  * meaningful: irradiance is LED_WASH_INTENSITY / d^2 and a Lambert wall reflects
@@ -667,6 +731,141 @@ const PANEL_HEIGHT_MAX = 3.5;
 const PANEL_HEIGHT_FRACTION_NARROW = 0.62;
 const PANEL_HEIGHT_MAX_NARROW = 3.0;
 
+/* ---------------------------------------------------------------------------
+   HOW A PHOTOGRAPH IS PRESENTED ON THE RAIL
+
+   The panels used to be a photo, a hairline matte backing, and two additive
+   glows behind it. That is a picture floating in a room. What the reference
+   photograph actually shows — and what makes its own signage read as PART of the
+   building rather than as an overlay — is that every lit surface in that studio
+   throws light onto something. The illuminated wordmark bleeds onto the wall
+   around it; the low LED strip pours a pool across the concrete.
+
+   So a memory is now treated as the light source it is (it is the only warm
+   thing in the room, so it is the only warm light in the room):
+
+     BEZEL  a machined matte-black surround, one config value wide.
+     LIP    a thin lit strip along the BOTTOM EDGE ONLY, like the underlighting on
+            a gallery lightbox. Additive, and positioned strictly BELOW the
+            photograph's bottom edge — never across it.
+     POOL   a soft glow on the floor beneath the panel, scaled with the panel and
+            faded with it. This is the single biggest change to how the rail
+            reads: without it a panel hangs in space, with it the room has a
+            photograph IN it.
+
+   ALL THREE ARE STRICTLY OUTSIDE THE PHOTOGRAPH'S OWN RECTANGLE, and that is not
+   an aesthetic preference — it is THE ONE RULE. Nothing here is a filter, a
+   vignette or a grade; each is a separate additive quad that light spills onto.
+   Tint the photo instead and you have thrown away the entire design.
+   --------------------------------------------------------------------------- */
+
+/** Width of the matte-black surround, in world units. Was hardcoded at 0.07. */
+const PANEL_BEZEL = 0.075;
+
+/** Height of the lit bottom lip, in world units. 0 removes it. */
+const PANEL_LIP_HEIGHT = 0.04;
+const PANEL_LIP_OPACITY = 0.55;
+/**
+ * Colour of the lit lip. LED_CORE_COLOR by default, because the lip IS a fixture
+ * on the frame — the same near-white as the strips overhead, not a separate
+ * decision. Named anyway so it can be pulled apart if the frames should read as
+ * warm-lit boxes rather than as blue-lit ones.
+ */
+const PANEL_LIP_COLOR = LED_CORE_COLOR;
+
+/**
+ * Strength of the light a photograph throws on the floor. 0 turns it off.
+ *
+ * SAM: this and PANEL_POOL_SPREAD are the two to play with, and this is the single
+ * biggest change to how the rail reads. 0.45 is a lit gallery; 0.7 is theatrical
+ * and starts to compete with the blue LED wash; 0.2 is barely a suggestion, which
+ * is also a defensible look for a room this dark. Turn it DOWN first if the floor
+ * ever looks milky.
+ *
+ * Kept moderate rather than generous on purpose: these are ADDITIVE, four or five
+ * panels are inside the fade window at once, and consecutive ones alternate sides
+ * of the corridor — so at PANEL_POOL_SPREAD 1.9 two adjacent pools sit about 8
+ * floor units apart with a radius near 4, meaning they touch rather than stack.
+ * Widening the spread past ~2.5 makes them overlap and the sum can clip.
+ */
+const PANEL_POOL = 0.45;
+/** How far the pool spreads relative to the panel's width. Past ~2.5 they overlap. */
+const PANEL_POOL_SPREAD = 1.9;
+/**
+ * Colour of the pool a photograph throws.
+ *
+ * Warm, and that is the whole argument of the room in one constant: everything
+ * architectural is black, concrete and electric blue, and the ONLY warm light in
+ * here comes off the memories. A blue pool under a warm photograph would say the
+ * exact opposite.
+ *
+ * To be completely clear about THE ONE RULE: this is a separate quad on the floor,
+ * metres away from any photograph and additive. It is the room reacting to a
+ * memory, never a grade applied to one. Set it to 0xffffff for neutral spill, or
+ * set PANEL_POOL to 0 to remove it entirely.
+ */
+const PANEL_POOL_COLOR = 0xffdcc0;
+
+/**
+ * The panel's own rim light, held OFF the room's LED colour on purpose.
+ *
+ * The room's strips are now a near-pure electric royal (see LED_COLOR), and a rim
+ * that saturated around a warm photograph reads as a colour clash rather than as
+ * a light. This is `--blue-light` from the palette: the wing's ambient-light blue,
+ * which is what a panel is lit BY. It still brightens toward LED_CORE_COLOR at max
+ * tension, which is the palette's own wash-to-glow rule doing the state work.
+ */
+const PANEL_RIM_COLOR = 0x3e7bff;
+
+/* ---------------------------------------------------------------------------
+   THE LIGHTS COMING UP
+
+   Arriving should feel like the room waking rather than like a room that was
+   already on. So at progress 0 the studio sits at a fraction of its light, and it
+   comes up over the first WAKE_END_P of the scroll — the ambient term, the wash
+   point lights, the CSS haze, the LED strips and the photographic backdrop all
+   ramp together, because a real room's lights are one switch.
+
+   THE FLOORS ARE NOT ZERO, and that is load-bearing. A room that starts at black
+   does not read as "off", it reads as "broken" — the file's own history records
+   exactly this failure with the backdrop: without it "the first frame is a black
+   rectangle with thirteen lit panels floating in it, which looks broken rather
+   than loading". So the floors are low enough to be unmistakably dim and high
+   enough that the room is legibly a room from the first frame.
+
+   NOTHING HERE TOUCHES A PHOTOGRAPH. The panels' own materials are unlit
+   MeshBasicMaterial, so the wash cannot reach them by construction; the backdrop
+   is dimmed by its own opacity, and it sits BELOW the canvas. A memory is at full
+   warmth in the first frame and in the last one.
+
+   Under prefers-reduced-motion progress is pinned at 1, so the room simply opens
+   fully lit. The wake is motion, and she asked for none.
+   --------------------------------------------------------------------------- */
+
+/**
+ * Scroll progress at which the lights are fully up.
+ *
+ * NOT a taste value — it has an arithmetic constraint, and the first number I
+ * picked (0.11) violated it. The FIRST WALL PANEL sits at WALL_START_Z (-15),
+ * which is (15 - VIEW_AHEAD) / RAIL_LEN = 0.0976 of the rail, and
+ * carriageEaseInverse() puts that at scroll progress 0.091. A wake that finished
+ * at 0.11 would still be ramping while she was already looking at the first
+ * memory of line 02 — the lights coming up would read as the room dimming a
+ * photograph, which is the one thing it must never look like.
+ *
+ * So the wake has to complete before the corridor opens. 0.085 lands just inside
+ * that, with the warm-up panel — which PLAN.md section 4.3 specifies is lit LOW on
+ * purpose, "one panel, dead centre, low light" — sitting in the dim part where it
+ * belongs. The assertion in the test harness is what stops this drifting back.
+ */
+const WAKE_END_P = 0.085;
+/** Multiplier on the point lights and the ambient term at progress 0. */
+const WAKE_FLOOR_LIGHT = 0.26;
+/** Opacity of the photographic backdrop at progress 0. */
+const WAKE_FLOOR_ROOM = 0.34;
+/** Multiplier on the CSS blue haze at progress 0. */
+const WAKE_FLOOR_HAZE = 0.2;
+
 /* ---- the carriage you ride ----
    Sized against the photographed room's centre aisle. The first version was 2.0
    wide and 6.4 long and fully opaque, which in image mode punched a solid black
@@ -710,8 +909,104 @@ const HIDDEN_VIEW_AHEAD = VIEW_AHEAD - 2.0;
 const WALL_START_Z = -15;
 const WALL_GAP = 5.5;
 
+/* ---------------------------------------------------------------------------
+   THE CARRIAGE'S OWN MOTION
+
+   The camera is bolted to the carriage, so the carriage cannot lag the camera —
+   she is sitting on it. What was missing is the machine's COMPLIANCE: a real
+   carriage on springs pitches into an acceleration and settles out of it, and the
+   lit front edge of it brightens under load because that is when the springs are
+   actually doing something.
+
+   All three of these read off carriage VELOCITY, damped, which is why they feel
+   like a mechanism rather than like an animation: they respond to how hard she is
+   scrolling, not to a clock.
+   --------------------------------------------------------------------------- */
+
+/** Radians of pitch at full scroll speed. ~1.1 degrees. Deliberately tiny. */
+const CARRIAGE_PITCH = 0.019;
+/** Time constant on the velocity estimate. Below ~0.1 it reads as jitter. */
+const CARRIAGE_VEL_TAU = 0.16;
+/** Speed, in world units/second, treated as "fully loaded" for the above. */
+const CARRIAGE_VEL_FULL = 26;
+/** How much brighter the lit front edge gets under full load, added to its base. */
+const CARRIAGE_EDGE_LOAD = 0.4;
+
+/** The living micro-bend: frequency in Hz, and amplitude in world units. */
+const BREATH_HZ = 0.167;
+const BREATH_AMP = 0.055;
+
 /** Seconds of hold to reach MAX TENSION. */
 const TENSION_FILL_SEC = 1.15;
+
+/* ---------------------------------------------------------------------------
+   FULL RANGE OF MOTION — the thing behind a gesture rather than behind a menu
+
+   Their cues are explicit that the rep is not over at the top. "Full range of
+   motion" is a documented instruction, and it is the one piece of their
+   vocabulary that describes doing MORE than the meter asks for.
+
+   So: reach max tension and the note is revealed, as before. KEEP HOLDING for
+   another OVERHOLD_SEC and the memory is KEPT — a real, persisted mark that I can
+   see afterwards (see marks.ts). The gesture is not a shortcut to something a
+   button also does more conveniently; it is the same act, earned differently.
+
+   WHY IT KEEPS RATHER THAN REVEALING MORE CONTENT: a secret second note would
+   have to be invented, and this room's placeholders exist precisely because
+   inventing content about their relationship is off the table. A mark is HER
+   content, so the gesture produces something real without anybody writing fiction.
+
+   The plain-click route is the keep button in the caption plate, so this never
+   becomes the only path to anything — the accessibility floor holds. Under
+   prefers-reduced-motion there is no hold at all (startHold reveals immediately
+   and never sets `holding`), so this quietly does not exist there, which is
+   correct: a 0.9s hold is motion.
+   --------------------------------------------------------------------------- */
+const OVERHOLD_SEC = 0.9;
+
+/**
+ * MUST EQUAL `MARK_NOTE_MAX` in src/lib/us/marks.ts (280).
+ *
+ * Restated rather than imported, and the reason is the same one that keeps
+ * ClientMark declared locally: marks.ts pulls in `aws4fetch` and reads
+ * `process.env` through config.ts, so a client island importing from it is a module
+ * edge between a browser bundle and bucket credentials.
+ *
+ * The duplication is real and it WILL desync silently if nobody checks — an earlier
+ * version hardcoded 280 inline with a comment claiming it matched, which is the
+ * weakest possible form of this. Naming it at least makes it greppable, and the
+ * relationship is asserted against both files' source in the test harness. The
+ * failure if it does drift is mild in one direction (a textarea that stops short of
+ * the server's cap) and annoying in the other (a 413 on something the box allowed),
+ * which is exactly why it is worth an assertion rather than a hope.
+ */
+const NOTE_MAX = 280;
+
+/* ---------------------------------------------------------------------------
+   ROOM TONE — opt-in, off by default, NEVER autoplayed.
+
+   PLAN.md section 2 is unambiguous: "No autoplay audio. Ever. Opt-in toggle
+   only." So the AudioContext is not merely left suspended — it does not EXIST
+   until she presses the button. That is deliberately stronger than needed
+   (browsers would suspend it anyway) because it makes the guarantee structural:
+   there is no code path in this file that can start audio without a click.
+
+   It is also never persisted. Remembering "tone was on" and restoring it on the
+   next visit is autoplay with extra steps, whatever it is called in the settings.
+
+   SYNTHESISED, not a file. A room-tone loop would be a 200KB asset shipped to a
+   phone for something most visits will never turn on. This is filtered noise plus
+   two low oscillators — a few lines of WebAudio, zero bytes over the wire, and it
+   loops seamlessly because there is no loop point.
+   --------------------------------------------------------------------------- */
+/** Peak gain. Low: this is a room you are standing in, not a track. */
+const ROOM_TONE_LEVEL = 0.05;
+/** The hum's fundamental, in Hz. 58 is mains-adjacent, which is what a room hums at. */
+const ROOM_TONE_HZ = 58;
+/** Corner frequency of the lowpass on the noise bed. Higher is airier / hissier. */
+const ROOM_TONE_CUTOFF = 340;
+/** Seconds to fade in and out. Never instant: a hard start is a click. */
+const ROOM_TONE_FADE_SEC = 1.8;
 
 /** Time constant for the no-GSAP fallback scrub. ~matches GSAP's `scrub: 1` feel. */
 const SCRUB_TAU = 0.26;
@@ -762,10 +1057,42 @@ const HAZE_STRENGTH = BACKDROP === 'image' ? 0.35 : 1;
    COMPONENT
    =========================================================================== */
 
+/**
+ * Her mark on one memory, as the island sees it.
+ *
+ * DECLARED HERE rather than imported from src/lib/us/marks.ts, and that is
+ * deliberate. marks.ts imports `aws4fetch` and reads `process.env` through
+ * config.ts — server-only code. A type-only import would be erased today, but it
+ * would leave a real module edge between a client island and a module holding
+ * bucket credentials, and one day somebody imports a helper across it rather than
+ * a type. Four lines of structural duplication is a much cheaper thing to keep in
+ * sync than that mistake is to find.
+ */
+export interface ClientMark {
+  kept: boolean;
+  /** Her words back, or ''. Capped server-side at MARK_NOTE_MAX. */
+  note: string;
+  seen: number;
+}
+
 interface Props {
   memories: ClientMemory[];
   /** Chapter lines, for the HUD indicator. Line number -> label. */
   lines: Array<{ line: number; label: string; blurb: string }>;
+  /**
+   * id -> her mark, READ ON THE SERVER. So the keeps and her notes are in the
+   * initial HTML — which matters twice over: the first paint is already correct
+   * with no fetch-and-flicker, and the static fallback grid (which is the page
+   * whenever WebGL or hydration fails) carries them too.
+   */
+  marks: Record<string, ClientMark>;
+  /**
+   * "the 7th time you've been in here." — already composed by marks.ts's
+   * visitLine(), or '' when there is nothing worth saying. A string rather than a
+   * number on purpose: the ordinal edge cases (1, 2, 11th) are data decisions and
+   * they belong next to the counter, not in a component.
+   */
+  visitLine: string;
 }
 
 /** Everything we own per panel, so teardown is a single loop. */
@@ -776,6 +1103,10 @@ interface PanelRig {
   backing: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
   rim: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
   halo: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
+  /** The lit strip under the bottom edge. Never across the photograph. */
+  lip: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial> | null;
+  /** The light this photograph throws on the floor. */
+  pool: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial> | null;
   mirror: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
   mirrorGroup: THREE.Group;
   /** Live width/height of the image, once known. Starts as the manifest hint. */
@@ -789,11 +1120,38 @@ interface PanelRig {
   usedFallback: boolean;
   tension: number;
   revealed: boolean;
+  /**
+   * 0..1 PAST max tension. See FULL RANGE OF MOTION. Only accumulates while the
+   * note is already revealed and she is still holding.
+   */
+  overhold: number;
+  /** Her mark. Seeded from the server, then kept in step with the store. */
+  kept: boolean;
+  herNote: string;
+  /**
+   * Unsaved text she typed on THIS memory, held per rig so it cannot be lost.
+   *
+   * There are two ways to lose words she typed, and one field closes both:
+   *
+   *   1. A save that FAILS and lands after she has already walked down the rail.
+   *      The live textarea now belongs to a different photograph, so putting her
+   *      words back into it would be worse than losing them — she could save them
+   *      onto the wrong memory without noticing.
+   *   2. The form being closed OUT FROM UNDER her, which setSelected does whenever
+   *      the selection changes.
+   *
+   * In both cases the text is parked here, on the memory it was written about, and
+   * openReply() hands it straight back when she returns. Cleared only by a
+   * successful save (or a reload — this is a draft, not storage).
+   */
+  draftNote: string;
+  /** True once `seen` has been reported for this memory on this page load. */
+  seenSent: boolean;
   /** 0..1 dissolve, from how close the carriage is. See PASS_FADE_NEAR. */
   fade: number;
 }
 
-export default function StudioRoom({ memories, lines }: Props) {
+export default function StudioRoom({ memories, lines, marks, visitLine }: Props) {
   const stageRef = useRef<HTMLDivElement | null>(null);
   const stickyRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -898,15 +1256,32 @@ export default function StudioRoom({ memories, lines }: Props) {
     const elNote = hud.querySelector<HTMLElement>('[data-us="note"]');
     const elNoteText = hud.querySelector<HTMLElement>('[data-us="note-text"]');
     const elReveal = hud.querySelector<HTMLButtonElement>('[data-us="reveal"]');
+    /* The reveal button and its "modification" label together — toggled as a pair,
+       because the label describes the button and a caption for a hidden control is
+       just a floating sentence. */
+    const elMod = hud.querySelector<HTMLElement>('[data-us="mod"]');
     const elLive = hud.querySelector<HTMLElement>('[data-us="live"]');
     const elHint = hud.querySelector<HTMLElement>('[data-us="hint"]');
     const elMore = hud.querySelector<HTMLElement>('[data-us="more"]');
+    /* ---- the marks she can leave (see marks.ts) ---- */
+    const elKeep = hud.querySelector<HTMLButtonElement>('[data-us="keep"]');
+    const elReplyOpen = hud.querySelector<HTMLButtonElement>('[data-us="reply-open"]');
+    const elReplyForm = hud.querySelector<HTMLFormElement>('[data-us="reply-form"]');
+    const elReplyText = hud.querySelector<HTMLTextAreaElement>('[data-us="reply-text"]');
+    const elReplyCancel = hud.querySelector<HTMLButtonElement>('[data-us="reply-cancel"]');
+    const elHers = hud.querySelector<HTMLElement>('[data-us="hers"]');
+    const elHersText = hud.querySelector<HTMLElement>('[data-us="hers-text"]');
+    const elMarkState = hud.querySelector<HTMLElement>('[data-us="mark-state"]');
+    /* ---- opt-in room tone, off by default ---- */
+    const elTone = hud.querySelector<HTMLButtonElement>('[data-us="tone"]');
     const lineEls = Array.from(hud.querySelectorAll<HTMLElement>('[data-line]'));
     const indexButtons = Array.from(hud.querySelectorAll<HTMLButtonElement>('[data-memory]'));
 
     if (
       !elMonth || !elCaption || !elMeter || !elFill || !elState ||
-      !elNote || !elNoteText || !elReveal || !elLive || !elHint || !elMore
+      !elNote || !elNoteText || !elReveal || !elMod || !elLive || !elHint || !elMore ||
+      !elKeep || !elReplyOpen || !elReplyForm || !elReplyText || !elReplyCancel ||
+      !elHers || !elHersText || !elMarkState || !elTone
     ) {
       console.error('[us] StudioRoom HUD markup is missing an element; keeping the static grid.');
       return;
@@ -1454,6 +1829,22 @@ export default function StudioRoom({ memories, lines }: Props) {
     const room = new THREE.Group();
     scene.add(room);
 
+    /* ---------------------------------------------------------------------
+       THE WAKE REGISTRY
+
+       Every material whose opacity is part of "the lights coming up" registers
+       here with its FULL-BRIGHTNESS value, and one loop in the frame scales all
+       of them. The alternative — reaching for each material by name in the frame
+       loop — is how a light gets added in one place and forgotten in the other,
+       after which the room wakes up unevenly and nobody can say which piece is
+       wrong.
+
+       Note what is NOT eligible for this list: anything belonging to a panel.
+       Panel opacity is owned entirely by the pass/distance dissolve, and a second
+       writer would fight it. The wake is the ROOM's lights.
+       --------------------------------------------------------------------- */
+    const wakeMaterials: Array<{ mat: THREE.Material; base: number }> = [];
+
     const ROOM_LEN = RAIL_LEN + 30;
     const ROOM_MID_Z = -ROOM_LEN / 2 + 6;
     const ROOM_HALF_W = 5.3;
@@ -1538,30 +1929,65 @@ export default function StudioRoom({ memories, lines }: Props) {
          wall. Two boxes each: a bright core and a wider, dimmer additive bloom,
          which is what makes a thin emissive line read as a light rather than as
          a painted stripe. */
-      const ledCoreMat = ownMaterial(new THREE.MeshBasicMaterial({ color: LED_CORE_COLOR, fog: true }));
-      const ledBloomMat = ownMaterial(
+      /* THE STACKED BLOOM.
+         One wide dim box is not a bloom, it is a grey band: additive blending is
+         linear and a real halo falls off on a curve. LED_BLOOM_LAYERS boxes, each
+         LED_BLOOM_FALLOFF times wider and that many times dimmer, sum to an
+         approximately exponential falloff — which is what the reference's
+         metres-wide glow actually looks like — for two extra draw calls per strip.
+
+         Emphatically NOT a post-processing bloom pass. A real one would also
+         brighten the PHOTOGRAPHS, and THE ONE RULE forbids that. Light in this
+         room lives on the architecture as geometry, where it physically cannot
+         reach a memory. */
+      /* `transparent` even at opacity 1, purely so the wake ramp can dim it. A
+         non-transparent material ignores `.opacity` entirely, which would have
+         left the hot core at full brightness in an otherwise dark room — the one
+         element whose being lit says "the lights are on". depthWrite off to match
+         the bloom layers it is composited over. */
+      const ledCoreMat = ownMaterial(
         new THREE.MeshBasicMaterial({
-          color: LED_COLOR,
+          color: LED_CORE_COLOR,
           transparent: true,
-          opacity: 0.55,
-          blending: THREE.AdditiveBlending,
+          opacity: 1,
           depthWrite: false,
           fog: true,
         }),
       );
+      /** [material, thickness multiplier, render order] per layer, widest first. */
+      const ledLayers: Array<[THREE.MeshBasicMaterial, number, number]> = [];
+      for (let i = LED_BLOOM_LAYERS - 1; i >= 0; i -= 1) {
+        const spread = Math.pow(LED_BLOOM_FALLOFF, i);
+        ledLayers.push([
+          ownMaterial(
+            new THREE.MeshBasicMaterial({
+              color: LED_COLOR,
+              transparent: true,
+              opacity: LED_BLOOM_OPACITY / spread,
+              blending: THREE.AdditiveBlending,
+              depthWrite: false,
+              fog: true,
+            }),
+          ),
+          LED_BLOOM_WIDTH * spread,
+          3,
+        ]);
+      }
+      // The hot core goes on last so it composites over its own halo.
+      ledLayers.push([ledCoreMat, 1, 4]);
+      // Registered for the wake ramp: the strips come up with everything else.
+      for (const [mat] of ledLayers) wakeMaterials.push({ mat, base: mat.opacity });
 
-      /** One strip: a core, a bloom, on any wall, at any height. */
+      /** One strip: a stacked bloom and a core, on any wall, at any height. */
       const addStrip = (
         y: number,
         len: number,
         axis: 'x' | 'z',
         pos: [number, number, number],
       ) => {
-        for (const [mat, thick, order] of [
-          [ledBloomMat, LED_THICKNESS * 4.5, 3],
-          [ledCoreMat, LED_THICKNESS, 4],
-        ] as const) {
-          const s = new THREE.Mesh(railGeo, mat as THREE.MeshBasicMaterial);
+        for (const [mat, mult, order] of ledLayers) {
+          const thick = LED_THICKNESS * mult;
+          const s = new THREE.Mesh(railGeo, mat);
           if (axis === 'z') s.scale.set(thick, thick, len);
           else s.scale.set(len, thick, thick);
           s.position.set(pos[0], y, pos[2]);
@@ -1591,6 +2017,11 @@ export default function StudioRoom({ memories, lines }: Props) {
       wordmark.position.set(0, WORDMARK_Y, MIRROR_WALL_Z + 0.12);
       wordmark.renderOrder = 4;
       room.add(wordmark);
+      /* An illuminated box comes up with the building's lights. Registered by
+         reaching for `.material` rather than by threading a return value out of
+         makeTextPlane, which would change that helper's signature for six callers
+         to serve two. */
+      wakeMaterials.push({ mat: wordmark.material as THREE.Material, base: 1 });
 
       const wordmarkEcho = makeTextPlane(WORDMARK_TEXT, {
         width: WORDMARK_WIDTH * 0.55,
@@ -1603,6 +2034,7 @@ export default function StudioRoom({ memories, lines }: Props) {
       wordmarkEcho.position.set(0, WORDMARK_Y * 0.42, MIRROR_WALL_Z + 0.11);
       wordmarkEcho.renderOrder = 4;
       room.add(wordmarkEcho);
+      wakeMaterials.push({ mat: wordmarkEcho.material as THREE.Material, base: 0.3 });
 
       /* SIDE-WALL VINYL. The reference's left wall reads "strong is the new
          skinny"; ours is Sam's own line. Painted, not lit — vinyl, not neon. */
@@ -1618,10 +2050,21 @@ export default function StudioRoom({ memories, lines }: Props) {
         vinyl.position.set(sx * (ROOM_HALF_W - 0.05), 3.4, ROOM_MID_Z + ROOM_LEN * 0.22);
         vinyl.renderOrder = 4;
         room.add(vinyl);
+        /* Vinyl is paint, not a light — but it is drawn with an UNLIT material, so
+           without this it would stay fully legible in a dark room while everything
+           around it dimmed. Registering it is what makes an unlit material behave
+           like a lit surface. */
+        wakeMaterials.push({ mat: vinyl.material as THREE.Material, base: 0.82 });
       }
 
       /* THE EXIT SIGN. Tiny, and it is most of why the room reads as a real
-         building rather than as a set. */
+         building rather than as a set.
+
+         DELIBERATELY NOT registered for the wake. An emergency exit sign is on a
+         separate circuit and is lit when everything else is off — that is the
+         entire point of one — so it is the single light burning in the dark room
+         before she scrolls, and it is the detail that makes the wake read as "the
+         house lights coming up" rather than as a fade-in. */
       if (EXIT_SIGN) {
         const exit = makeTextPlane('EXIT', {
           width: 0.62,
@@ -1666,6 +2109,7 @@ export default function StudioRoom({ memories, lines }: Props) {
           fog: true,
         }),
       );
+      wakeMaterials.push({ mat: pendantGlowMat, base: PENDANT_GLOW_OPACITY });
       const pendantCount = Math.max(1, Math.round(ROOM_LEN / PENDANT_SPACING));
       for (let i = 0; i < pendantCount; i += 1) {
         const z = ROOM_MID_Z + ROOM_LEN / 2 - (i + 0.5) * PENDANT_SPACING;
@@ -1708,6 +2152,7 @@ export default function StudioRoom({ memories, lines }: Props) {
         depthWrite: false,
       }),
     );
+    wakeMaterials.push({ mat: lineMat, base: 0.34 });
 
     /* =====================================================================
        LIGHTS
@@ -1722,6 +2167,8 @@ export default function StudioRoom({ memories, lines }: Props) {
        ===================================================================== */
     const ambient = new THREE.AmbientLight(0x0c0f16, imageBackdrop ? 2.1 : 1.35);
     scene.add(ambient);
+    /** Full-brightness value, for the wake ramp. Read back rather than restated. */
+    const ambientBase = ambient.intensity;
 
     /* Intensity and placement are ARITHMETIC, not taste.
        three r155+ uses physically-correct falloff, so a PointLight's irradiance is
@@ -1739,6 +2186,8 @@ export default function StudioRoom({ memories, lines }: Props) {
        floor (y 1.9, not 1.1). */
     const wash: THREE.PointLight[] = [];
     const washCount = coarse ? LED_WASH_COUNT_COARSE : LED_WASH_COUNT;
+    /** Full-brightness intensity, for the wake ramp. */
+    const washBase = imageBackdrop ? LED_WASH_INTENSITY * 0.55 : LED_WASH_INTENSITY;
     for (let i = 0; i < washCount; i += 1) {
       // `distance` bounds the light's influence so fragments outside it skip the
       // term entirely; decay 2 is the physically-correct default.
@@ -1774,6 +2223,25 @@ export default function StudioRoom({ memories, lines }: Props) {
     const carriage = new THREE.Group();
     scene.add(carriage);
 
+    /* ---------------------------------------------------------------------
+       THE CHASSIS — a sub-group, and the reason for it is a bug I would
+       otherwise have shipped.
+
+       CARRIAGE_PITCH tilts the machine about its origin, which sits at the
+       camera. Everything rigid on the machine should tilt with it: the plate, its
+       lit front edge, the numbered marks. But the UNDERGLOW is a floor quad,
+       lying flat at y = 0.02 and extending to z = -7.3 — and rotating that by
+       1.1 degrees about an origin seven units away lifts its far edge 0.14 world
+       units off the concrete. A pool of light that detaches from the floor and
+       hovers is unmistakably wrong, in exactly the way a subtle tilt is
+       unmistakably right.
+
+       So the tilt is applied to this sub-group and the underglow is parented to
+       `carriage` directly. Light stays on the floor; the machine moves.
+       --------------------------------------------------------------------- */
+    const chassis = new THREE.Group();
+    carriage.add(chassis);
+
     /* Darker than --machine (#15161a) on purpose. The nearest wash light sits
        about 3 units from the front of the plate, so at Lambert's inverse-square
        falloff the plate is the brightest lit surface in frame and #15161a read as
@@ -1793,7 +2261,7 @@ export default function StudioRoom({ memories, lines }: Props) {
     // you can see the rail through is a floating slab.
     plate.position.set(0, 0.105, -CARRIAGE_LENGTH / 2 - 0.1);
     plate.renderOrder = 2;
-    carriage.add(plate);
+    chassis.add(plate);
 
     /* The carriage's lit front edge. Additive, so it reads as an LED strip
        rather than as paint, and it is the thing that actually makes the motion
@@ -1811,7 +2279,7 @@ export default function StudioRoom({ memories, lines }: Props) {
     frontEdge.scale.set(CARRIAGE_WIDTH + 0.06, 0.03, 0.06);
     frontEdge.position.set(0, 0.16, -CARRIAGE_LENGTH - 0.1);
     frontEdge.renderOrder = 3;
-    carriage.add(frontEdge);
+    chassis.add(frontEdge);
 
     const underglowMat = ownMaterial(
       new THREE.MeshBasicMaterial({
@@ -1827,6 +2295,16 @@ export default function StudioRoom({ memories, lines }: Props) {
         fog: false,
       }),
     );
+    /* The carriage's own two lights wake with the room — the machine is not lit
+       before the studio is — but they are DELIBERATELY NOT in wakeMaterials.
+       Both are also driven per frame by something else (the front edge brightens
+       under load, the underglow brightens at max tension), and two writers on one
+       opacity is a fight where the last one to run wins and the other looks
+       broken. So the frame loop owns both, and folds the wake in itself. These
+       bases are captured here only because they are mode-dependent and computing
+       the same conditional twice is how the two copies drift. */
+    const underglowBase = imageBackdrop ? 0.3 : 0.55;
+
     const underglow = new THREE.Mesh(quad, underglowMat);
     underglow.rotation.x = -Math.PI / 2;
     underglow.scale.set(4.2, 5.4, 1);
@@ -1880,7 +2358,7 @@ export default function StudioRoom({ memories, lines }: Props) {
             -3.5 - (i / Math.max(1, n - 1)) * (CARRIAGE_LENGTH - 3.7),
           );
           mark.renderOrder = 4;
-          carriage.add(mark);
+          chassis.add(mark);
           carriageMarks.push({ line: i + 1, mesh: mark });
         }
       }
@@ -1910,7 +2388,11 @@ export default function StudioRoom({ memories, lines }: Props) {
         quad,
         ownMaterial(
           new THREE.MeshBasicMaterial({
-            color: LED_COLOR,
+            // PANEL_RIM_COLOR, not LED_COLOR: the room's strips are now a
+            // near-pure electric royal, and that saturation immediately around a
+            // warm photograph reads as a clash instead of as light. See the note
+            // on that constant.
+            color: PANEL_RIM_COLOR,
             transparent: true,
             opacity: 0,
             blending: THREE.AdditiveBlending,
@@ -1976,7 +2458,70 @@ export default function StudioRoom({ memories, lines }: Props) {
       );
       photo.renderOrder = 5;
 
+      /* THE LIT LIP under the bottom edge — a gallery lightbox's underlighting.
+         Additive, and positioned in sizeRig() strictly BELOW the photograph's
+         bottom edge, so it is light spilling out from behind the frame and never a
+         highlight laid across the image. Render order 5, the same as the photo:
+         it does not overlap it, so the ordering between them is moot, and matching
+         keeps it composited after the backing. */
+      const lip =
+        PANEL_LIP_HEIGHT > 0
+          ? new THREE.Mesh(
+              quad,
+              ownMaterial(
+                new THREE.MeshBasicMaterial({
+                  color: PANEL_LIP_COLOR,
+                  transparent: true,
+                  opacity: 0,
+                  blending: THREE.AdditiveBlending,
+                  depthWrite: false,
+                }),
+              ),
+            )
+          : null;
+      if (lip) {
+        lip.position.z = 0.004;
+        lip.renderOrder = 5;
+      }
+
+      /* THE POOL this photograph throws on the floor.
+         A child of the panel's group, so it inherits the panel's x/z and its
+         slight turn toward the rail for free; sizeRig() puts it at the floor by
+         cancelling PANEL_Y in local space. It is the one place in the room where a
+         MEMORY is treated as a light source, which it is — it is the only warm
+         thing in here.
+
+         Warm-tinted rather than blue, on purpose. This is not a tint OF the
+         photograph (THE ONE RULE) — it is a separate quad, several units away from
+         it, standing in for the light coming off it. A blue pool under a warm
+         photograph would say the opposite of what the whole room is arguing. */
+      const pool =
+        PANEL_POOL > 0
+          ? new THREE.Mesh(
+              quad,
+              ownMaterial(
+                new THREE.MeshBasicMaterial({
+                  map: glowTex,
+                  color: PANEL_POOL_COLOR,
+                  transparent: true,
+                  opacity: 0,
+                  blending: THREE.AdditiveBlending,
+                  depthWrite: false,
+                  // A light is never fogged toward black: that is the one place
+                  // the black-fog trick reads as a bug rather than as distance.
+                  fog: false,
+                }),
+              ),
+            )
+          : null;
+      if (pool) {
+        pool.rotation.x = -Math.PI / 2;
+        pool.renderOrder = 3;
+      }
+
       group.add(halo, rim, backing, photo);
+      if (lip) group.add(lip);
+      if (pool) group.add(pool);
       panelGroup.add(group);
       pickable.push(photo);
 
@@ -2004,6 +2549,11 @@ export default function StudioRoom({ memories, lines }: Props) {
       mirrorMeshGroup.add(mirror);
       mirrorsRoot.add(mirrorMeshGroup);
 
+      /* Her mark, straight off the server-rendered prop. Seeded here rather than
+         fetched, so the keeps and her notes are correct in the FIRST frame — a
+         room that pops a keep-badge in a second later reads as a bug. */
+      const mark = marks[memory.id];
+
       rigs.push({
         memory,
         group,
@@ -2011,6 +2561,8 @@ export default function StudioRoom({ memories, lines }: Props) {
         backing,
         rim,
         halo,
+        lip,
+        pool,
         mirror,
         mirrorGroup: mirrorMeshGroup,
         aspect: memory.aspect > 0 ? memory.aspect : 1,
@@ -2021,6 +2573,11 @@ export default function StudioRoom({ memories, lines }: Props) {
         usedFallback: false,
         tension: 0,
         revealed: false,
+        overhold: 0,
+        kept: Boolean(mark?.kept),
+        herNote: typeof mark?.note === 'string' ? mark.note : '',
+        draftNote: '',
+        seenSent: false,
         fade: 1,
       });
     }
@@ -2139,10 +2696,34 @@ export default function StudioRoom({ memories, lines }: Props) {
         : panelH;
       const w = h * rig.aspect;
       rig.photo.scale.set(w, h, 1);
-      rig.backing.scale.set(w + 0.07, h + 0.07, 1);
+      // PANEL_BEZEL is the width PER SIDE, hence the doubling. It was a bare 0.07
+      // on both axes here, which made the bezel a magic number in a file whose
+      // whole premise is that every art-direction value is named at the top.
+      rig.backing.scale.set(w + PANEL_BEZEL * 2, h + PANEL_BEZEL * 2, 1);
       rig.rim.scale.set(w + 0.34, h + 0.34, 1);
       rig.halo.scale.set(w * 2.1 + 1.4, h * 2.1 + 1.4, 1);
       rig.mirror.scale.set(w, -h, 1);
+
+      /* THE LIP, sized and placed here rather than at construction, because both
+         depend on the panel's live height — which changes on resize and again when
+         the decoded photograph turns out to be a different shape than the manifest
+         hinted. It sits just OUTSIDE the bezel's bottom edge, so it can never land
+         on the photograph however the panel is re-sized. */
+      if (rig.lip) {
+        rig.lip.scale.set(w + PANEL_BEZEL * 2, PANEL_LIP_HEIGHT, 1);
+        rig.lip.position.y = -(h / 2 + PANEL_BEZEL + PANEL_LIP_HEIGHT / 2);
+      }
+
+      /* THE POOL, on the floor. The group sits at PANEL_Y, so cancelling it in
+         local space is what puts this at world y ~= 0.03 — just above the floor
+         plane, which is at 0 with depthWrite off, so there is nothing to z-fight
+         with. Scaled off the panel's WIDTH on both axes so the pool stays round-ish
+         rather than becoming a tall ellipse behind a portrait panel. */
+      if (rig.pool) {
+        const spread = w * PANEL_POOL_SPREAD;
+        rig.pool.scale.set(spread, spread, 1);
+        rig.pool.position.y = -PANEL_Y + 0.03;
+      }
     }
 
     function layout(): void {
@@ -2649,10 +3230,20 @@ export default function StudioRoom({ memories, lines }: Props) {
     let hudMonth = '';
     let hudCaption = '';
     let hudMeter = -1;
+    /** Rounded FULL RANGE OF MOTION percentage, tracked like hudMeter. */
+    let hudOver = -1;
     let hudStateText = '';
     let hintHidden = false;
     /** Last written backdrop zoom, so the layer is not dirtied for nothing. */
     let backdropZoom = 1;
+    /** Last written wake level. Same reason: a CSS write per frame dirties style. */
+    let lastWake = -1;
+    /* Carriage velocity, for the machine's compliance. `lastCamZ` seeded to NaN so
+       the FIRST frame produces no velocity at all — seeding it to 0 would compute a
+       jump of the entire rail length on the one frame where dt is smallest, and the
+       plate would visibly snap. */
+    let lastCamZ = Number.NaN;
+    let carriageVel = 0;
 
     function viewZ(camZ: number): number {
       return camZ - VIEW_AHEAD;
@@ -2689,21 +3280,46 @@ export default function StudioRoom({ memories, lines }: Props) {
       if (selectedIndex === i) return;
       // Leaving a panel drops its tension; nothing carries between memories.
       if (!rigs[selectedIndex].revealed) rigs[selectedIndex].tension = 0;
+      /* And drops the overhold unconditionally, revealed or not. FULL RANGE OF
+         MOTION is one continuous hold on ONE memory — letting it accumulate across
+         panels would mean being carried past three of them while holding could
+         keep a memory she never looked at. */
+      rigs[selectedIndex].overhold = 0;
+      /* Close a reply that is open on the memory we are LEAVING. Leaving it open
+         would silently retarget her half-typed note at a different photograph,
+         which is the worst possible outcome for the one control that holds words
+         she wrote.
+
+         BEFORE `selectedIndex = i`, and that order is load-bearing: closeReply()
+         stashes the box's contents as a draft on `rigs[selectedIndex]`, so running
+         it after the move would file her words under the wrong memory. The frame
+         loop additionally refuses to call setSelected at all while the form is open
+         (see pickFocus's caller), so in practice this fires for a deliberate jump
+         from the index — but the ordering has to be right either way. */
+      if (!elReplyForm!.hidden) closeReply();
       selectedIndex = i;
       for (let n = 0; n < indexButtons.length; n += 1) {
         indexButtons[n].setAttribute('aria-current', n === i ? 'true' : 'false');
       }
       syncPlate();
-      if (announceIt) announce(`${rigs[i].memory.month}. ${rigs[i].memory.caption}`);
+      // The caption alone, because `when` is optional now. Prefixing an empty
+      // string would have announced ". us, at the beginning" with a stray stop.
+      if (announceIt) {
+        const w = rigs[i].memory.when;
+        announce(w ? `${w}. ${rigs[i].memory.caption}` : rigs[i].memory.caption);
+      }
       invalidate();
     }
 
     /** Writes the caption block for whatever is selected. */
     function syncPlate(): void {
       const rig = rigs[selectedIndex];
-      if (hudMonth !== rig.memory.month) {
-        hudMonth = rig.memory.month;
-        elMonth!.textContent = rig.memory.month;
+      /* `when` is free text and may be absent, so the strip is EMPTIED rather
+         than left showing the previous panel's line — the bug you get from
+         only writing on change. */
+      if (hudMonth !== rig.memory.when) {
+        hudMonth = rig.memory.when;
+        elMonth!.textContent = rig.memory.when || '';
       }
       if (hudCaption !== rig.memory.caption) {
         hudCaption = rig.memory.caption;
@@ -2712,12 +3328,17 @@ export default function StudioRoom({ memories, lines }: Props) {
       if (rig.revealed) {
         elNoteText!.textContent = rig.memory.note;
         elNote!.hidden = false;
-        elReveal!.hidden = true;
+        // The WRAPPER, so the "modification" label goes with its button. Hiding
+        // only the button would leave its caption behind, describing nothing.
+        elMod!.hidden = true;
       } else {
         elNote!.hidden = true;
         elNoteText!.textContent = '';
-        elReveal!.hidden = false;
+        elMod!.hidden = false;
       }
+      // Her marks are part of the plate, so they are written by the same function
+      // rather than by a second one that a future caller could forget.
+      syncMarkUi();
     }
 
     function reveal(i: number): void {
@@ -2727,7 +3348,481 @@ export default function StudioRoom({ memories, lines }: Props) {
       rig.tension = 1;
       if (selectedIndex === i) syncPlate();
       announce(`max tension. ${rig.memory.note}`);
+      /* Report that she actually READ it, not merely that she opened the room.
+         Fired here rather than on selection on purpose: the difference between
+         "she scrolled past" and "she reached the note" is the only interesting
+         thing the counter can tell me. */
+      reportSeen(i);
       invalidate();
+    }
+
+    /* =====================================================================
+       THE MARKS SHE LEAVES
+
+       Three of them, three weights: KEEP is one tap, NOTE is her words back,
+       SEEN is incidental. All three go to /api/us/mark, which is session-only —
+       it refuses my own admin token, because a keep I could have written is not
+       a keep. See src/lib/us/marks.ts for why any of this exists.
+
+       OPTIMISTIC, WITH A REAL ROLLBACK. The mark flips in the UI immediately and
+       is reconciled against the store's answer, and if the write failed it flips
+       BACK and says so. The alternative — waiting on the network before the
+       button moves — makes a keep feel like a form submission, and the whole
+       point of a keep is that it costs nothing.
+       ===================================================================== */
+
+    /**
+     * Hard deadline on one mark write.
+     *
+     * Longer than the store's own 2.5s because that is the SERVER's budget and
+     * this is the client's: she is standing in the room watching a button, and
+     * giving up before the server has finished would report "not saved" for a
+     * write that landed. Two and a half seconds of store plus its overhead fits
+     * comfortably inside six.
+     */
+    const MARK_TIMEOUT_MS = 6000;
+
+    /**
+     * Per-rig request token.
+     *
+     * She can tap keep three times in a second, and fetch does not guarantee
+     * response order — so without this the FIRST response to arrive could be an
+     * older one and would silently undo the newest tap. Only the response whose
+     * token still matches is allowed to touch state.
+     */
+    const markSeq = rigs.map(() => 0);
+
+    /**
+     * SERIALISED. Every mark write queues behind the previous one.
+     *
+     * This is not throughput management, it is correctness, and an adversarial
+     * review found the sequence: on the R2 tier a write is a read-modify-write of
+     * ONE JSON document, and this room fires TWO writes from a single gesture —
+     * `seen` the instant a note is revealed, then `keep` OVERHOLD_SEC later on the
+     * same continuous hold. Overlapping, the second one's PUT is built from a
+     * snapshot taken before the first one's landed, so one of the two silently
+     * loses. Swap `keep` for `note` (she reads the note, then writes back — the
+     * designed flow) and the thing that disappears is her words, while the room
+     * says "saved."
+     *
+     * marks.ts now also guards this server-side with a conditional If-Match PUT, so
+     * a lost race is a 412 rather than data loss. Both halves are worth having: the
+     * chain means the room never GENERATES the conflict, and If-Match means a
+     * conflict from somewhere else (a second device, the no-JS form path) still
+     * cannot destroy anything.
+     *
+     * A tail-chained promise rather than a queue object, because there is nothing to
+     * manage: `.then` on the previous tail IS the queue. The catch keeps a rejection
+     * from poisoning the chain — postMark never rejects anyway, but a chain that can
+     * be permanently broken by one throw is not worth the four characters saved.
+     */
+    let markChain: Promise<unknown> = Promise.resolve();
+    function queueMark(body: Record<string, unknown>): Promise<ClientMark | null> {
+      const next = markChain.then(() => postMark(body), () => postMark(body));
+      markChain = next.catch(() => undefined);
+      return next;
+    }
+
+    /** Post one mark. Resolves to the store's resulting mark, or null on any failure. */
+    async function postMark(body: Record<string, unknown>): Promise<ClientMark | null> {
+      const ctrl = new AbortController();
+      const timer = window.setTimeout(() => ctrl.abort(), MARK_TIMEOUT_MS);
+      try {
+        const res = await fetch('/api/us/mark', {
+          method: 'POST',
+          // JSON in, JSON out. The endpoint switches on this header: a form
+          // content-type would get a 303 redirect instead, which is the no-JS
+          // path and would navigate the room away from under her.
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+          // Explicit, not implied. The session cookie is the entire authorisation
+          // and `same-origin` is only the DEFAULT — stating it means a future
+          // change of that default cannot quietly 401 every mark.
+          credentials: 'same-origin',
+          signal: ctrl.signal,
+        });
+        if (!res.ok) return null;
+        const data = (await res.json()) as { ok?: boolean; mark?: ClientMark };
+        if (!data?.ok || !data.mark) return null;
+        return data.mark;
+      } catch {
+        // A timeout, an offline phone and a 500 are all one thing to the caller:
+        // the mark did not land, so roll back and say so.
+        return null;
+      } finally {
+        window.clearTimeout(timer);
+      }
+    }
+
+    /** Auto-clearing status line under the plate. */
+    let markStateTimer = 0;
+    function setMarkState(text: string, isError = false): void {
+      window.clearTimeout(markStateTimer);
+      elMarkState!.textContent = text;
+      elMarkState!.setAttribute('data-error', isError ? 'true' : 'false');
+      // An ERROR stays up: it is the only thing telling her to try again. A
+      // success clears itself, because a permanent "saved." is just noise.
+      if (text && !isError) {
+        markStateTimer = window.setTimeout(() => {
+          elMarkState!.textContent = '';
+        }, 2600);
+      }
+    }
+
+    /**
+     * Reflect a keep onto its index marker.
+     *
+     * The colour change is NOT the only signal — the accessible name gains the
+     * word "kept" as well. A round marker that is merely a different blue is
+     * invisible to a screen reader and to anyone who cannot tell those two blues
+     * apart, and this is a state she chose, so it has to be reported.
+     */
+    function applyKeptToIndex(i: number): void {
+      const btn = indexButtons[i];
+      if (!btn) return;
+      const rig = rigs[i];
+      btn.setAttribute('data-kept', rig.kept ? 'true' : 'false');
+      const base = rig.memory.hidden ? 'one more' : `${i + 1}. ${rig.memory.caption}`;
+      btn.setAttribute('aria-label', rig.kept ? `${base}, kept` : base);
+    }
+
+    /** Write the selected memory's mark state into the plate. */
+    function syncMarkUi(): void {
+      const rig = rigs[selectedIndex];
+      elKeep!.setAttribute('aria-pressed', rig.kept ? 'true' : 'false');
+      // The LABEL changes too, not just aria-pressed. A toggle whose text never
+      // changes forces a screen-reader user to hunt for the state separately, and
+      // sighted users read the word before they read the colour.
+      elKeep!.textContent = rig.kept ? 'kept' : 'keep this';
+      if (rig.herNote) {
+        elHersText!.textContent = rig.herNote;
+        elHers!.hidden = false;
+        elReplyOpen!.textContent = 'edit your note';
+      } else {
+        elHersText!.textContent = '';
+        elHers!.hidden = true;
+        elReplyOpen!.textContent = 'leave a note back';
+      }
+      // The form's own id field, so the no-JS submit path targets the right memory.
+      const idField = elReplyForm!.querySelector<HTMLInputElement>('input[name="id"]');
+      if (idField) idField.value = rig.memory.id;
+    }
+
+    /**
+     * Close the reply form, keeping whatever she had typed.
+     *
+     * TWO things this has to get right, and neither is obvious:
+     *
+     * THE DRAFT. Every caller of this can be closing a box with words in it — the
+     * cancel button, a successful save, and setSelected(), which fires from the
+     * FRAME LOOP whenever the carriage settles onto a different panel. That last
+     * one can happen while she is typing (GSAP's `scrub: 1` means the carriage is
+     * still arriving for a second after her thumb stops), so discarding the box's
+     * contents here is a real path to losing something she wrote. It is stashed on
+     * the rig it belongs to instead, and openReply() hands it back.
+     *
+     * THE FOCUS. This hides the element that may currently HAVE focus — the save
+     * or cancel button — and focus on a `hidden` element is focus nowhere: the
+     * next Tab restarts from the top of the document. So if focus was inside the
+     * form it is moved deliberately to the disclosure button that replaces it,
+     * which is the nearest thing to "where she was". Only when it WAS inside,
+     * because stealing focus from somewhere else entirely would be worse than the
+     * problem being fixed.
+     */
+    function closeReply(): void {
+      const wasOpen = !elReplyForm!.hidden;
+      if (wasOpen) {
+        /* rigs[selectedIndex] is still the memory the form belonged to: setSelected
+           calls this BEFORE it moves selectedIndex, precisely so this line works. */
+        const rig = rigs[selectedIndex];
+        const typed = elReplyText!.value;
+        // Only a DIFFERENCE is a draft. Storing an unedited copy of her saved note
+        // would make openReply() prefer a stale duplicate of it forever.
+        rig.draftNote = typed === rig.herNote ? '' : typed;
+      }
+      const hadFocus = wasOpen && elReplyForm!.contains(document.activeElement);
+      elReplyForm!.hidden = true;
+      elReplyOpen!.hidden = false;
+      elReplyOpen!.setAttribute('aria-expanded', 'false');
+      if (hadFocus) elReplyOpen!.focus();
+    }
+
+    function openReply(): void {
+      const rig = rigs[selectedIndex];
+      /* A note that failed to save wins over the stored one. This is what makes
+         "not saved. your words are still here." true even after she has walked down
+         the rail and come back — otherwise that message is a lie the moment the
+         selection changes. */
+      elReplyText!.value = rig.draftNote || rig.herNote;
+      elReplyForm!.hidden = false;
+      elReplyOpen!.hidden = true;
+      elReplyOpen!.setAttribute('aria-expanded', 'true');
+      // Focus MOVES to the textarea, because the button she just pressed is now
+      // hidden — leaving focus on a display:none element drops a keyboard user
+      // back at the top of the document.
+      elReplyText!.focus();
+    }
+
+    /**
+     * Toggle a keep.
+     *
+     * `via` only affects what is announced: reaching this through FULL RANGE OF
+     * MOTION is a different event from pressing a button, and a screen-reader user
+     * who just held past max tension should be told what that did.
+     */
+    function requestKeep(i: number, on: boolean, via: 'button' | 'range'): void {
+      const rig = rigs[i];
+      if (rig.kept === on) return;
+      const previous = rig.kept;
+      rig.kept = on;
+      applyKeptToIndex(i);
+      if (i === selectedIndex) syncMarkUi();
+      if (via === 'range') announce('full range of motion. kept.');
+      invalidate();
+
+      const seq = (markSeq[i] += 1);
+      void queueMark({ action: 'keep', id: rig.memory.id, on }).then((mark) => {
+        if (seq !== markSeq[i]) return; // a newer tap already owns this rig
+        if (!mark) {
+          rig.kept = previous;
+          applyKeptToIndex(i);
+          if (i === selectedIndex) syncMarkUi();
+          setMarkState('not saved. try again.', true);
+          invalidate();
+          return;
+        }
+        // Reconcile against what the store actually holds rather than trusting the
+        // optimistic guess: on the R2 tier the write was a read-modify-write that
+        // could in principle have raced.
+        rig.kept = mark.kept;
+        rig.herNote = mark.note;
+        applyKeptToIndex(i);
+        if (i === selectedIndex) syncMarkUi();
+        setMarkState(mark.kept ? 'kept.' : '');
+        invalidate();
+      });
+    }
+
+    function requestNote(i: number, text: string): void {
+      const rig = rigs[i];
+      const previous = rig.herNote;
+      rig.herNote = text;
+      if (i === selectedIndex) syncMarkUi();
+      closeReply();
+      setMarkState('saving...');
+      invalidate();
+
+      const seq = (markSeq[i] += 1);
+      void queueMark({ action: 'note', id: rig.memory.id, note: text }).then((mark) => {
+        if (seq !== markSeq[i]) return;
+        if (!mark) {
+          rig.herNote = previous;
+          /* This is the one rollback that matters: she typed something, and losing
+             it because a bucket blinked would be unforgivable. So the text is parked
+             ON THE RIG first — which is what makes it survive her walking away —
+             and only put back into the live textarea if she is still standing here.
+             Restoring it into a form that now belongs to a different photograph
+             would be worse than losing it, because she could save it onto the wrong
+             memory without noticing. */
+          rig.draftNote = text;
+          if (i === selectedIndex) {
+            syncMarkUi();
+            openReply();
+          }
+          setMarkState('not saved. your words are still here.', true);
+          invalidate();
+          return;
+        }
+        rig.kept = mark.kept;
+        rig.herNote = mark.note;
+        // The store has it now, so the held copy has done its job and must go —
+        // otherwise reopening the memory would show a stale draft over her saved
+        // note forever.
+        rig.draftNote = '';
+        applyKeptToIndex(i);
+        if (i === selectedIndex) syncMarkUi();
+        setMarkState(mark.note ? 'saved.' : 'cleared.');
+        announce(mark.note ? 'your note saved.' : 'your note cleared.');
+        invalidate();
+      });
+    }
+
+    /** Fire-and-forget. At most once per memory per page load. */
+    function reportSeen(i: number): void {
+      const rig = rigs[i];
+      if (rig.seenSent) return;
+      rig.seenSent = true;
+      // Deliberately unawaited and deliberately unreported: nothing in the room's
+      // behaviour depends on it, and a failed `seen` must never produce an error
+      // message about a thing she did not ask for.
+      void queueMark({ action: 'seen', id: rig.memory.id });
+    }
+
+    const onKeepClick = () => requestKeep(selectedIndex, !rigs[selectedIndex].kept, 'button');
+    const onReplyOpenClick = () => openReply();
+    // closeReply() already returns focus to the disclosure button when focus was
+    // inside the form, which it always is on a cancel click.
+    const onReplyCancelClick = () => closeReply();
+    const onReplySubmit = (e: Event) => {
+      /* preventDefault, because this IS a real <form> with a real action. It has
+         one so that a room whose JavaScript broke after hydration still saves a
+         note through a plain POST and a 303 — but while the island is alive, a
+         navigation would tear the whole room down to store 40 characters. */
+      e.preventDefault();
+      requestNote(selectedIndex, elReplyText!.value);
+    };
+
+    elKeep.addEventListener('click', onKeepClick);
+    elReplyOpen.addEventListener('click', onReplyOpenClick);
+    elReplyCancel.addEventListener('click', onReplyCancelClick);
+    elReplyForm.addEventListener('submit', onReplySubmit);
+
+    /* =====================================================================
+       ROOM TONE — opt-in, off by default, NEVER autoplayed.
+
+       PLAN.md section 2: "No autoplay audio. Ever. Opt-in toggle only." The
+       AudioContext is therefore not merely created-and-suspended, it DOES NOT
+       EXIST until she presses the button. That is stronger than the browser would
+       require and it is the point: there is no code path in this file that can
+       start audio without a click, so the guarantee is structural rather than
+       procedural.
+
+       It is also never persisted. Remembering "tone was on" and restoring it next
+       visit is autoplay with extra steps, whatever the setting is called.
+
+       Synthesised rather than a file: filtered noise plus two low oscillators is a
+       few lines and zero bytes over the wire, where a room-tone loop is a couple
+       of hundred kilobytes shipped to a phone for something most visits will never
+       turn on. It also loops perfectly, because there is no loop point.
+       ===================================================================== */
+
+    interface ToneRig {
+      ctx: AudioContext;
+      master: GainNode;
+      sources: AudioScheduledSourceNode[];
+    }
+    let tone: ToneRig | null = null;
+    let toneOn = false;
+
+    /** Is there an AudioContext at all? If not, the button is a lie and is removed. */
+    const AudioCtor: typeof AudioContext | undefined =
+      window.AudioContext ??
+      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+
+    function buildTone(): ToneRig | null {
+      if (!AudioCtor) return null;
+      try {
+        const ctx = new AudioCtor();
+        const master = ctx.createGain();
+        // Starts at silence, always. Every path into audible ramps up from here.
+        master.gain.value = 0;
+        master.connect(ctx.destination);
+
+        /* THE AIR. Two seconds of one-pole-lowpassed white noise, looped. The
+           filter in the loop is what makes it pink-ish rather than hissy; a raw
+           white buffer sounds like a broken speaker, not like a room. */
+        const seconds = 2;
+        const buffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * seconds), ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        let running = 0;
+        for (let i = 0; i < data.length; i += 1) {
+          running = running * 0.94 + (Math.random() * 2 - 1) * 0.06;
+          data[i] = running * 3.2;
+        }
+        const air = ctx.createBufferSource();
+        air.buffer = buffer;
+        air.loop = true;
+        const airFilter = ctx.createBiquadFilter();
+        airFilter.type = 'lowpass';
+        airFilter.frequency.value = ROOM_TONE_CUTOFF;
+        airFilter.Q.value = 0.4;
+        const airGain = ctx.createGain();
+        airGain.gain.value = 0.7;
+        air.connect(airFilter).connect(airGain).connect(master);
+
+        /* THE HUM. Two oscillators a hair apart, so they beat slowly against each
+           other. One alone is a test tone; two is a building. */
+        const sources: AudioScheduledSourceNode[] = [air];
+        for (const [hz, level] of [
+          [ROOM_TONE_HZ, 0.5],
+          [ROOM_TONE_HZ * 2.011, 0.22],
+        ] as const) {
+          const osc = ctx.createOscillator();
+          osc.type = 'sine';
+          osc.frequency.value = hz;
+          const g = ctx.createGain();
+          g.gain.value = level;
+          osc.connect(g).connect(master);
+          sources.push(osc);
+        }
+
+        for (const s of sources) s.start();
+        return { ctx, master, sources };
+      } catch (err) {
+        // An AudioContext can be refused outright (an autoplay policy that has
+        // decided this gesture does not count, an exhausted audio device). The
+        // room does not need sound, so this is a warning and not a failure.
+        console.warn('[us] the room tone could not start; leaving it off.', err);
+        return null;
+      }
+    }
+
+    /** Ramp, never jump. A gain step from 0 to audible is an audible click. */
+    function rampTone(rig: ToneRig, to: number): void {
+      const now = rig.ctx.currentTime;
+      rig.master.gain.cancelScheduledValues(now);
+      rig.master.gain.setValueAtTime(rig.master.gain.value, now);
+      rig.master.gain.linearRampToValueAtTime(to, now + ROOM_TONE_FADE_SEC);
+    }
+
+    let toneSuspendTimer = 0;
+
+    function setTone(on: boolean): void {
+      toneOn = on;
+      elTone!.setAttribute('aria-pressed', on ? 'true' : 'false');
+      elTone!.textContent = on ? 'room tone on' : 'room tone';
+
+      if (on) {
+        // CREATED HERE, inside the click handler's call stack. See the header.
+        tone ??= buildTone();
+        if (!tone) {
+          // It refused. Say so once and take the control away rather than leaving
+          // a button that does nothing.
+          toneOn = false;
+          elTone!.hidden = true;
+          return;
+        }
+        window.clearTimeout(toneSuspendTimer);
+        void tone.ctx.resume();
+        rampTone(tone, ROOM_TONE_LEVEL);
+        announce('room tone on.');
+        return;
+      }
+
+      if (!tone) return;
+      rampTone(tone, 0);
+      announce('room tone off.');
+      /* Suspended AFTER the fade rather than instead of it. Suspending immediately
+         freezes the graph mid-ramp, so the tone stops at whatever level it had
+         reached — an audible cut, which is the exact thing the ramp exists to
+         avoid. The context is kept (not closed) so turning it back on is instant
+         and needs no second gesture. */
+      window.clearTimeout(toneSuspendTimer);
+      toneSuspendTimer = window.setTimeout(
+        () => {
+          if (!toneOn && tone) void tone.ctx.suspend();
+        },
+        Math.ceil(ROOM_TONE_FADE_SEC * 1000) + 120,
+      );
+    }
+
+    const onToneClick = () => setTone(!toneOn);
+    if (!AudioCtor) {
+      // No Web Audio at all. Remove the control rather than shipping a button
+      // whose only behaviour is to disappear when pressed.
+      elTone.hidden = true;
+    } else {
+      elTone.addEventListener('click', onToneClick);
     }
 
     /* =====================================================================
@@ -3013,7 +4108,7 @@ export default function StudioRoom({ memories, lines }: Props) {
          a screenshot even when the scroll has stopped. */
       const breath = reduced
         ? 0
-        : Math.sin(clock * 1.05) * 0.055 * (0.3 + 0.7 * progress);
+        : Math.sin(clock * BREATH_HZ * Math.PI * 2) * BREATH_AMP * (0.3 + 0.7 * progress);
       const camZ = -travel * RAIL_LEN + breath;
 
       camera.position.set(0, CAM_Y + breath * 0.12, camZ);
@@ -3025,7 +4120,45 @@ export default function StudioRoom({ memories, lines }: Props) {
       // whole thing behind the near plane.
       carriage.position.z = camZ;
 
+      /* ---- the machine's compliance ----
+         The camera is BOLTED to the carriage — she is sitting on it — so the plate
+         cannot lag behind the camera the way a real carriage lags a hand. What was
+         missing instead is compliance: the plate leans into travel, and its lit
+         front edge brightens while the springs are actually loaded.
+
+         Both read off a DAMPED velocity rather than an instantaneous one, and that
+         is the difference between a mechanism and a jitter: the raw frame-to-frame
+         delta of a scrubbed camera is noisy enough that the plate would shiver. */
+      const rawVel = dt > 0 && Number.isFinite(lastCamZ) ? (camZ - lastCamZ) / dt : 0;
+      lastCamZ = camZ;
+      carriageVel = damp(carriageVel, rawVel, CARRIAGE_VEL_TAU, dt);
+      /** 0..1, how hard the machine is currently being worked. */
+      const load = clamp01(Math.abs(carriageVel) / CARRIAGE_VEL_FULL);
+      /* Sign, not acceleration. Rotating about X by a positive angle RAISES the far
+         end of the plate (a point at local z = -L moves to y = L*sin(theta)), and
+         travelling down the rail is NEGATIVE z — so multiplying by the sign of the
+         velocity puts the nose down while she is moving forward and lifts it while
+         she is scrolling back. About 1.1 degrees at full speed: enough to read as a
+         machine taking load, not enough to notice as an animation. */
+      // On the CHASSIS, not on `carriage` — the underglow is parented one level up
+      // precisely so it stays flat on the floor. See the chassis comment.
+      chassis.rotation.x = Math.sign(carriageVel) * load * CARRIAGE_PITCH;
+
+      /* ---- THE LIGHTS COMING UP ----
+         One switch for the whole room: the ambient term, the wash point lights,
+         every material in the wake registry, the CSS haze and the photographic
+         backdrop. See WAKE_END_P for why the floors are not zero, and note that
+         nothing here can reach a photograph — panel materials are unlit
+         MeshBasicMaterial and the backdrop sits below the canvas. */
+      const wake = reduced ? 1 : smoothstep(0, WAKE_END_P, progress);
+      const litRoom = WAKE_FLOOR_LIGHT + (1 - WAKE_FLOOR_LIGHT) * wake;
+      ambient.intensity = ambientBase * litRoom;
+      for (const { mat, base } of wakeMaterials) {
+        (mat as THREE.Material & { opacity: number }).opacity = base * litRoom;
+      }
+
       for (let i = 0; i < wash.length; i += 1) {
+        wash[i].intensity = washBase * litRoom;
         /* All AHEAD of the carriage, alternating side and height.
            An earlier version spread them symmetrically around camZ, which put
            one light BEHIND the camera lighting a wall nobody can see — a full
@@ -3035,6 +4168,26 @@ export default function StudioRoom({ memories, lines }: Props) {
           i % 2 === 0 ? -2.4 : 2.4,
           i % 2 === 0 ? 1.9 : 4.0,
           camZ - 3.5 - i * 9,
+        );
+      }
+
+      /* The CSS half of the wake: the photographic backdrop and the blue haze.
+         Guarded, because writing the same custom property sixty times a second
+         still invalidates style on a layer that is otherwise composited-only — the
+         same reason the dolly below is guarded. The wake only moves during the
+         first WAKE_END_P of the scroll, so in the steady state this writes nothing
+         at all. */
+      if (Math.abs(wake - lastWake) > 0.004) {
+        lastWake = wake;
+        if (backdrop && imageBackdrop) {
+          backdrop.style.setProperty(
+            '--backdrop-lit',
+            (WAKE_FLOOR_ROOM + (1 - WAKE_FLOOR_ROOM) * wake).toFixed(3),
+          );
+        }
+        sticky.style.setProperty(
+          '--haze-lit',
+          (WAKE_FLOOR_HAZE + (1 - WAKE_FLOOR_HAZE) * wake).toFixed(3),
         );
       }
 
@@ -3071,11 +4224,20 @@ export default function StudioRoom({ memories, lines }: Props) {
       const nextFocus = pickFocus(camZ);
       if (nextFocus !== focusIndex) {
         focusIndex = nextFocus;
-        // Scrolling past a memory selects it, so the caption plate and the
-        // tension meter always describe what is in front of you. A hold that is
-        // in flight is left alone — being carried past a panel mid-rep should
-        // not silently retarget the meter.
-        if (!holding) setSelected(focusIndex, false);
+        /* Scrolling past a memory selects it, so the caption plate and the tension
+           meter always describe what is in front of you. TWO exceptions, and both
+           are about not moving something out from under her:
+
+           `holding` — being carried past a panel mid-rep must not silently retarget
+           the meter she is filling.
+
+           the reply form being OPEN — she is writing about a specific photograph,
+           and the selection is what decides which one the save lands on. GSAP's
+           `scrub: 1` means the carriage keeps arriving for about a second after her
+           thumb stops, so this is not hypothetical: without it, the first second of
+           typing could re-aim her note at the next memory down the rail. The plate
+           going briefly stale relative to the view is the correct trade. */
+        if (!holding && elReplyForm!.hidden) setSelected(focusIndex, false);
       }
 
       const line = rigs[focusIndex].memory.line;
@@ -3094,11 +4256,34 @@ export default function StudioRoom({ memories, lines }: Props) {
         }
       }
 
-      /* ---- time under tension ---- */
+      /* ---- time under tension, and then past it ---- */
       const sel = rigs[selectedIndex];
       if (!sel.revealed) {
         sel.tension = tensionStep(sel.tension, dt, holding, TENSION_FILL_SEC);
         if (sel.tension >= 1) reveal(selectedIndex);
+      } else {
+        /* FULL RANGE OF MOTION. Their cues are explicit that the rep is not over at
+           the top, and this is the one piece of their vocabulary that describes
+           doing MORE than the meter asked for. Keep holding past max tension and
+           the memory is KEPT — a real persisted mark, not a second secret, because
+           inventing more content about their relationship is exactly what this
+           room's placeholders exist to refuse.
+
+           Drains eccentrically, at the same ECCENTRIC_RATIO as the tension meter,
+           because it is the same hold: letting go does not dump it, it lowers with
+           control.
+
+           There is a plain-click route to the identical outcome (the keep button in
+           the plate), so this is never the only path to anything. Under reduced
+           motion startHold() reveals immediately and never sets `holding`, so this
+           branch simply never accumulates — which is right, because a 0.9-second
+           hold is motion. */
+        sel.overhold = clamp01(
+          holding
+            ? sel.overhold + dt / OVERHOLD_SEC
+            : sel.overhold - dt / (OVERHOLD_SEC * ECCENTRIC_RATIO),
+        );
+        if (sel.overhold >= 1 && !sel.kept) requestKeep(selectedIndex, true, 'range');
       }
 
       /* ---- panel light, and the pass/distance dissolve ---- */
@@ -3137,23 +4322,68 @@ export default function StudioRoom({ memories, lines }: Props) {
         const base = isFocus ? 0.2 : 0.06;
         rig.rim.material.opacity = (base + t * 0.72) * fade;
         rig.halo.material.opacity = ((isFocus ? 0.1 : 0) + t * 0.5) * fade;
-        rig.rim.material.color.setHex(t > 0.6 ? LED_CORE_COLOR : LED_COLOR);
+        rig.rim.material.color.setHex(t > 0.6 ? LED_CORE_COLOR : PANEL_RIM_COLOR);
+
+        /* THE LIT LIP. A fixture on the frame, so it comes up with the room's
+           lights like every other fixture, and it brightens with the meter. It is
+           positioned outside the bezel by sizeRig(), so no value it can take ever
+           lands on the photograph. */
+        if (rig.lip) {
+          rig.lip.material.opacity = PANEL_LIP_OPACITY * (0.55 + 0.45 * t) * fade * litRoom;
+        }
+
+        /* THE POOL ON THE FLOOR — the light this photograph throws.
+           Gated on the texture actually being resident: a warm pool under a grey
+           unloaded panel is a light with no source, which reads as a bug. It is NOT
+           scaled by litRoom, and that is the point of it — a photograph is not lit
+           BY this room, it is the only thing lighting it. */
+        if (rig.pool) {
+          const sourced = rig.state === 'ready' ? 1 : 0;
+          rig.pool.material.opacity = PANEL_POOL * (0.7 + 0.3 * t) * fade * sourced;
+        }
         // The photograph's COLOUR is never touched — only the light around it.
       }
 
+      /* The carriage's own two lights, owned HERE rather than by the wake registry
+         because each has a second input and two writers on one opacity is a fight.
+         The front edge brightens while the springs are loaded; the underglow
+         brightens at max tension, so the machine you are riding reports the rep. */
+      edgeMat.opacity = (CARRIAGE_EDGE_OPACITY + load * CARRIAGE_EDGE_LOAD) * litRoom;
+      underglowMat.opacity = underglowBase * (1 + sel.tension * 0.6) * litRoom;
+
       /* ---- HUD ---- */
       const shown = Math.round((sel.revealed ? 1 : sel.tension) * 100);
-      if (shown !== hudMeter) {
+      const over = sel.revealed ? Math.round(sel.overhold * 100) : 0;
+      if (shown !== hudMeter || over !== hudOver) {
         hudMeter = shown;
-        /* A UNITLESS 0..1 custom property, consumed by us-studio.css as
+        hudOver = over;
+        /* UNITLESS 0..1 custom properties, consumed by us-studio.css as
            `transform: scaleX(var(--fill))`. Writing `width: N%` instead would
            be a layout invalidation on every frame of the meter; a transform is
-           composited and costs nothing. */
+           composited and costs nothing.
+
+           `--over` goes on the METER rather than on the fill, because the element
+           that reads it is a sibling of the fill and a custom property is only
+           visible to descendants. Setting it on the shared ancestor is what lets
+           one write feed both bars. */
         elFill!.style.setProperty('--fill', (shown / 100).toFixed(4));
+        elMeter!.style.setProperty('--over', (over / 100).toFixed(4));
+        /* aria-valuenow stays on TIME UNDER TENSION and is never blended with the
+           overhold. A progressbar reports one quantity; folding a second one into
+           it would make the announced number mean two different things at
+           different times. FULL RANGE OF MOTION is announced as an event instead
+           (see requestKeep), which is what it is. */
         elMeter!.setAttribute('aria-valuenow', String(shown));
         elMeter!.setAttribute('data-max', shown >= 100 ? 'true' : 'false');
+        elMeter!.setAttribute('data-range', over >= 100 ? 'true' : 'false');
         const label =
-          shown >= 100 ? 'max tension' : shown > 0 ? `${shown}%` : 'hold to reveal';
+          over >= 100
+            ? 'full range of motion'
+            : shown >= 100
+              ? 'max tension'
+              : shown > 0
+                ? `${shown}%`
+                : 'hold to reveal';
         if (label !== hudStateText) {
           hudStateText = label;
           elState!.textContent = label;
@@ -3234,6 +4464,15 @@ export default function StudioRoom({ memories, lines }: Props) {
     }
 
     function sync(): void {
+      /* The tone follows the TAB, not the reduced-motion setting, so this runs
+         before the early return. Leaving a room tone humming out of a backgrounded
+         tab is the behaviour every autoplay policy exists to stop, and it would be
+         ours rather than the browser's. It is resumed only if she had turned it on
+         — coming back to a visible tab never STARTS audio. */
+      if (tone) {
+        if (document.hidden) void tone.ctx.suspend();
+        else if (toneOn) void tone.ctx.resume();
+      }
       if (reduced) return;
       if (visible && !document.hidden) start();
       else stop();
@@ -3268,7 +4507,9 @@ export default function StudioRoom({ memories, lines }: Props) {
       'aria-label',
       `A dark studio under blue light. ${memories.length} photographs of us ride a carriage ` +
         'on a rail into the dark, doubled in the mirrored floor. Use the memory list below to ' +
-        'move between them; hold Enter on one to build time under tension and reveal its note.',
+        'move between them; hold Enter on one to build time under tension and reveal its note, ' +
+        'and keep holding past max tension for full range of motion, which keeps that memory. ' +
+        'Every one of those also has a plain button: reveal the note, keep this, leave a note back.',
     );
 
     // Hand over from the static grid ONLY now that the renderer, the scene and
@@ -3281,7 +4522,14 @@ export default function StudioRoom({ memories, lines }: Props) {
     syncPlate();
     for (let n = 0; n < indexButtons.length; n += 1) {
       indexButtons[n].setAttribute('aria-current', n === 0 ? 'true' : 'false');
+      /* Her existing keeps, painted onto the index in the FIRST frame. The state
+         came down in the server-rendered props (see the `marks` prop), so there is
+         no fetch here and no moment where the room shows her nothing kept. */
+      applyKeptToIndex(n);
     }
+    // The reply form ships hidden from the server; this makes sure aria-expanded
+    // agrees with that, whatever a future edit does to the markup.
+    closeReply();
     if (reduced) {
       // The finished state: carriage at max extension, one more already given.
       progress = 1;
@@ -3345,9 +4593,35 @@ export default function StudioRoom({ memories, lines }: Props) {
       window.clearTimeout(restoreTimer);
       canvas.style.touchAction = prevTouchAction;
       elReveal.removeEventListener('click', onRevealClick);
+      elKeep.removeEventListener('click', onKeepClick);
+      elReplyOpen.removeEventListener('click', onReplyOpenClick);
+      elReplyCancel.removeEventListener('click', onReplyCancelClick);
+      elReplyForm.removeEventListener('submit', onReplySubmit);
+      elTone.removeEventListener('click', onToneClick);
+      window.clearTimeout(markStateTimer);
+      window.clearTimeout(toneSuspendTimer);
       for (const off of keyCleanups) off();
       for (const off of gsapWaitOff) off();
       if (gsapTween) gsapTween.kill();
+
+      /* THE AUDIO GRAPH.
+         Stopped and CLOSED, not merely suspended. An AudioContext holds a real
+         audio device and browsers cap how many a page may have — the same class of
+         leak as the WebGL context below, with the same symptom: it works, and then
+         one navigation later it silently does not. `stop()` on an already-stopped
+         source throws in some engines, hence the try. */
+      if (tone) {
+        for (const s of tone.sources) {
+          try {
+            s.stop();
+          } catch {
+            /* already stopped */
+          }
+        }
+        void tone.ctx.close();
+        tone = null;
+        toneOn = false;
+      }
 
       for (const rig of rigs) clearTexture(rig);
       for (const t of disposableTextures) t.dispose();
@@ -3407,6 +4681,31 @@ export default function StudioRoom({ memories, lines }: Props) {
               <span className="room-mark-bracket" aria-hidden="true">]</span>
             </span>
             <span className="room-where">the studio</span>
+            {/*
+              THE VISIT COUNTER.
+
+              Server-rendered from a persisted count (see marks.ts's countVisit and
+              its 20-minute debounce, which is what stops a refresh from being a
+              visit). Rendered as a plain string with no JS involvement at all, so
+              it is also correct in the static fallback and needs no fetch.
+
+              Omitted entirely rather than shown empty when the store could not be
+              read or the count is 0 — visitLine() returns '' for both, so an
+              unreachable bucket costs her a sentence and not a broken one.
+            */}
+            {visitLine && <span className="room-visits">{visitLine}</span>}
+            {/*
+              ROOM TONE. Off by default, never autoplayed, never persisted — see
+              the ROOM_TONE_* block. `aria-pressed` because this is a toggle and
+              not an action, and the LABEL changes too so the state does not live
+              only in an attribute.
+
+              Rendered unconditionally; the component removes it when there is no
+              AudioContext, rather than shipping a button that does nothing.
+            */}
+            <button className="room-tone" type="button" data-us="tone" aria-pressed="false">
+              room tone
+            </button>
             <a className="room-exit" href="/stronger/vault">exit</a>
           </div>
 
@@ -3443,38 +4742,205 @@ export default function StudioRoom({ memories, lines }: Props) {
               <span className="room-tension-label">time under tension</span>
               <span className="room-tension-track">
                 <span className="room-tension-fill" data-us="fill" />
+                {/*
+                  FULL RANGE OF MOTION — the second bar, over the first.
+                  Deliberately NOT a second role="progressbar": a progressbar
+                  reports one quantity, and two of them stacked in one control
+                  would make the announced number ambiguous. This bar is purely
+                  visual; the outcome it leads to is announced as an event.
+                */}
+                <span className="room-tension-over" aria-hidden="true" />
               </span>
               <span className="room-tension-state" data-us="state">hold to reveal</span>
             </div>
 
-            <button className="room-reveal" type="button" data-us="reveal">
-              reveal the note
-            </button>
+            {/*
+              THE MODIFICATION.
+
+              "Modification" is a real solidcore instruction, not a metaphor: it is
+              what a coach offers when the prescribed movement is not available to
+              you, and the whole point of their version is that it is the SAME work
+              rather than a lesser one. Which is exactly the right frame for this
+              button — hold-to-reveal as the only path to content fails WCAG 2.1.1
+              and 2.5.x, so this is the route that has to exist, and naming it with
+              their own word makes it part of the room instead of an apology
+              bolted to the side of it.
+
+              Wrapped so the label hides with the button it describes: the pair is
+              only shown while there is still a note to reveal.
+            */}
+            <div className="room-modification" data-us="mod">
+              <button
+                className="room-reveal"
+                type="button"
+                data-us="reveal"
+                aria-describedby="us-modification"
+              >
+                reveal the note
+              </button>
+              <p className="room-modification-label" id="us-modification">
+                modification &mdash; the same rep, without the hold
+              </p>
+            </div>
 
             <div className="room-note" data-us="note" hidden>
               <p className="room-note-text" data-us="note-text" />
             </div>
+
+            {/*
+              ===========================================================
+              WHAT SHE CAN DO — the marks. See src/lib/us/marks.ts.
+
+              The room was read-only: thirteen photographs, a note behind each
+              one, and no way for her to answer any of it. These two controls are
+              the answer, and they are also the PLAIN ROUTE to the two gestures —
+              keep is what holding past max tension does, so the gesture is never
+              the only path to it.
+
+              Both are real <button>s at 44px, both take focus in DOM order, and
+              the reply is a real <form> with a real action so a room whose script
+              broke after hydration still saves through a POST and a 303.
+              ===========================================================
+            */}
+            <div className="room-marks">
+              <button
+                className="room-keep"
+                type="button"
+                data-us="keep"
+                /* A toggle, so aria-pressed rather than a second button. The text
+                   content changes with it, because state that lives only in an
+                   attribute is state a sighted user has to infer from a colour. */
+                aria-pressed="false"
+              >
+                keep this
+              </button>
+
+              <button
+                className="room-reply-open"
+                type="button"
+                data-us="reply-open"
+                aria-expanded="false"
+              >
+                leave a note back
+              </button>
+
+              {/*
+                A REAL form, with a real action and method.
+
+                While the island is alive the submit is intercepted — a navigation
+                would tear the whole room down to store forty characters. But the
+                attributes are here so that the degraded path exists at all: JS
+                that breaks after hydration still posts this, and /api/us/mark
+                answers a form submission with a 303 back to this page.
+              */}
+              <form
+                className="room-reply"
+                data-us="reply-form"
+                action="/api/us/mark"
+                method="post"
+                hidden
+              >
+                <input type="hidden" name="action" value="note" />
+                {/* Rewritten by the component whenever the selection changes. */}
+                <input type="hidden" name="id" value={memories[0]?.id ?? ''} />
+                {/*
+                  A REAL label, visually hidden. A bare textarea in a HUD announces
+                  as "edit text, blank" and nothing else — and this is the one
+                  control in the room that holds words she wrote.
+                */}
+                <label className="room-sr-only" htmlFor="us-reply-text">
+                  your note back on this memory
+                </label>
+                <textarea
+                  id="us-reply-text"
+                  className="room-reply-text"
+                  data-us="reply-text"
+                  name="note"
+                  rows={3}
+                  /* NOTE_MAX, which must equal MARK_NOTE_MAX in marks.ts — see the
+                     note on that constant for why it is restated rather than
+                     imported, and for the assertion that keeps the two honest. The
+                     server caps it too, so this is the courtesy rather than the
+                     enforcement; without it she can type 400 characters and be
+                     told no. */
+                  maxLength={NOTE_MAX}
+                  placeholder="anything. it saves to the same place his notes live."
+                />
+                <div className="room-reply-actions">
+                  <button className="room-reply-save" type="submit">save</button>
+                  <button
+                    className="room-reply-cancel"
+                    type="button"
+                    data-us="reply-cancel"
+                  >
+                    cancel
+                  </button>
+                </div>
+              </form>
+
+              {/*
+                Her note, once there is one. Marked as hers rather than styled
+                identically to his — the whole value of the feature is that the
+                room now holds two voices, and they must not read as one.
+              */}
+              <div className="room-hers" data-us="hers" hidden>
+                <p className="room-hers-label">yours</p>
+                <p className="room-hers-text" data-us="hers-text" />
+              </div>
+
+              {/*
+                Save feedback. NOT a live region: it is written on every optimistic
+                keep, and a polite announcement per tap would talk over her. The
+                outcomes that matter — a kept memory, a saved note, a failure — are
+                announced explicitly through the room's one live region instead.
+              */}
+              <p className="room-mark-state" data-us="mark-state" data-error="false" />
+            </div>
           </div>
 
           {/*
-            The keyboard route, and the monthly-focus calendar in one control.
-            Every memory is a real <button> in DOM order, so Tab walks the year.
+            The keyboard route to every panel. Every memory is a real <button> in
+            DOM order, so Tab walks the rail.
+
+            This used to be a monthly-focus CALENDAR — a 12-cell grid, each cell
+            stamped `01 JAN 2024`. It has been deliberately de-structured: no
+            dates, no grid, no implied gap where a month has no photograph. A row
+            of small markers reads as "there are more of these" rather than as a
+            filing system, which is what a wall of memories should feel like.
+
+            The accessible name still carries the count, because a screen-reader
+            user gets no benefit from the visual looseness and does need to know
+            how many there are. The number stays inside each button for the same
+            reason — it is the only thing that distinguishes one from the next
+            non-visually, and `when` is optional so it cannot be relied on.
           */}
-          <ol className="room-index" aria-label="memories, by month">
-            {memories.map((m, i) => (
-              <li key={m.id} className="room-index-item">
-                <button
-                  type="button"
-                  className="room-index-btn"
-                  data-memory={m.id}
-                  data-hidden={m.hidden ? 'true' : 'false'}
-                  aria-current={i === 0 ? 'true' : 'false'}
-                >
-                  <span className="room-index-n">{m.hidden ? '+1' : String(i + 1).padStart(2, '0')}</span>
-                  <span className="room-index-month">{m.month}</span>
-                </button>
-              </li>
-            ))}
+          <ol className="room-index" aria-label={`${memories.length} memories on the rail`}>
+            {memories.map((m, i) => {
+              /* Rendered from the SERVER's marks, so a kept memory is already
+                 marked in the initial HTML. The component keeps both the attribute
+                 and the accessible name in step afterwards (applyKeptToIndex) —
+                 the name matters as much as the attribute, because a marker that
+                 is merely a different blue is invisible to a screen reader. */
+              const kept = Boolean(marks[m.id]?.kept);
+              const base = m.hidden ? 'one more' : `${i + 1}. ${m.caption}`;
+              return (
+                <li key={m.id} className="room-index-item">
+                  <button
+                    type="button"
+                    className="room-index-btn"
+                    data-memory={m.id}
+                    data-hidden={m.hidden ? 'true' : 'false'}
+                    data-kept={kept ? 'true' : 'false'}
+                    aria-current={i === 0 ? 'true' : 'false'}
+                    aria-label={kept ? `${base}, kept` : base}
+                  >
+                    <span className="room-index-n" aria-hidden="true">
+                      {m.hidden ? '+' : String(i + 1)}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
           </ol>
 
           <p className="room-hint" data-us="hint">scroll — the carriage follows</p>

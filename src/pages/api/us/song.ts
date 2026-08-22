@@ -36,6 +36,38 @@
  * type. Empty is a supported state, not a bug; her page just omits the line.
  *
  * ---------------------------------------------------------------------------
+ * THE WEB API IS AN OPTIONAL UPGRADE, GATED ON CREDENTIALS THAT MAY NEVER EXIST
+ *
+ * Album, release year and duration are not available without an app registration,
+ * so they come from Spotify's Web API — and ONLY when `SPOTIFY_CLIENT_ID` and
+ * `SPOTIFY_CLIENT_SECRET` are both set. When they are not, which is the state this
+ * shipped in, resolveMetadata() goes straight to oEmbed and every enriched field
+ * is stored empty. Nothing on either page renders a label for an empty one.
+ *
+ * THIS ORDERING IS THE POINT: the credential-free path is not a fallback bolted
+ * on for robustness, it is the DEFAULT, and the credentialed path is the thing
+ * wrapped in a try/catch. A feature that stopped working the day a token expired
+ * would be a feature that depends on my remembering to renew it, and the whole
+ * design premise of the wing is that it survives me forgetting things.
+ *
+ * Deliberately NOT used from the Web API: `preview_url`. Spotify stopped issuing
+ * it to new applications, so it is null for us and anything built on it is dead.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THIS FILE EXPORTS ITS PARSER AND ITS METADATA RESOLVER
+ *
+ * /api/us/reply — her side — imports extractTrackId(), resolveMetadata() and
+ * cleanText() from here rather than owning copies. That is the single most
+ * important decision in the two-way feature: this parser is where the host
+ * confusion, `javascript:`, playlist and path-traversal rejections live, and a
+ * second parser written for her endpoint would be a second parser to get right.
+ * There is only ever one, and it is this one.
+ *
+ * They live HERE, and not in a shared lib module, because this is the file whose
+ * header documents WHY each rule exists. Moving the code away from that reasoning
+ * is how the reasoning stops being read.
+ *
+ * ---------------------------------------------------------------------------
  * THE URL IS PARSED, NEVER TRUSTED
  *
  * A pasted link is the only attacker-shaped input this endpoint has, and its
@@ -53,8 +85,7 @@ import { readCookie, verify } from '../../../lib/us/session';
 import { clientKey, hit } from '../../../lib/us/ratelimit';
 import {
   StoreError,
-  getReactions,
-  getSongs,
+  getExchange,
   isWingDate,
   putSong,
   wingDate,
@@ -90,8 +121,9 @@ const TRACK_ID_RE = /^[A-Za-z0-9]{22}$/;
  */
 const ART_HOSTS = ['.scdn.co', '.spotifycdn.com'];
 
-const MAX_NOTE = 600;
-const MAX_ARTIST = 120;
+/** Exported so her endpoint applies the same caps rather than picking its own. */
+export const MAX_NOTE = 600;
+export const MAX_ARTIST = 120;
 
 /** Where a browser form is sent afterwards, either way. */
 const DJ = '/stronger/dj';
@@ -167,27 +199,224 @@ function trackUrl(id: string): string {
    METADATA
    ========================================================================= */
 
-interface Metadata {
+export interface Metadata {
   title: string;
   art: string;
+  /** Web API only. '' without credentials. */
+  artist: string;
+  /** Web API only. '' without credentials. */
+  album: string;
+  /** Web API only, four digits. '' without credentials. */
+  year: string;
+  /** Web API only. 0 without credentials. */
+  durationMs: number;
+}
+
+const EMPTY_METADATA: Metadata = { title: '', art: '', artist: '', album: '', year: '', durationMs: 0 };
+
+/**
+ * Read one environment variable at REQUEST time.
+ *
+ * Bracket access on a variable rather than `import.meta.env.SPOTIFY_CLIENT_ID`,
+ * for the reason config.ts spells out at length: Vite statically replaces the
+ * dotted form during `astro build`, so the value baked into the bundle is whatever
+ * the build container had — which for a secret is `undefined`, forever, with no
+ * error anywhere. Duplicated here rather than added to config.ts because these two
+ * variables belong to this endpoint's Spotify story and nothing else in the wing
+ * reads them.
+ */
+function env(name: string): string | undefined {
+  const fromMeta = (import.meta as unknown as { env?: Record<string, string | undefined> }).env;
+  const fromNode = typeof process !== 'undefined' ? process.env : undefined;
+  const value = fromMeta?.[name] ?? fromNode?.[name];
+  // Empty string is absent. A blank secret saved in a dashboard must never look
+  // like a configured one.
+  return value && value.length > 0 ? value : undefined;
+}
+
+function spotifyApp(): { id: string; secret: string } | null {
+  const id = env('SPOTIFY_CLIENT_ID');
+  const secret = env('SPOTIFY_CLIENT_SECRET');
+  // BOTH or neither. Half-configured is treated as unconfigured rather than as an
+  // error, because the degraded path is fully functional and a 500 here would take
+  // down posting for the sake of a field nobody has yet seen.
+  return id && secret ? { id, secret } : null;
 }
 
 /**
- * Ask Spotify for the title and album art. Never throws.
+ * The client-credentials token, cached for the life of the container.
+ *
+ * A token is good for an hour and a serverless container rarely lives that long,
+ * so in practice this caches across the handful of requests in one warm instance
+ * and nothing more. That is enough: it turns "two round trips per post" into "two
+ * on a cold start, one after". The 60-second safety margin is there so a token
+ * that expires mid-flight is refreshed before use rather than producing a 401 that
+ * silently loses the enrichment.
+ *
+ * No locking around the refresh. Two concurrent posts on one instance would each
+ * mint a token, which Spotify permits and which costs one wasted request — and the
+ * only two posters are two people, one of whom posts once a morning. A mutex here
+ * would be more code than the problem.
+ */
+let cachedToken: { value: string; expiresAt: number } | null = null;
+
+async function appToken(app: { id: string; secret: string }): Promise<string | null> {
+  if (cachedToken && cachedToken.expiresAt > Date.now() + 60_000) return cachedToken.value;
+
+  try {
+    const res = await fetch('https://accounts.spotify.com/api/token', {
+      method: 'POST',
+      headers: {
+        // Basic auth rather than the body form: the secret stays out of the
+        // request body, which is the part most likely to end up in a log.
+        Authorization: `Basic ${Buffer.from(`${app.id}:${app.secret}`).toString('base64')}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: 'grant_type=client_credentials',
+      signal: AbortSignal.timeout(3000),
+    });
+    if (!res.ok) {
+      // The status, never the body: a token endpoint's error body can echo back
+      // request material, and this log line is not worth that risk.
+      console.error(`[us] spotify token HTTP ${res.status} — falling back to oEmbed.`);
+      return null;
+    }
+    const body = (await res.json()) as { access_token?: unknown; expires_in?: unknown };
+    const value = typeof body?.access_token === 'string' ? body.access_token : '';
+    if (!value) return null;
+    const ttl = Number(body?.expires_in);
+    cachedToken = {
+      value,
+      expiresAt: Date.now() + (Number.isFinite(ttl) && ttl > 0 ? ttl : 3600) * 1000,
+    };
+    return value;
+  } catch (err) {
+    console.error('[us] spotify token unreachable — falling back to oEmbed:', err);
+    return null;
+  }
+}
+
+/** An https URL under a known Spotify CDN, or '' — see resolveMetadata(). */
+function safeArtUrl(raw: unknown): string {
+  if (typeof raw !== 'string' || raw.length === 0) return '';
+  try {
+    const u = new URL(raw);
+    const host = u.hostname.toLowerCase();
+    if (u.protocol === 'https:' && ART_HOSTS.some((suffix) => host.endsWith(suffix))) {
+      return u.toString();
+    }
+    console.error(`[us] spotify art host not allowed: ${host} — dropping the art.`);
+  } catch {
+    /* unparseable: no art, no drama. */
+  }
+  return '';
+}
+
+/**
+ * The credentialed path. Returns null on ANY problem so the caller falls through
+ * to oEmbed — a missing album name must never cost us the title.
+ */
+async function resolveViaWebApi(id: string): Promise<Metadata | null> {
+  const app = spotifyApp();
+  if (!app) return null;
+
+  const token = await appToken(app);
+  if (!token) return null;
+
+  try {
+    const res = await fetch(`https://api.spotify.com/v1/tracks/${id}`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+      signal: AbortSignal.timeout(3000),
+    });
+    if (!res.ok) {
+      // 401 means the cached token went stale early (revoked, or the app's
+      // credentials rotated). Dropping it means the NEXT post mints a fresh one
+      // instead of failing for the rest of the container's life.
+      if (res.status === 401) cachedToken = null;
+      console.error(`[us] spotify track HTTP ${res.status} for ${id} — falling back to oEmbed.`);
+      return null;
+    }
+
+    const body = (await res.json()) as {
+      name?: unknown;
+      duration_ms?: unknown;
+      artists?: unknown;
+      album?: unknown;
+    };
+
+    const str = (v: unknown, max: number) => (typeof v === 'string' ? v.slice(0, max).trim() : '');
+
+    const title = str(body?.name, 200);
+    // Every artist, comma-joined, because a collaboration listing only the first
+    // name is a small wrong answer and the field is free-text anyway.
+    const artist = Array.isArray(body?.artists)
+      ? body.artists
+          .map((a) => str((a as { name?: unknown })?.name, 120))
+          .filter(Boolean)
+          .join(', ')
+          .slice(0, MAX_ARTIST)
+      : '';
+
+    const album = (body?.album ?? {}) as { name?: unknown; release_date?: unknown; images?: unknown };
+    const released = str(album?.release_date, 10);
+    // `release_date` is `YYYY`, `YYYY-MM` or `YYYY-MM-DD` depending on
+    // `release_date_precision`. Only the year is ever shown, so only the year is
+    // stored, and it is stored only if it is really four digits.
+    const year = /^\d{4}/.test(released) ? released.slice(0, 4) : '';
+
+    // Images arrive largest-first. The 300px one is picked deliberately, not the
+    // 640: the card renders it at 320 CSS px on a phone at DPR 2-3, and 640 is
+    // four times the bytes for a difference that only a desktop would see. Falls
+    // back to whatever exists when there are fewer than three sizes.
+    const images = Array.isArray(album?.images) ? (album.images as Array<{ url?: unknown }>) : [];
+    const chosen = images[1] ?? images[0] ?? null;
+    const art = safeArtUrl(chosen?.url);
+
+    if (!title) return null;
+
+    const durationMs = Number(body?.duration_ms);
+    return {
+      title,
+      art,
+      artist,
+      album: str(album?.name, 200),
+      year,
+      durationMs: Number.isFinite(durationMs) && durationMs > 0 ? Math.floor(durationMs) : 0,
+    };
+  } catch (err) {
+    console.error('[us] spotify web api unreachable — falling back to oEmbed:', err);
+    return null;
+  }
+}
+
+/**
+ * Ask Spotify for whatever it will tell us about a track. Never throws.
+ *
+ * The Web API is tried first and only when both credentials exist; oEmbed is the
+ * floor underneath it and needs nothing. If the API answers with a title, its
+ * answer is used whole — mixing the two sources per-field would mean a card whose
+ * title and art could come from different responses about the same track, which is
+ * a class of inconsistency with no upside.
  *
  * 3s rather than the store's 2s: this is a third party over the public internet
  * from a cold serverless container, not a database in the next rack. Still short
- * enough that a hung Spotify does not hold my phone's form submission open.
+ * enough that a hung Spotify does not hold my phone's form submission open. Note
+ * the credentialed path can spend that twice (token, then track), which is the
+ * honest cost of the upgrade and is bounded because both calls are separately
+ * timed out and both failures are non-fatal.
  *
- * Everything in the response is treated as untrusted. The art URL in particular
+ * Everything in every response is treated as untrusted. The art URL in particular
  * goes into an `<img src>` on her page, so it must be https and its hostname must
  * sit under a known Spotify CDN — if Spotify ever starts returning something
  * else, the card degrades to the no-art layout rather than making her browser
  * fetch from a host this code has never heard of. Logged loudly, because "the art
  * quietly stopped working" is otherwise invisible.
  */
-async function resolveMetadata(id: string): Promise<Metadata> {
-  const empty: Metadata = { title: '', art: '' };
+export async function resolveMetadata(id: string): Promise<Metadata> {
+  const enriched = await resolveViaWebApi(id);
+  if (enriched) return enriched;
+
+  const empty: Metadata = { ...EMPTY_METADATA };
   try {
     const endpoint = `https://open.spotify.com/oembed?url=${encodeURIComponent(trackUrl(id))}`;
     const res = await fetch(endpoint, {
@@ -202,22 +431,9 @@ async function resolveMetadata(id: string): Promise<Metadata> {
     const body = (await res.json()) as { title?: unknown; thumbnail_url?: unknown };
     const title = typeof body?.title === 'string' ? body.title.slice(0, 200).trim() : '';
 
-    let art = '';
-    if (typeof body?.thumbnail_url === 'string') {
-      try {
-        const u = new URL(body.thumbnail_url);
-        const host = u.hostname.toLowerCase();
-        if (u.protocol === 'https:' && ART_HOSTS.some((suffix) => host.endsWith(suffix))) {
-          art = u.toString();
-        } else {
-          console.error(`[us] spotify oembed art host not allowed: ${host} — dropping the art.`);
-        }
-      } catch {
-        /* unparseable thumbnail_url: no art, no drama. */
-      }
-    }
-
-    return { title, art };
+    // Same host allowlist as the credentialed path, via the same function. Two
+    // copies of an art-URL check is two chances to relax one of them.
+    return { ...empty, title, art: safeArtUrl(body?.thumbnail_url) };
   } catch (err) {
     // R7 in the plan: oEmbed is undocumented-ish and may change or disappear. The
     // mitigation is exactly this — post the song anyway. The official embed iframe
@@ -254,7 +470,7 @@ const CONTROL_CHARS = new RegExp(
  * PERSISTED: a stray NUL in a stored note is the kind of thing that breaks a JSON
  * round trip or a terminal three months later, for no benefit at all.
  */
-function cleanText(raw: unknown, max: number): string {
+export function cleanText(raw: unknown, max: number): string {
   if (typeof raw !== 'string') return '';
   return raw.replace(CONTROL_CHARS, '').slice(0, max).trim();
 }
@@ -280,20 +496,30 @@ export const GET: APIRoute = async ({ cookies, url }) => {
   const today = wingDate();
 
   try {
-    // One list, then split. `today` is whatever is filed under today's date, and
-    // the archive is everything else — so a morning I never posted shows an empty
-    // card above a full archive rather than silently promoting yesterday's song.
-    // Pretending yesterday is today would be a small lie that makes the whole
-    // feature untrustworthy.
-    const songs = await getSongs(ARCHIVE_LIMIT);
-    const reactions = await getReactions(songs.map((s) => s.date));
-    const decorate = (s: SongRecord) => ({ ...s, reactions: reactions[s.date] ?? [] });
+    // One composite read, then split. `today` is whatever is filed under today's
+    // date, and the archive is everything else — so a morning I never posted shows
+    // an empty card above a full archive rather than silently promoting
+    // yesterday's song. Pretending yesterday is today would be a small lie that
+    // makes the whole feature untrustworthy.
+    const { songs, reactions, replyByDate } = await getExchange(ARCHIVE_LIMIT);
+
+    // Her reply rides along with the day it answers. A client that had to make a
+    // second call for the other half of a conversation would eventually render
+    // half of one.
+    const decorate = (s: SongRecord) => ({
+      ...s,
+      reactions: reactions[s.date] ?? [],
+      reply: replyByDate[s.date] ?? null,
+    });
     const todaySong = songs.find((s) => s.date === today);
 
     return json({
       ok: true,
       date: today,
       today: todaySong ? decorate(todaySong) : null,
+      // Present even on a day I have not posted, because she may have gone first
+      // and a null `today` must not mean "nothing happened today".
+      reply: replyByDate[today] ?? null,
       archive: songs.filter((s) => s.date !== today).map(decorate),
     });
   } catch (err) {
@@ -380,10 +606,17 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
     date,
     id,
     title: meta.title,
-    artist,
+    // WHAT I TYPED WINS. The Web API's artist string is a good default and a bad
+    // override: for a feature or a remix I may deliberately want to name it
+    // differently, and having the server quietly replace what I typed would make
+    // the field feel broken. So the resolver only fills a blank.
+    artist: artist || meta.artist,
     art: meta.art,
     note,
     postedAt: Date.now(),
+    album: meta.album,
+    year: meta.year,
+    durationMs: meta.durationMs,
   };
 
   try {

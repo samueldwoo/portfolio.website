@@ -22,6 +22,24 @@ export default defineConfig({
   // header — neither is possible from a static file.
   output: 'static',
 
+  /* CSRF, and a fragility worth knowing about.
+     Astro's `security.checkOrigin` defaults to true and DOES protect the
+     form-encoded POSTs under /api/us/* here. Verified twice: a cross-origin
+     form post to /api/us/react returns 403 on the dev server, and the built
+     manifest in .vercel/output carries `checkOrigin: true`.
+
+     But look at how Astro computes it (plugin-manifest.js:275):
+         checkOrigin: (security?.checkOrigin && buildOutput === "server") ?? false
+     `buildOutput` is "server" for this project ONLY because some routes set
+     `prerender = false`. Delete the last on-demand route and buildOutput flips
+     to "static", checkOrigin silently becomes false, and every form endpoint
+     loses its origin check with nothing failing and no warning.
+
+     It also never covers `application/json` at all — confirmed, a cross-origin
+     JSON post is not blocked — which is exactly why every handler verifies its
+     own session cookie rather than leaning on this. `sameSite: 'lax'` on the
+     cookies is the control that actually stops a browser sending credentials
+     cross-site; checkOrigin is the belt, not the braces. */
   adapter: vercel({
     // Astro's own middleware (src/middleware.ts) runs inside the serverless
     // function. We deliberately do NOT hoist it to a Vercel Edge Middleware:

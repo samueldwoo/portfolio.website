@@ -38,8 +38,23 @@ export interface Verdict {
   backend: 'upstash' | 'memory' | 'failed-open';
 }
 
-const UPSTASH_URL = () => process.env.UPSTASH_REDIS_REST_URL || undefined;
-const UPSTASH_TOKEN = () => process.env.UPSTASH_REDIS_REST_TOKEN || undefined;
+/* Same lookup order as config.ts's env(), and that consistency is the point.
+   This file used to read `process.env` ONLY. config.ts prefers
+   `import.meta.env`, which is where `astro dev` puts a .env — so the two could
+   disagree about whether Upstash is configured: hasKV() true (marks and songs
+   go to Redis) while the rate limiter silently fell back to its per-instance
+   in-memory bucket. Nothing errors; the limiter just quietly stops being the
+   shared control it claims to be. Bracket access on a variable, not
+   `import.meta.env.FOO`, so Vite cannot inline a build-time value. */
+function env(name: string): string | undefined {
+  const fromMeta = (import.meta as unknown as { env?: Record<string, string | undefined> }).env;
+  const fromNode = typeof process !== 'undefined' ? process.env : undefined;
+  const value = fromMeta?.[name] ?? fromNode?.[name];
+  return value && value.length > 0 ? value : undefined;
+}
+
+const UPSTASH_URL = () => env('UPSTASH_REDIS_REST_URL');
+const UPSTASH_TOKEN = () => env('UPSTASH_REDIS_REST_TOKEN');
 
 /* --------------------------------- memory --------------------------------- */
 
