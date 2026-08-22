@@ -923,6 +923,21 @@
         gsap.set(els, { clearProps: "all" });
     }
 
+    /* Release ONE element the moment its own entrance ends.
+       `.gsap-busy` is not decoration: motion-ux.js's `ready()` refuses to
+       write a hover transform while it is present, because a gesture and an
+       entrance tween would otherwise both be writing y/scale. Clearing it
+       for the whole SET at the set's end means the first element to settle
+       stays hover-deaf until the last one finishes — measured at 2560 as
+       ~530ms of a visibly settled pass ignoring the pointer. Per-element
+       release keeps the interlock (nothing is freed early) and drops the
+       cross-element share of the wait to zero. */
+    function finishOne(el) {
+        el.classList.add("is-visible");
+        el.classList.remove("gsap-busy");
+        gsap.set(el, { clearProps: "all" });
+    }
+
     var passes = toArray(".pass.gsap-reveal");
     var prose = toArray(".gsap-reveal:not(.pass)");
 
@@ -949,18 +964,23 @@
            reads its actual rows — the wave runs diagonally across the bento. */
         var wall = passes[0].closest(".pass-wall") || passes[0].parentElement;
         gsap.set(passes, { opacity: 0, y: 34, scale: 0.97, rotateX: -6, transformPerspective: 800 });
-        gsap.to(passes, {
-            opacity: 1, y: 0, scale: 1, rotateX: 0,
-            duration: 0.9,
-            // Gentle overshoot: a boarding pass settling onto the wall.
-            // Kept under 1.2 so it reads as a settle, not a bounce.
-            ease: "back.out(1.1)",
-            stagger: {
-                each: 0.075,
-                grid: "auto",
-                from: "start",
-                ease: "power1.inOut"
-            },
+
+        /* ONE TWEEN PER PASS, not one staggered tween over all of them.
+           The visual result is identical — `gsap.utils.distribute` is the
+           very function a `stagger: {}` object uses internally, so feeding
+           it the same {each, grid, from, ease} reproduces the same diagonal
+           wave (measured: 11 passes, delays 0 -> 0.275s, 7 distinct steps).
+           What changes is that each pass now owns an `onComplete`, so it can
+           be released from `.gsap-busy` when ITS entrance ends instead of
+           when the slowest one does. See finishOne(). */
+        var delayOf = gsap.utils.distribute({
+            each: 0.075,
+            grid: "auto",
+            from: "start",
+            ease: "power1.inOut"
+        });
+
+        var wallIn = gsap.timeline({
             scrollTrigger: {
                 trigger: wall,
                 start: "top 78%",
@@ -969,8 +989,18 @@
                 // grid's measured geometry the stagger depends on.
                 invalidateOnRefresh: true
             },
-            onStart: function () { begin(passes); },
-            onComplete: function () { finish(passes); }
+            onStart: function () { begin(passes); }
+        });
+
+        passes.forEach(function (el, i) {
+            wallIn.to(el, {
+                opacity: 1, y: 0, scale: 1, rotateX: 0,
+                duration: 0.9,
+                // Gentle overshoot: a boarding pass settling onto the wall.
+                // Kept under 1.2 so it reads as a settle, not a bounce.
+                ease: "back.out(1.1)",
+                onComplete: function () { finishOne(el); }
+            }, delayOf(i, el, passes));
         });
     } else if (passes.length) {
         // No ScrollTrigger for some reason — show them, don't hide them.

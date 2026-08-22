@@ -73,8 +73,10 @@ function heightAt(x, y, cx, cy, span, tiltAng, tiltMag, seed) {
   // component and this copy still said 0.42/0.16, so golf_verify_port.py reported
   // a 0.63 heightAt delta and read as a PORT MISMATCH when the port was fine and
   // the PROBE was stale. If you change the field, change it here too.
-  const undul = fbm(nx * 1.25 + seed, ny * 1.25 - seed) * 1.05 +
-    fbm(nx * 2.9 - seed * 1.7, ny * 2.9 + seed * 1.3) * 0.40;
+  /* MIRROR of HeroCanvas.tsx heightAt(). Kept bit-identical on purpose:
+     a stale mirror here once produced a false PORT MISMATCH. */
+  const undul = fbm(nx * 0.85 + seed, ny * 0.85 - seed) * 0.58 +
+    fbm(nx * 2.0 - seed * 1.7, ny * 2.0 + seed * 1.3) * 0.13;
   return plane + undul;
 }
 const out = [];

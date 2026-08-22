@@ -662,6 +662,43 @@
     margin: 2px 0 26px;
 }
 
+/* ---- WIDE DISPLAYS: the hero name alone keeps growing --------------------
+   Reviewed on a real 2560 display: "Samuel Woo can afford to grow a bit
+   larger, but it doesn't need to get that much bigger — probably just
+   proportionally", while `.section-title` ("Things I'm building", "Where I've
+   been") was judged good as-is.
+
+   That rules out the `--display-scale: .58` bump this file already worked out
+   above, because that dial multiplies BOTH — it would have taken the section
+   titles from 67.2px to 78.0px, which was not asked for and was explicitly
+   liked at the current size. So the growth goes on `.hero-name`'s own clamp
+   and nothing else moves.
+
+   The band is a continuation, not a step: at exactly 1600px this rule
+   evaluates to 7.67rem + 3.33vw = 122.7 + 53.3 = 176px, which is the same
+   11rem ceiling the base rule is already sitting at, so the size is
+   continuous through the breakpoint and there is no jump. From there it
+   tracks the viewport to a 13rem ceiling:
+
+       1600px -> 176.0 * .50 =  88.0px   (identical to before — no jump)
+       1920px -> 186.6 * .50 =  93.3px
+       2560px -> 207.9 * .50 = 104.0px   (+18% over the old flat 88)
+       3840px -> 208.0 * .50 = 104.0px   (held at the 13rem cap)
+
+   Why a second clamp rather than a multiplier: a unitless fluid factor is not
+   expressible in CSS (you cannot divide a length by a length to get a plain
+   number), so scaling proportionally has to happen in the font-size itself.
+
+   Safe with the canvas: HeroCanvas.tsx's `measureCopy` re-measures the real
+   glyph rects on every resize and expresses the ink fade as offsets from that
+   measured edge, so a taller hero name moves the fade rather than landing
+   inside it. Verified by re-running the ink probe at 1600/1920/2560. */
+@media (min-width: 1600px) {
+    .hero-name {
+        font-size: calc(clamp(11rem, 7.67rem + 3.33vw, 13rem) * var(--display-scale));
+    }
+}
+
 /* Kickers pick up wider tracking to widen the gap the other way. */
 .kicker { letter-spacing: .3em; }
 

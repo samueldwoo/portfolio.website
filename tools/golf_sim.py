@@ -75,7 +75,7 @@ class Green:
                  cup_r=CUP_R, capture_speed=CAPTURE_SPEED, max_speed=MAX_SPEED,
                  friction=FRICTION, reach_safety=None,
                  downhill_credit=1.0 / -math.log(FRICTION),
-                 undul_scale=1.0, tilt_scale=1.0):
+                 undul_scale=1.0, tilt_scale=1.0, copy_edge=None):
         # Slope-budget knobs: undul_scale multiplies BOTH fbm amplitudes
         # (0.42 / 0.16), tilt_scale multiplies the plane's tiltMag.
         self.undul_scale = undul_scale
@@ -88,6 +88,10 @@ class Green:
         self.css_w = css_w
         self.css_h = css_h
         self.copy_bottom = copy_bottom
+        # Wide play box is DERIVED from the measured copy edge (see _play_box).
+        # None keeps the pre-derivation constant so old callers still run, but
+        # they are then simulating a green the component no longer draws.
+        self.copy_edge = copy_edge
         self.narrow = narrow
         self.round = round_no
         self.cup_r = cup_r
@@ -134,16 +138,42 @@ class Green:
             h = max(130.0, self.css_h - top - pad)
             return {"x": self.css_w * 0.16, "y": top,
                     "w": self.css_w * 0.68, "h": h}
-        return {"x": self.css_w * 0.48, "y": self.css_h * 0.16,
-                "w": self.css_w * 0.46, "h": self.css_h * 0.68}
+        # MIRROR of HeroCanvas.tsx playBox(). This branch was STALE: it was
+        # hardcoded to x=0.48 / w=0.46 long after the component started deriving
+        # the left edge from the measured copy edge. At 1440 the real box is
+        # x=0.628 / w=0.312, so every offline solvability number computed here
+        # described a green ~1.5x too wide and 200px too far left. Any result
+        # from before this fix is void.
+        left = max(0.44, (0.44 if self.copy_edge is None else self.copy_edge) + 0.05)
+        return {"x": self.css_w * left, "y": self.css_h * 0.16,
+                "w": self.css_w * (0.94 - left), "h": self.css_h * 0.68}
 
     def _place_cup(self):
+        """MIRROR of HeroCanvas.tsx placeCup().
+
+        Twenty-four candidates from the same hash stream; the first flat enough
+        for a ball to hold wins, else the flattest. `SLOPE_ACCEL * REST_SLOPE`
+        is the same threshold the roll integrator uses for `holds`, so "a
+        greenkeeper would cut here" and "a ball can rest here" are one test.
+        """
         b = self.box
         m = self.cup_r * 3.2
-        rx = hash2(self.round * 23 + 9, 41)
-        ry = hash2(self.round * 31 + 4, 53)
-        self.cup_x = b["x"] + m + (b["w"] - m * 2) * (0.25 + rx * 0.5)
-        self.cup_y = b["y"] + m + (b["h"] - m * 2) * (0.2 + ry * 0.6)
+        acceptable = SLOPE_ACCEL * REST_SLOPE
+        bx = by = 0.0
+        best_mag = float("inf")
+        for i in range(24):
+            rx = hash2(self.round * 23 + 9 + i * 7, 41)
+            ry = hash2(self.round * 31 + 4 + i * 11, 53)
+            x = b["x"] + m + (b["w"] - m * 2) * (0.25 + rx * 0.5)
+            y = b["y"] + m + (b["h"] - m * 2) * (0.2 + ry * 0.6)
+            gx, gy = self.slope_at(x, y)
+            mag = math.hypot(gx, gy)
+            if mag < best_mag:
+                best_mag = mag
+                bx, by = x, y
+            if mag <= acceptable:
+                break
+        self.cup_x, self.cup_y = bx, by
 
     def reach_toward(self, px, py):
         """Max distance a FULL-power putt can roll from (px,py) toward the cup.
@@ -207,9 +237,12 @@ class Green:
         ny = (y - self.hmy) / self.span
         plane = (nx * math.cos(self.tilt_ang) + ny * math.sin(self.tilt_ang)) \
             * self.tilt_mag
-        undul = (fbm(nx * 1.25 + self.g_seed, ny * 1.25 - self.g_seed) * 1.05
-                 + fbm(nx * 2.9 - self.g_seed * 1.7,
-                       ny * 2.9 + self.g_seed * 1.3) * 0.40) * self.undul_scale
+        # MIRROR of HeroCanvas.tsx heightAt(). Amplitudes 1.05/0.40 -> 0.58/0.13
+        # and frequencies 1.25/2.9 -> 0.85/2.0: fewer, broader contours so the
+        # fall line is readable again. Keep bit-identical with the component.
+        undul = (fbm(nx * 0.85 + self.g_seed, ny * 0.85 - self.g_seed) * 0.58
+                 + fbm(nx * 2.0 - self.g_seed * 1.7,
+                       ny * 2.0 + self.g_seed * 1.3) * 0.13) * self.undul_scale
         return plane + undul
 
     def slope_at(self, x, y):

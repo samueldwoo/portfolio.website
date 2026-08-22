@@ -39,7 +39,8 @@ for us in [float(v) for v in a.undul.split(",")]:
         shares, pk, vl, slopes, holds = [], [], [], [], []
         for rnd in range(1, a.rounds + 1):
             g = S.Green(w, h, cb, nr, rnd, reach_safety=0.9,
-                        undul_scale=us, tilt_scale=ts)
+                        undul_scale=us, tilt_scale=ts,
+                        copy_edge=probe["copyEdge"])
             b = g.box
             H = [[0.0] * N for _ in range(N)]
             P = [[0.0] * N for _ in range(N)]

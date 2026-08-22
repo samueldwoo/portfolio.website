@@ -193,19 +193,37 @@ function heightAt(
   const nx = (x - cx) / span;
   const ny = (y - cy) / span;
   const plane = (nx * Math.cos(tiltAng) + ny * Math.sin(tiltAng)) * tiltMag;
-  /* AMPLITUDES RAISED 2.5x (0.42/0.16 -> 1.05/0.40). Measured, not guessed.
-     At 0.42/0.16 the plane was 62-77% of all relief, which left 0-4 local peaks
-     across the whole play box and an arrow-direction spread as low as 22 deg. The
-     visible consequence: contours ran near-parallel, every arrow pointed the same
-     way, and the fall-line arrows never diverged across a ridge or converged into
-     a valley — there was no ridge and no valley to read.
-     The offline sweep (tools/golf_sweep.py, port verified bit-exact against this
-     file) says one-stroke solvability holds at 100% for x2.0, x2.5 and x3.0 with
-     the minimum aim tolerance steady at 4 deg; it breaks at x4.0. So x3 is the
-     edge and 2.5 is the value with margin. */
+  /* FEWER, BROADER CONTOURS — amplitudes 1.05/0.40 -> 0.58/0.13, frequencies
+     1.25/2.9 -> 0.85/2.0.
+
+     HISTORY, so this is not re-litigated a third time. The amplitudes started at
+     0.42/0.16, which made the plane 62-77% of all relief: contours ran
+     near-parallel, arrows all pointed one way, and there was no ridge or valley
+     to read. They were then raised 2.5x to 1.05/0.40 to put real structure in.
+     That fixed the ridges and broke something else: 1.45 of undulation against a
+     plane of only 0.60-1.35 means the NOISE now outweighs the fall line, so the
+     green lost the one thing a golfer actually reads. Reviewed on a real display:
+     "we have good indication of steepness, [but] it's a bit hard to read
+     lateralness -- whether the curve is going left or right", and "is there no
+     more flatter areas... typically the hole isn't located on a huge slant... there
+     typically aren't this many contours".
+
+     Both complaints are the same measurement: too much relief, too finely spaced.
+     Real greens agree. Greens are "usually flatter than other areas of the
+     course", with "gentle slopes and undulations" (Wikipedia, Golf course);
+     Augusta National's greens had to be REMODELLED to reduce their slopes in the
+     1980s once bent grass made them too quick. Difficulty on a good green comes
+     from a legible tilt plus speed, not from many small wrinkles.
+
+     So: cut the amplitudes and LOWER the frequencies. Lower frequency is the half
+     that fixes readability -- the same relief spread over fewer, wider features
+     produces fewer contour crossings and a dominant direction you can actually
+     read, while still having ridges and hollows to find. 0.58 + 0.13 = 0.71 of
+     undulation against a 0.60-1.35 plane puts the fall line back in charge
+     without returning to the bare tilt of 0.42/0.16. */
   const undul =
-    fbm(nx * 1.25 + seed, ny * 1.25 - seed) * 1.05 +
-    fbm(nx * 2.9 - seed * 1.7, ny * 2.9 + seed * 1.3) * 0.4;
+    fbm(nx * 0.85 + seed, ny * 0.85 - seed) * 0.58 +
+    fbm(nx * 2.0 - seed * 1.7, ny * 2.0 + seed * 1.3) * 0.13;
   return plane + undul;
 }
 
@@ -584,10 +602,57 @@ export default function HeroCanvas() {
     const placeCup = () => {
       const b = playBox();
       const m = CUP_R * 3.2;
-      const rx = hash2(round * 23 + 9, 41);
-      const ry = hash2(round * 31 + 4, 53);
-      cupX = b.x + m + (b.w - m * 2) * (0.25 + rx * 0.5);
-      cupY = b.y + m + (b.h - m * 2) * (0.2 + ry * 0.6);
+      const hm = home();
+      const span = Math.min(cssW, cssH) * 0.5;
+
+      /* THE HOLE GOES ON A FLAT SPOT — because that is who cuts it.
+         A hole location is not a random point on the surface; a greenkeeper
+         chooses it, and the first thing they rule out is a slant. Reviewed:
+         "typically the hole isn't located on a huge slant".
+
+         The threshold is not a new number. `SLOPE_ACCEL * REST_SLOPE` is the
+         exact expression the physics already uses for `holds` — the gradient
+         below which a slow ball comes to rest. REST_SLOPE is 0.03, i.e. a 3%
+         grade, which happens to be the same order as real hole-location
+         practice: a ball has to be able to sit still next to the cup, and on a
+         quick green that stops being true within a few percent. So "somewhere
+         the ball would hold" and "somewhere a greenkeeper would cut" are the
+         same test, and it is already calibrated.
+
+         Twenty-four candidates from the same hash stream, first acceptable one
+         wins, flattest otherwise. 24 rather than 12 because only ~9% of the
+         green holds a ball (measured, tools/golf_relief.py): at 12 samples a
+         genuinely flat cup is found in 1-0.91^12 = 68% of rounds, at 24 it is
+         89%. The cost is 24 gradient evaluations once per re-tee. This cannot fail to place a cup: a green with no
+         qualifying spot still gets the least-bad one, so there is no loop and
+         no possibility of an unplaced hole. Cup placement stays deterministic
+         per round because the candidate hashes are derived from `round`.
+
+         Solvability is unaffected by construction: the tee sampler in
+         resetBall() runs AFTER this and picks the ball's lie against the cup
+         that ends up here, using the reachToward() budget. Moving the cup to a
+         flatter spot changes what that sampler is solving, not whether it
+         solves it. */
+      const acceptable = SLOPE_ACCEL * REST_SLOPE;
+      let bx = 0;
+      let by = 0;
+      let bestMag = Infinity;
+      for (let i = 0; i < 24; i++) {
+        const rx = hash2(round * 23 + 9 + i * 7, 41);
+        const ry = hash2(round * 31 + 4 + i * 11, 53);
+        const x = b.x + m + (b.w - m * 2) * (0.25 + rx * 0.5);
+        const y = b.y + m + (b.h - m * 2) * (0.2 + ry * 0.6);
+        const s = slopeAt(x, y, hm.x, hm.y, span, tiltAng, tiltMag, gSeed);
+        const mag = Math.hypot(s.gx, s.gy);
+        if (mag < bestMag) {
+          bestMag = mag;
+          bx = x;
+          by = y;
+        }
+        if (mag <= acceptable) break;
+      }
+      cupX = bx;
+      cupY = by;
     };
 
     /**
@@ -1229,7 +1294,13 @@ export default function HeroCanvas() {
            the LINES carry everything, and they are faded at the box edges by the
            same gradient discipline the rest of the layer uses, so the green has
            no visible border. */
-        const LEVELS = 9;
+        /* 9 -> 7 levels (8 drawn lines -> 6). Reviewed on a real display:
+           "there typically aren't this many contours". The levels are
+           re-normalised to each frame's hMin..hMax, so cutting the count widens
+           every band rather than clipping the range — the whole relief is still
+           described, in fewer lines. Pairs with the lower undulation amplitude
+           in heightAt(): less relief AND fewer bands to express it. */
+        const LEVELS = 7;
         ctx.lineWidth = 1;
 
         /* THE CUP IS THE DATUM, and each quantity gets ITS OWN CHANNEL.
@@ -1715,7 +1786,37 @@ export default function HeroCanvas() {
     if (typeof document !== 'undefined' && document.fonts && document.fonts.ready) {
       document.fonts.ready
         .then(() => {
+          const before = playBox();
           layout();
+          const after = playBox();
+
+          /* RE-TEE THE FIRST HOLE IF THE BOX MOVED UNDER IT.
+             layout() re-runs measureCopy(), and the play box's left edge is
+             DERIVED from the measured copy edge. Before the webfont lands
+             copyEdge is the 0.52 fallback; after it, at 1440, the real value is
+             0.578. That moves the box from x=820.8/w=532.8 to x=904.5/w=449.1 —
+             84px right and 84px narrower — but the cup and tee keep the absolute
+             coordinates they were given against the OLD box. So the opening hole
+             was laid out on a green that no longer existed: the reach budget that
+             guarantees it is sinkable in one stroke had been evaluated against
+             the wider box, and the ball was not even re-clamped (the resize
+             observer does that, but the font path never called it).
+             Found by tools/golf_verify_port.py: 40 of 41 rounds matched the
+             offline model bit-for-bit and only round 0 disagreed — cup off by
+             156.9px — because every later round is placed on re-tee, long after
+             the font has settled.
+
+             Guarded on `phase === 'idle'`: re-placing the cup under a ball that
+             is already rolling, or under a player mid-aim, would be a far worse
+             bug than the one being fixed. If the font lands mid-putt the hole
+             stays as it is and the next re-tee corrects it. */
+          if (
+            phase === 'idle' &&
+            (Math.abs(after.x - before.x) > 0.5 || Math.abs(after.w - before.w) > 0.5)
+          ) {
+            placeCup();
+            resetBall(false);
+          }
           if (!running) render(clock, Math.max(intro, 0.001));
         })
         .catch(() => {});

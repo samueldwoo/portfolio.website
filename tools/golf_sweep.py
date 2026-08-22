@@ -286,7 +286,8 @@ def main():
           f"undul={a.undul} tilt={a.tilt}")
 
     if a.selfcheck:
-        g0 = S.Green(w, h, cb, nr, 1, cup_r=a.cupr, capture_speed=a.capture,
+        g0 = S.Green(w, h, cb, nr, 1, copy_edge=probe["copyEdge"],
+                     cup_r=a.cupr, capture_speed=a.capture,
                      max_speed=a.maxspeed, friction=a.friction)
         if not selfcheck(g0, dt):
             sys.exit(2)
@@ -306,7 +307,8 @@ def main():
     # would audit a hole the player never sees.
     measured = {r["round"]: r for r in probe.get("rounds", [])}
     for rnd in todo:
-        g = S.Green(w, h, cb, nr, rnd, cup_r=a.cupr, capture_speed=a.capture,
+        g = S.Green(w, h, cb, nr, rnd, copy_edge=probe["copyEdge"],
+                    cup_r=a.cupr, capture_speed=a.capture,
                     max_speed=a.maxspeed, friction=a.friction,
                     reach_safety=a.reach_safety,
                     downhill_credit=(1.0 / -math.log(a.friction)

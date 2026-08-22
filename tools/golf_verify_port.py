@@ -44,7 +44,10 @@ cb, nr = probe["copyBottom"], probe["narrow"]
 gbad = 0
 gworst = 0.0
 for r in probe["rounds"]:
-    g = Green(w, h, cb, nr, r["round"], reach_safety=RS)
+    # copy_edge is REQUIRED for the wide box: without it Green falls back to the
+    # pre-derivation constant and the cup/ball geometry cannot possibly match.
+    g = Green(w, h, cb, nr, r["round"], reach_safety=RS,
+              copy_edge=probe["copyEdge"])
     d1 = max(abs(g.ball0[0] - r["ball"][0]), abs(g.ball0[1] - r["ball"][1]))
     d2 = max(abs(g.cup_x - r["cup"][0]), abs(g.cup_y - r["cup"][1]))
     gworst = max(gworst, d1, d2)
