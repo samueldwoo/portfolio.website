@@ -195,10 +195,30 @@ html.nav-marker-js .nav-marker {
 .nav-link:hover,
 .nav-cta:hover { color: var(--sage-deep); }
 
-/* THE active state: white type carried by the filled marker underneath. */
+/* THE active state: white type carried by the filled marker underneath.
+   Scoped to `html.nav-marker-js`, because the marker that supplies the fill is
+   positioned by script.js and does not exist otherwise. Unscoped, this rule made
+   the active link WHITE ON OFF-WHITE — measured 1.09:1 — so with JS off or a
+   script 404, "PROJECTS" on /projects and "TRAVEL" on /travel rendered as a ghost
+   gap in the nav bar. Everything else on the site degrades gracefully without
+   JS; this was the one hole. */
 .nav-link.is-active,
 .nav-cta.is-active {
     color: #fff;
+}
+
+/* The no-JS active state: the link carries its own fill instead of borrowing the
+   marker's. Same sage pill, same white type (5.34:1 on --sage), just painted by
+   the link itself. Also the state a reader sees for the instant before
+   script.js runs, so it must be right on its own terms, not a degraded fallback.
+   `html:not(.nav-marker-js)` and NOT a plain `.is-active` rule: an unscoped
+   background would still be in play once the marker exists, so the bar would
+   show two filled things at once. The negation is what makes the two states
+   mutually exclusive rather than merely ordered. */
+html:not(.nav-marker-js) .nav-link.is-active,
+html:not(.nav-marker-js) .nav-cta.is-active {
+    background: var(--sage);
+    border-color: var(--sage);
 }
 
 /* The CTA keeps a hairline so "Connect" still reads as the end of the row,

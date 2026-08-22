@@ -364,7 +364,12 @@ export default function HeroCanvas() {
           ? COPY_EDGE_FALLBACK
           // Clamp so a pathological measurement can neither erase the
           // composition (too high) nor expose copy to full ink (too low).
-          : Math.min(0.66, Math.max(0.3, (h.right - wrapRect.left) / wrapRect.width));
+          /* Ceiling 0.66 -> 0.80. At 0.66 the clamp bound BEFORE the copy did once the
+             gutter narrowed: measured copy edge is 0.622 at 1024 and 0.694 at 900, so the
+             fade began left of the text and ink reached the glyphs (maxAlpha 251 at 1024,
+             250 at 900 -- the solid cup, not a faint contour). The clamp is a guard rail,
+             not the value; measuring is the point. */
+          : Math.min(0.8, Math.max(0.3, (h.right - wrapRect.left) / wrapRect.width));
 
       // Vertical onset — includes .explore-cue.
       const v = inkExtent(inner, COPY_BOTTOM_SEL);
@@ -550,7 +555,12 @@ export default function HeroCanvas() {
            available even in the worst lie, and more from anywhere else. */
         return { x: cssW * 0.16, y: top, w: cssW * 0.68, h };
       }
-      return { x: cssW * 0.48, y: cssH * 0.16, w: cssW * 0.46, h: cssH * 0.68 };
+      /* Derived from the measured copy edge, not a fixed 0.48. The narrow branch
+         already keys off copyBottom; this is the same rule horizontally, and it is what
+         stops the cup drifting onto the copy as the gutter narrows between 900 and
+         1280. The 0.44 floor keeps the green from swallowing a very wide hero. */
+      const left = Math.max(0.44, copyEdge + 0.05);
+      return { x: cssW * left, y: cssH * 0.16, w: cssW * (0.97 - left), h: cssH * 0.68 };
     };
 
     /* Randomise the green itself: fall-line angle, steepness and undulation.

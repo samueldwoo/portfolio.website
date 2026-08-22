@@ -1199,6 +1199,17 @@ a.bubble.ticker:hover::after { transform: translate(2px, -2px); opacity: 1; }
     justify-content: space-between;
     gap: 6px 20px;
 }
+/* A flex item's default `min-width: auto` refuses to shrink below its longest
+   unbreakable word, so a long job title grew the DOCUMENT rather than wrapping:
+   measured at a 390px viewport, a ~79-character unbroken title added 486px and
+   introduced horizontal page scroll. `min-width: 0` lets the item shrink;
+   `overflow-wrap` gives the word permission to break rather than just overflow
+   its own box. Titles are author-controlled today, so this is a guard against
+   the next one, not a fix for current copy. */
+.exp-head > * {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
 .exp-title {
     font-family: var(--display);
     font-weight: 600;
