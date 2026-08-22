@@ -1,22 +1,69 @@
 ---
 /**
- * /stronger/vault — Act II, the hub. PHASE 1 STUB.
+ * /stronger/vault — Act II, the hub.
  *
- * Reaching this page at all is the Phase 1 acceptance test: src/middleware.ts
- * has already verified a signed, unexpired `session` cookie, or this render
- * never happened and she was bounced to the gate instead.
+ * ---------------------------------------------------------------------------
+ * THE SESSION IS RE-VERIFIED HERE, AND THAT IS NOT THEATRE
  *
- * The re-check below is not redundant defense theatre — it is what makes a
- * routing mistake in the middleware degrade to "empty page" instead of
- * "everything is public". If NEEDS_SESSION ever stops matching this path, this
- * page still refuses to render.
+ * src/middleware.ts has already verified a signed, unexpired `session` cookie, or
+ * this render never happened and she was bounced to the gate instead.
  *
- * The rooms are stubs on purpose. Phase 2 fills in `today`, Phase 3 builds
- * `room`. A disabled card that says SOON is a better artifact than a live link
- * to a 404.
+ * The re-check below is what makes a routing mistake in the middleware degrade to
+ * "empty page" instead of "everything is public". If NEEDS_SESSION ever stops
+ * matching this path, this page still refuses to render.
+ *
+ * ---------------------------------------------------------------------------
+ * WHAT THIS PAGE IS FOR NOW
+ *
+ * It used to be a menu. The problem with a menu is that it looks identical whether
+ * or not anything has happened, so the only way for her to find out I had posted was
+ * to open both rooms and compare them against her memory. She had to guess and
+ * check, every time, forever.
+ *
+ * So the hub now answers two questions before she clicks anything:
+ *
+ *   1. WHAT CHANGED SINCE SHE WAS LAST HERE. A quiet marker on each room that has
+ *      something in it, plus one line above the grid. Everything is derived from
+ *      stored records — see status.ts's newSince(); nothing here is estimated and no
+ *      count exists because the layout wanted a badge.
+ *
+ *   2. HOW LONG UNTIL THEY ARE IN THE SAME PLACE. One date in status.ts, rendered
+ *      server-side so both of them see the same number from opposite sides of the
+ *      Atlantic. Invisible when unset.
+ *
+ * THE EMPTY STATE IS THE DESIGN TARGET, not the fallback. Most visits will have
+ * nothing new in them, so "nothing new since you were last here — everything is
+ * exactly where you left it" is the sentence this page says most often, and it has
+ * to read as a room at rest rather than as a zero or a fault.
+ *
+ * ---------------------------------------------------------------------------
+ * IT COUNTS THE VISIT, AND IT HAS TO
+ *
+ * countVisitSafe, not getVisits: THIS PAGE LOAD IS A VISIT, exactly as it is in
+ * room.astro. It is also load-bearing for the markers above, because the baseline
+ * they compare against is Visits.prev, and `prev` only means "her previous visit"
+ * once countVisit has stamped the current one. Reading without counting would leave
+ * `prev` one visit stale and the markers would describe the wrong window.
+ *
+ * The twenty-minute debounce inside countVisit is what makes the markers survive a
+ * refresh — see the VISIT DEBOUNCE and Visits.prev in marks.ts, which document the
+ * interaction and the one accepted consequence of it.
+ *
+ * ---------------------------------------------------------------------------
+ * EVERY READ HERE FAILS SOFT
+ *
+ * This page is the front door. A store that is down must cost her the markers, never
+ * the door: marks.ts's *Safe wrappers already do that by policy, and getSongs()
+ * (which throws by policy, because kv.ts's writes must fail loud) is caught to an
+ * empty array right at the call. An empty array yields no markers, and no markers is
+ * a state this page renders correctly on purpose.
+ * ---------------------------------------------------------------------------
  */
 import { HER_NAME, SESSION_SECRET } from '../../../lib/us/config';
 import { readCookie, verify } from '../../../lib/us/session';
+import { getSongs, wingDate, type SongRecord } from '../../../lib/us/kv';
+import { countVisitSafe, getMarksSafe } from '../../../lib/us/marks';
+import { countdown, newSince } from '../../../lib/us/status';
 
 export const prerender = false;
 
@@ -26,6 +73,51 @@ if (!session) return Astro.redirect('/stronger', 302);
 
 const her = HER_NAME();
 
+/** Today in the wing's timezone. Passed into everything; never re-derived. */
+const today = wingDate();
+
+/**
+ * How far back to look for songs written since her last visit.
+ *
+ * 365, matching today.astro's HISTORY_WINDOW and the ceiling getSongs() enforces,
+ * so this is "everything there is" rather than a window that silently truncates.
+ * That matters for the "I went back and changed an older morning" case
+ * specifically: getSongs orders by DATE, so a note I rewrote today on a morning from
+ * six months ago sits near the bottom of the list, and a 60-row window would simply
+ * never see it.
+ *
+ * The cost is smallest on the tier that is live: on R2 the entire history is one
+ * JSON object, so 365 days costs exactly what 60 does. On Upstash it widens one
+ * MGET — more bytes, same two round trips.
+ */
+const HISTORY_WINDOW = 365;
+
+/**
+ * Three reads, in parallel, because none of them depends on another.
+ *
+ * Two of them hit the marks document and one hits the songs document. On the R2 tier
+ * that is two GETs of the same object, which is a real if small waste — the honest
+ * alternative would be a seventh operation on marks.ts's Store interface returning
+ * marks and visits together, and that interface's own header sets the bar: a new
+ * operation has to justify itself three times over, once per tier. Saving one GET on
+ * one page does not clear it.
+ */
+const [songs, marks, visits] = await Promise.all([
+  getSongs(HISTORY_WINDOW).catch((err): SongRecord[] => {
+    // kv.ts throws on read failure by policy. Here that is decoration failing, so it
+    // degrades to "nothing new" rather than to an error page.
+    console.error('[us] the hub could not read the songs; rendering it without markers.', err);
+    return [];
+  }),
+  getMarksSafe(),
+  countVisitSafe(),
+]);
+
+const fresh = newSince({ today, visits, songs, marks });
+
+/** null when Sam has not set a date, or has set one that has passed. Renders nothing. */
+const until = countdown(today);
+
 const rooms = [
   {
     n: 'line 01',
@@ -33,6 +125,12 @@ const rooms = [
     note: 'whatever I could not stop playing this morning, and why.',
     href: '/stronger/vault/today',
     ready: true,
+    /* The marker is WORDS, not a colour and not a dot on its own. Two reasons, and
+       both are requirements rather than taste: a state carried only by a blue border
+       is invisible to anyone who cannot see the blue, and a bare count is the SaaS
+       badge this feature exists to not be. The dot in the markup below is decoration
+       on top of the words and is aria-hidden accordingly. */
+    fresh: fresh.song,
   },
   {
     n: 'line 02',
@@ -40,6 +138,20 @@ const rooms = [
     note: 'a dark room, a carriage on a rail, and every photo I have of us on it.',
     href: '/stronger/vault/room',
     ready: true,
+    fresh: fresh.studio,
+  },
+  {
+    n: 'line 03',
+    title: 'letters',
+    note: 'the longer things. one at a time, and some of them are sealed.',
+    href: '/stronger/vault/letters',
+    ready: true,
+    /* No `fresh` signal yet. status.ts derives freshness from the song store and
+       the marks store; letters keep their read receipts in their OWN document
+       (data/letters.json / us:letter:*), which status.ts does not read. Wiring
+       it would mean a third store read on every hub render, so it is deliberately
+       left off rather than faked — an always-absent marker is honest, an
+       always-present one would train her to ignore all three. */
   },
 ];
 ---
@@ -56,7 +168,29 @@ const rooms = [
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <!-- Installable-app metadata. `scope: /stronger/` in the manifest keeps the
+         installed app inside the wing, so tapping the icon can never land her on
+         the public portfolio, and `start_url: /stronger/vault` opens at the hub
+         rather than the gate — she already holds a session cookie, so she skips
+         the quiz on every launch.
+
+         DELIBERATELY NO SERVICE WORKER. Every page here is behind a session and
+         several are per-day; a worker that cached the wrong response would serve
+         her a stale room, or worse, hand a cached authorised page to whoever
+         opened the app next. Standalone display, the icon and the black status
+         bar all work without one. The only thing given up is offline, which for
+         a room whose whole content is fetched per visit is not a real loss. -->
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="apple-touch-icon" href="/assets/us/icons/apple-touch-icon.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="[us]">
+    <meta name="theme-color" content="#000000">
     <link rel="stylesheet" href="/css/us.css">
+    <!-- After us.css, never before: us-hub.css overrides .room's resting border on a
+         card that has something new in it, and the cascade order is the only thing
+         making that win. -->
+    <link rel="stylesheet" href="/css/us-hub.css">
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23000'/%3E%3Ctext x='16' y='23' font-family='monospace' font-size='20' font-weight='700' text-anchor='middle' fill='%233e7bff'%3E%5B%5D%3C/text%3E%3C/svg%3E">
 </head>
 <body class="studio">
@@ -75,17 +209,49 @@ const rooms = [
         This is the part of the site nobody else has the address to.
     </p>
 
+    {/* Nothing at all when the date is unset, mistyped, or long past. No
+        placeholder, no "TBD", no empty box — see countdown() in status.ts. */}
+    {until && (
+        <p class="hub-until">
+            <strong class="hub-until-count">{until.count}</strong>
+            {/* Three separate elements spaced by CSS `gap`, not by whitespace in
+                this file. Astro collapses the whitespace between an expression and
+                the element on the next line, which rendered a real "untilTue 8 Sept"
+                the first time this shipped. Explicit boxes with a gap cannot have
+                that bug, and they wrap onto their own lines cleanly on a phone. */}
+            <span class="hub-until-rest">
+                {until.connector && <span class="hub-until-connector">{until.connector}</span>}
+                <time class="hub-until-date" datetime={until.iso}>{until.when}</time>
+                {until.label && <span class="hub-until-label">&mdash; {until.label}</span>}
+            </span>
+        </p>
+    )}
+
     <hr class="studio-rule">
 
     <p class="studio-kicker">the room, by carriage line</p>
 
+    {/* Directly above the cards it describes, because it is a summary of them and
+        not an announcement about the site. `data-any` only changes emphasis — the
+        two states have entirely different words, so nothing depends on noticing a
+        shade of grey. */}
+    {fresh.line && <p class="hub-status" data-any={fresh.any ? 'yes' : 'no'}>{fresh.line}</p>}
+
     <div class="room-grid">
         {rooms.map((room) => (
             room.ready ? (
-                <a class="room" href={room.href}>
+                <a class:list={['room', { 'is-fresh': !!room.fresh }]} href={room.href}>
                     <span class="room-n">{room.n}</span>
                     <h2 class="room-title">{room.title}</h2>
                     <p class="room-note">{room.note}</p>
+                    {/* Inside the <a>, so the words join the link's accessible name:
+                        "line 01, song of the day, ..., something new in here" is
+                        exactly what a screen reader should hear before following it. */}
+                    {room.fresh && (
+                        <p class="room-fresh">
+                            <span class="room-fresh-dot" aria-hidden="true"></span>{room.fresh}
+                        </p>
+                    )}
                 </a>
             ) : (
                 /* A <div> rather than an <a aria-disabled>: a disabled link is

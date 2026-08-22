@@ -123,8 +123,53 @@ export interface Visits {
   count: number;
   /** Epoch millis of the first counted visit. 0 before there is one. */
   first: number;
-  /** Epoch millis of the most recent counted visit. */
+  /**
+   * Epoch millis of the visit she is IN. Not "the last time she was here".
+   *
+   * Precise wording matters because the debounce below means this value does not
+   * move while she is browsing: countVisit stamps it once when a visit begins and
+   * then returns it unchanged for the next twenty minutes. So after countVisit
+   * has run, `last` is always the start of the CURRENT visit.
+   */
   last: number;
+  /**
+   * Epoch millis of the visit BEFORE the current one. 0 when there isn't one.
+   *
+   * ---------------------------------------------------------------------------
+   * THIS FIELD IS THE WHOLE REASON "NEW SINCE YOUR LAST VISIT" CAN WORK
+   *
+   * The hub wants one number: the instant her previous visit began, so it can ask
+   * the song store "what has been written since then". The obvious way to get it
+   * is to snapshot `last` in the page before calling countVisit, and that way is
+   * WRONG in a way that only shows up on the second page view:
+   *
+   *   render 1  stored last = Monday. Page snapshots Monday, countVisit writes
+   *             last = now. Baseline is Monday. Correct.
+   *   render 2  she refreshes four minutes later. Page snapshots `last`, which is
+   *             now FOUR MINUTES AGO, because render 1 wrote it. countVisit is
+   *             inside the debounce so it changes nothing and reports nothing.
+   *             Baseline is four minutes ago. Every marker vanishes, and she has
+   *             not clicked a thing.
+   *
+   * There is no in-page fix for that: once `last` has been overwritten, Monday is
+   * simply gone, and a snapshot taken during render 2 cannot recover a value that
+   * is no longer stored anywhere. The snapshot has to be DURABLE, which makes it a
+   * field, not a local.
+   *
+   * With it, the rule collapses to one line with no branching at all — after
+   * countVisit has run, the baseline is `prev`, whether this render counted a new
+   * visit or was swallowed by the debounce. That is exactly the invariant `last`
+   * documents above: `last` is the current visit, `prev` is the one before it.
+   *
+   * 0 IS "NO BASELINE", AND CALLERS MUST TREAT IT AS SUPPRESS-EVERYTHING RATHER
+   * THAN AS THE EPOCH. It is 0 on her very first visit (nothing preceded it) and
+   * on the first render after this field shipped, because records written before
+   * then have no `prev` and parseVisits defaults it. Reading 0 as a timestamp
+   * means "since 1970", i.e. everything ever written is new, i.e. the loudest
+   * possible false alarm on exactly the two occasions we know least. It self-heals
+   * on her next genuine visit, when countVisit writes a real value.
+   */
+  prev: number;
 }
 
 /**
@@ -153,7 +198,7 @@ export function emptyMark(id: string): Mark {
   return { id, kept: false, note: '', seen: 0, at: 0 };
 }
 
-export const NO_VISITS: Visits = { count: 0, first: 0, last: 0 };
+export const NO_VISITS: Visits = { count: 0, first: 0, last: 0, prev: 0 };
 
 /* ============================================================================
    VALIDATION
@@ -298,6 +343,12 @@ function parseVisits(raw: unknown): Visits {
     count: count(obj.count),
     first: count(obj.first),
     last: count(obj.last),
+    // Absent on every record written before `prev` existed, and count() turns that
+    // into 0 — which the field's own comment defines as "no baseline, suppress
+    // everything" rather than as the epoch. That is the safe direction: a returning
+    // visitor sees no markers for one render instead of being told the entire
+    // archive is new.
+    prev: count(obj.prev),
   };
 }
 
@@ -313,6 +364,19 @@ function parseVisits(raw: unknown): Visits {
    same visit, short enough that coming back after dinner is a new one. The
    debounce lives in the STORE rather than in the page, so every future caller
    inherits it and cannot accidentally double-count.
+
+   ONE CONSEQUENCE WORTH STATING, because the hub's "new since your last visit"
+   markers ride on it: the window is measured from the START of a visit, not from
+   her last click. So a session that runs past twenty minutes ends with a page view
+   that opens a NEW visit, `prev` advances to this session's own start, and the
+   markers go quiet mid-session even though she never left.
+
+   That is accepted, not overlooked. The alternative — sliding the window forward
+   on every page view — would mean an afternoon of browsing never ends, so a genuine
+   return after dinner would not count as a visit and the markers would then be
+   stale in the other direction. Twenty minutes of markers is plenty of invitation,
+   and going quiet after twenty minutes IN the room is a defensible thing for them
+   to do.
    ========================================================================= */
 export const VISIT_DEBOUNCE_MS = 20 * 60 * 1000;
 
@@ -525,9 +589,18 @@ function upstashStore(url: string, token: string): Store {
          sentence is not worth a lock on the path that renders her room. */
       const [counted] = await run([
         ['HINCRBY', VISITS_KEY, 'count', 1],
-        ['HSET', VISITS_KEY, 'last', String(nowMs), 'first', String(first)],
+        /* `prev` is written from `before.last` IN THE SAME COMMAND that overwrites
+           `last`, which is the point: the value being replaced is the one the hub
+           needs, and after this HSET it exists nowhere else. On her first ever visit
+           before.last is 0, which is correctly "there was no previous visit". */
+        ['HSET', VISITS_KEY, 'last', String(nowMs), 'first', String(first), 'prev', String(before.last)],
       ]);
-      return { count: Math.max(1, Number(counted) || before.count + 1), first, last: nowMs };
+      return {
+        count: Math.max(1, Number(counted) || before.count + 1),
+        first,
+        last: nowMs,
+        prev: before.last,
+      };
     },
   };
 }
@@ -972,6 +1045,9 @@ function r2Store(): Store {
         count: unchanged.count + 1,
         first: unchanged.first > 0 ? unchanged.first : nowMs,
         last: nowMs,
+        // The value `last` is about to lose, kept because the hub's "new since your
+        // last visit" baseline is exactly this number and nothing else stores it.
+        prev: unchanged.last,
       };
       doc.visits = next;
       /* A conflict here is IGNORED rather than retried or thrown. The other writer
@@ -1051,6 +1127,12 @@ function memoryStore(): Store {
         count: memory.visits.count + 1,
         first: memory.visits.first > 0 ? memory.visits.first : nowMs,
         last: nowMs,
+        /* Same as the other two tiers: carry the outgoing `last` forward. This
+           reads the OLD value because the whole object literal is evaluated before
+           the assignment lands — which is fine, but it is the kind of thing a later
+           refactor to `memory.visits.last = nowMs` (mutating in place instead of
+           replacing) would silently break, so it is worth saying out loud. */
+        prev: memory.visits.last,
       };
       return { ...memory.visits };
     },

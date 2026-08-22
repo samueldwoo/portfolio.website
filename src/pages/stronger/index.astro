@@ -73,6 +73,24 @@ const showPlaceholderWarning = import.meta.env.DEV && gateNeedsReview();
     <title>access terminal</title>
     <!-- Absolute path: this page is at /stronger, so "css/us.css" would
          resolve to /stronger/css/us.css and 404. -->
+    <!-- Installable-app metadata. `scope: /stronger/` in the manifest keeps the
+         installed app inside the wing, so tapping the icon can never land her on
+         the public portfolio, and `start_url: /stronger/vault` opens at the hub
+         rather than the gate — she already holds a session cookie, so she skips
+         the quiz on every launch.
+
+         DELIBERATELY NO SERVICE WORKER. Every page here is behind a session and
+         several are per-day; a worker that cached the wrong response would serve
+         her a stale room, or worse, hand a cached authorised page to whoever
+         opened the app next. Standalone display, the icon and the black status
+         bar all work without one. The only thing given up is offline, which for
+         a room whose whole content is fetched per visit is not a real loss. -->
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="apple-touch-icon" href="/assets/us/icons/apple-touch-icon.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="[us]">
+    <meta name="theme-color" content="#000000">
     <link rel="stylesheet" href="/css/us.css">
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23000'/%3E%3Ctext x='16' y='23' font-family='monospace' font-size='20' font-weight='700' text-anchor='middle' fill='%233e7bff'%3E%5B%5D%3C/text%3E%3C/svg%3E">
 </head>

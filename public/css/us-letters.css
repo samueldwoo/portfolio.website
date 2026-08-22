@@ -1,0 +1,649 @@
+/* ============================================================
+   us-letters.css — the only room in the wing that is PROSE.
+
+   Loaded by /stronger/vault/letters after us.css (which owns
+   every token used here) and us-song.css (which owns the wing's
+   shared primitives: .notice, .sr-only, .dj-*). Paths are
+   ABSOLUTE because this page lives at /stronger/vault/letters
+   and a relative href would resolve to /stronger/vault/css/.
+
+   ------------------------------------------------------------
+   WHY THIS FILE IS NOT JUST "us-song.css WITH WIDER TEXT"
+
+   Every other surface in this wing is a LABEL. A carriage
+   number, a reaction chip, a date, a 200-character note. Space
+   Grotesk and DM Mono are exactly right for labels: tight,
+   geometric, mechanical, the vocabulary of a machine in a dark
+   room. Set 700 words of a letter in either of them and it is
+   work to read after the second paragraph — a display grotesque
+   has too much personality per glyph to disappear, and
+   disappearing is the entire job of a reading face.
+
+   So this page has its own type, its own measure, its own
+   leading and its own ink, and none of them are shared with
+   anything else in the wing. That is the feature. The room
+   around the letter is still the same black studio under the
+   same blue LED; the letter itself is a page lying in it.
+
+   ------------------------------------------------------------
+   THE ONE RULE STILL HOLDS
+
+   Nothing here is warm, tinted or graded. us.css's rule is that
+   the photographs are the only warm objects in the wing, and a
+   sheet of paper is not a photograph: the sheet is one step off
+   pure black, the ink is neutral grey, the only colour is the
+   blue that was already in the room. A cream "paper" background
+   was tried on paper (so to speak) and rejected — it would have
+   been the only warm surface in the entire wing and it would
+   have read as a different website.
+   ============================================================ */
+
+/* ------------------------------------------------------------
+   TOKENS, SCOPED TO THIS PAGE
+
+   Declared on `.letters` rather than on :root because us.css is
+   shared by every page in the wing and these four values are
+   meaningless anywhere else. A reading ink on the hub would be
+   an invitation to use it for a label.
+   ------------------------------------------------------------ */
+.letters {
+    /* The sheet. One step off --void, not --machine: --machine is
+       the colour of a MACHINE BODY and it is used for every card
+       in the wing, so a letter on it would read as another card.
+       #101114 is barely a surface, which is the point — it lifts
+       the text off pure black without becoming an object. */
+    --letter-sheet: #101114;
+    --letter-sheet-edge: #24262c;
+
+    /* Body prose. NOT --chalk (#fff, 21:1 on void) and NOT
+       --chalk-dim (#d7d9dd, the UI text colour).
+
+       21:1 is the number people reach for and it is the wrong
+       one for extended dark-mode reading: pure white on near
+       black haloes, the counters fill in, and after a few
+       hundred words the glyphs smear. #d2d6dd measures 12.95:1
+       on --letter-sheet — comfortably past AAA's 7:1 for body
+       text with room to spare, and low enough that a long
+       paragraph at midnight does not glare. Computed, not
+       eyeballed.
+
+       It is deliberately a DIFFERENT value from --chalk-dim so
+       that "reading ink" and "interface text" cannot silently
+       become one token that gets tuned for the wrong one. */
+    --letter-ink: #d2d6dd;
+
+    /* Datelines, signoffs, counters. --concrete-4 exactly, so it
+       inherits us.css's audited value: 6.87:1 on the sheet,
+       7.64:1 on --void, both above the wing's --concrete-3
+       floor of 5.76:1. */
+    --letter-ink-dim: var(--concrete-4);
+
+    /* THE READING FACE, AND WHY THERE IS NO WEBFONT HERE.
+
+       A serif is the right call for the only long-form page in
+       the wing, and the stack is a SYSTEM stack on purpose:
+
+       - The page whose entire product is uninterrupted reading
+         is the worst possible page on which to introduce a font
+         swap. `display=swap` reflows a paragraph under her eyes
+         mid-sentence; `display=optional` usually just does not
+         load the font at all on a cold connection. Both are
+         worse than a face that is already installed.
+       - Zero extra bytes on a phone on a train, which is where
+         this gets read.
+       - ui-serif resolves to New York on iOS and macOS, Iowan
+         Old Style on older Apple systems, Georgia on Windows,
+         Noto Serif on Android. Every one of those is a genuine
+         reading face designed for extended text.
+
+       WHAT WE GIVE UP, stated plainly: the letter does not look
+       byte-identical on her phone and on my laptop. Measure is
+       held in `ch`, so the line length stays right on all of
+       them, and the x-heights differ by a few percent. That is
+       the whole cost, and it is smaller than a reflow. */
+    --letter-serif:
+        ui-serif, "New York", "Iowan Old Style", "Palatino Linotype",
+        Palatino, Georgia, "Times New Roman", Times, serif;
+}
+
+/* ============================================================
+   THE SHELF — the index view
+   ============================================================ */
+
+/* The one-line answer to "is there anything for me". Deliberately
+   the same mono voice as .studio-kicker: this is a status line,
+   not prose, and it should not compete with the letters below it. */
+.lt-status-line {
+    font-family: var(--us-mono);
+    font-size: 0.78rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--blue-glow);       /* 8.73:1 on the sheet, 9.71:1 on void */
+    margin: 18px 0 0;
+}
+.lt-status-line[data-quiet="1"] { color: var(--concrete-4); }
+
+.lt-section-head {
+    font-family: var(--us-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--concrete-4);
+    margin: 0 0 14px;
+}
+
+.lt-shelf {
+    display: grid;
+    gap: 12px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+/* A card is a whole-area link. min-height clears the 44px target
+   floor on its own, and the padding puts it well past it. */
+.lt-card {
+    display: block;
+    position: relative;
+    min-height: 44px;
+    padding: 18px 20px;
+    background: var(--machine);
+    border: 1px solid var(--concrete-1);
+    border-radius: 2px;
+    text-decoration: none;
+    color: var(--chalk-dim);
+    transition: border-color 200ms ease, background 200ms ease, transform 200ms ease;
+}
+.lt-card:hover,
+.lt-card:focus-visible {
+    background: var(--machine-2);
+    border-color: var(--blue-light);
+    transform: translateY(-2px);
+}
+.lt-card:focus-visible {
+    outline: 2px solid var(--blue-light);
+    outline-offset: 2px;
+}
+
+/* The oldest unread one. Bigger, and lit from the left edge —
+   the same LED that washes the floor in the studio, doing the
+   one job a hero card needs: saying "start here" without a
+   badge that says START HERE. */
+.lt-card--hero {
+    padding: 24px 24px 22px;
+    border-left: 3px solid var(--blue-light);
+    background:
+        linear-gradient(100deg, rgba(62, 123, 255, 0.10), transparent 42%),
+        var(--machine);
+}
+
+.lt-card-meta {
+    font-family: var(--us-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--letter-ink-dim);
+    margin: 0;
+}
+
+.lt-card-title {
+    font-family: var(--us-display);
+    font-size: 1.2rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.3;
+    color: var(--chalk);
+    margin: 8px 0 0;
+}
+.lt-card--hero .lt-card-title {
+    font-size: clamp(1.4rem, 4vw, 1.85rem);
+}
+
+/* A letter with no title. Set in the reading face and in italics
+   so it reads as a description rather than as a name — the same
+   move us-song.css makes with "a song I could not name". */
+.lt-card-title--untitled {
+    font-family: var(--letter-serif);
+    font-style: italic;
+    font-weight: 400;
+    color: var(--chalk-dim);
+}
+
+/* First line of a letter she has ALREADY read. Shown only there:
+   on an unread card it would be a spoiler, on a re-read card it
+   is the thing that reminds her which letter this is. Set in the
+   reading face because it is a fragment of the letter itself. */
+.lt-card-excerpt {
+    font-family: var(--letter-serif);
+    font-size: 0.98rem;
+    line-height: 1.55;
+    color: var(--letter-ink-dim);
+    margin: 8px 0 0;
+    /* Two lines, then ellipsis. -webkit-line-clamp is the only
+       thing every engine implements; the standard `line-clamp`
+       is listed alongside it so this stops being prefixed the
+       day it ships. Falls back to simply showing both lines. */
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+}
+
+/* "new" — the only badge on the shelf, and it carries a WORD and
+   not just a colour, because "read" versus "unread" told by hue
+   alone is not told at all. */
+.lt-new {
+    display: inline-block;
+    font-family: var(--us-mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--void);
+    background: var(--blue-glow);   /* dark text on a light chip: 9.71:1 */
+    padding: 2px 7px;
+    border-radius: 2px;
+    margin: 0 0 10px;
+}
+
+/* ---- sealed --------------------------------------------------
+   A <div>, never an <a aria-disabled>. A disabled link is still
+   a link to a keyboard and to most screen readers, and
+   aria-disabled does not prevent activation — us.css's .room
+   makes the same call for the same reason. No href, no problem.
+
+   Dashed, and NOT dimmed with opacity: us.css documents the bug
+   that taught this, where `opacity: .55` dragged a card's prose
+   to 1.97:1. "Not yet" is carried by the border style and the
+   word "sealed", both of which survive at full contrast.
+   ------------------------------------------------------------ */
+.lt-card--sealed {
+    border-style: dashed;
+    border-color: var(--concrete-2);
+    background: transparent;
+    cursor: default;
+}
+.lt-seal {
+    display: inline-block;
+    font-family: var(--us-mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--concrete-4);
+    border: 1px solid var(--concrete-2);
+    padding: 2px 7px;
+    margin: 0 0 10px;
+}
+.lt-opens {
+    font-family: var(--us-display);
+    font-size: 1.1rem;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    color: var(--chalk-dim);
+    margin: 0;
+}
+/* The line on the outside of the envelope. Italic serif, so it
+   is visibly a fragment of a letter and not a UI label. */
+.lt-teaser {
+    font-family: var(--letter-serif);
+    font-style: italic;
+    font-size: 1rem;
+    line-height: 1.55;
+    color: var(--letter-ink-dim);
+    margin: 10px 0 0;
+    max-width: 46ch;
+}
+
+.lt-empty {
+    font-family: var(--letter-serif);
+    font-size: 1.05rem;
+    line-height: 1.65;
+    color: var(--letter-ink-dim);
+    max-width: 48ch;
+    margin: 0;
+}
+
+/* ============================================================
+   THE READING VIEW
+
+   Everything below this line exists to make several hundred
+   words comfortable on a phone at midnight. If a rule here is
+   not doing that, it should not be here.
+   ============================================================ */
+
+/* The header of the reading view: a small wordmark that is also
+   the way back, so the letter's own title can be the <h1>. */
+.lt-topbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 18px;
+    align-items: baseline;
+    justify-content: space-between;
+    margin: 0 0 clamp(20px, 4vw, 34px);
+}
+.lt-topbar-mark {
+    font-family: var(--us-display);
+    font-weight: 700;
+    font-size: 1.15rem;
+    letter-spacing: -0.03em;
+    color: var(--chalk);
+    text-decoration: none;
+    /* 44px of vertical target on a link that sits in a text row. */
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding-right: 4px;
+}
+.lt-topbar-mark:focus-visible {
+    outline: 2px solid var(--blue-light);
+    outline-offset: 3px;
+}
+.lt-topbar-mark .us-mark-bracket { color: var(--blue-light); }
+.lt-topbar-where {
+    font-family: var(--us-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--concrete-4);
+    margin: 0;
+}
+
+/* ---- THE SHEET ---------------------------------------------
+   MEASURE IS THE WHOLE POINT OF THIS BLOCK.
+
+   `60ch` is set on the sheet, whose font is the reading serif,
+   so one `ch` is the advance width of "0" in the face that
+   actually renders the prose. In a Georgia-class serif that
+   works out around 66-70 rendered characters per line, which
+   sits inside the 45-75 band and near the comfortable end of it.
+
+   The padding is ADDED to the max-width rather than eaten out of
+   it — `calc(60ch + var(--lt-pad) * 2)` — because a fixed
+   max-width with inner padding silently narrows the measure at
+   every breakpoint, and the measure is the one number on this
+   page that must not drift.
+   ------------------------------------------------------------ */
+/* ONE class owns the column width, and every block in the reading
+   view carries it. That is not tidiness: `ch` resolves against
+   the element's OWN font, so a wrapper left in Space Grotesk
+   would compute a different 60ch from the sheet's and her reply
+   would sit a few percent wider than the letter it answers. One
+   selector, one font context, one measure. */
+.lt-column {
+    --lt-pad: clamp(20px, 5vw, 46px);
+    font-family: var(--letter-serif);
+    /* Larger than the wing's body size, because this is the one
+       page that is read rather than scanned. Fluid between
+       ~17px and ~19.5px. */
+    font-size: clamp(1.06rem, 0.99rem + 0.42vw, 1.22rem);
+    max-width: calc(60ch + var(--lt-pad) * 2);
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.lt-sheet {
+    padding: var(--lt-pad);
+    background: var(--letter-sheet);
+    border: 1px solid var(--letter-sheet-edge);
+    border-radius: 2px;
+    /* A single blue hairline along the top edge: the LED strip in
+       the room catching the near edge of the page. One inset
+       shadow, no blur, no bloom — the letter is lit BY the room,
+       it does not glow on its own. */
+    box-shadow: inset 0 1px 0 rgba(62, 123, 255, 0.16);
+}
+
+.lt-dateline {
+    font-family: var(--us-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--letter-ink-dim);
+    margin: 0 0 10px;
+}
+
+.lt-title {
+    font-family: var(--us-display);
+    font-size: clamp(1.55rem, 5vw, 2.15rem);
+    font-weight: 600;
+    letter-spacing: -0.03em;
+    line-height: 1.15;
+    color: var(--chalk);
+    margin: 0 0 clamp(18px, 3vw, 26px);
+    /* Stops a two-word title breaking to a lonely second line. */
+    text-wrap: balance;
+}
+.lt-title--untitled {
+    font-family: var(--letter-serif);
+    font-style: italic;
+    font-weight: 400;
+    letter-spacing: 0;
+    color: var(--chalk-dim);
+}
+
+/* ---- THE PROSE ---------------------------------------------
+   The product.
+   ------------------------------------------------------------ */
+.lt-prose {
+    color: var(--letter-ink);
+    /* 1.72 rather than the 1.5-1.6 used elsewhere in the wing.
+       Light type on a dark ground needs more leading than dark
+       on light at the same size: the glyphs bloom slightly, the
+       lines crowd, and the eye loses its place on the return
+       sweep. This is the single cheapest thing that makes a long
+       dark-mode paragraph readable. */
+    line-height: 1.72;
+    /* Light-on-dark renders visually bolder than dark-on-light at
+       the same weight, so macOS/iOS subpixel smoothing thickens
+       an already-thick stem. `antialiased` gives back the
+       intended weight. It is a real improvement here and a bad
+       default everywhere else, which is why it is on this one
+       selector and not on the body. */
+    -webkit-font-smoothing: antialiased;
+    /* Widow control where it exists, ignored where it does not. */
+    text-wrap: pretty;
+    /* No hyphenation: a hyphenated line break in a personal
+       letter reads as a newspaper column. */
+    hyphens: none;
+}
+.lt-prose p {
+    margin: 0 0 1.15em;
+    /* Never justified. Justification without a hyphenation engine
+       opens rivers of whitespace, and at a 60ch measure on a
+       phone it is unreadable. Left-aligned, ragged right. */
+    text-align: left;
+}
+.lt-prose p:last-child { margin-bottom: 0; }
+
+/* A closing line, set apart from the prose but in the same face —
+   it is part of the letter, not a caption on it. */
+.lt-signoff {
+    font-family: var(--letter-serif);
+    font-size: 1.02em;
+    line-height: 1.6;
+    color: var(--letter-ink);
+    margin: 1.6em 0 0;
+    padding-top: 1.1em;
+    border-top: 1px solid var(--letter-sheet-edge);
+}
+
+/* ---- HER HALF ----------------------------------------------
+   Deliberately the SAME reading face as the letter and a
+   deliberately DIFFERENT surface. /api/us/reply's page makes the
+   same call and states the reason: a day is an exchange, so her
+   half must not look like a receipt stapled to the bottom of
+   mine. Same type, mirrored accent, one step up in elevation.
+   ------------------------------------------------------------ */
+/* Carries .lt-column in the markup, so it is exactly as wide as
+   the sheet above it. */
+.lt-hers {
+    margin-top: clamp(22px, 4vw, 34px);
+}
+
+.lt-reply-card {
+    padding: var(--lt-pad);
+    background: var(--machine-2);
+    /* Blue-BRAND on her side against blue-LIGHT on the sheet's
+       top edge: the same light source, reflected rather than
+       direct. */
+    border: 1px solid var(--concrete-1);
+    border-left: 3px solid var(--blue-brand);
+    border-radius: 2px;
+}
+.lt-reply-card .lt-prose { color: var(--letter-ink); }
+
+.lt-hers-head {
+    font-family: var(--us-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--concrete-4);
+    margin: 0 0 12px;
+}
+
+/* The <summary> that opens the form. A real disclosure widget, so
+   it collapses with no JavaScript at all. */
+.lt-write-summary {
+    display: inline-block;
+    font-family: var(--us-mono);
+    font-size: 0.76rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--blue-glow);
+    cursor: pointer;
+    /* 44px, because a <summary> is a control. */
+    min-height: 44px;
+    padding: 13px 2px;
+}
+.lt-write-summary:focus-visible {
+    outline: 2px solid var(--blue-light);
+    outline-offset: 2px;
+}
+
+/* The counter under the textarea. aria-hidden in the markup: a
+   live region that fires on every keystroke is actively hostile
+   to a screen reader, and `maxlength` already stops her at the
+   limit without needing to be announced. */
+.lt-count {
+    font-family: var(--us-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    color: var(--concrete-4);
+    margin: 0;
+    text-align: right;
+}
+.lt-count[data-over="1"] { color: #ffb4b4; }
+
+/* Her textarea wants to be TALL, and it wants to be set in the
+   face she is answering. The wing's .dj-textarea is 132px of
+   Space Grotesk, sized for a one-line note about a song; a
+   four-row box is a box that tells her to keep it short, and
+   composing a letter in the label face is composing it in the
+   wrong voice.
+
+   17px, NOT smaller: us-song.css's "16px floor. Do not reduce."
+   is about iOS Safari zooming the viewport on focus, and this
+   goes up from there rather than down. */
+.lt-write .dj-textarea {
+    min-height: 40vh;
+    font-family: var(--letter-serif);
+    font-size: 1.0625rem;
+    line-height: 1.68;
+    color: var(--letter-ink);
+}
+
+/* Small positional adjustments that would otherwise be inline
+   `style` attributes. This repo keeps its CSS in files. */
+.lt-card-meta--under { margin-top: 8px; }
+.lt-dateline--after  { margin: 1.2em 0 0; }
+.lt-nav-label--after { margin: 0 0 0 8px; margin-right: 0; }
+
+/* ---- prev / next -------------------------------------------
+   Between OPEN letters only, in written order. A <nav> with real
+   links, so it works with JavaScript off and reads correctly to
+   a screen reader.
+   ------------------------------------------------------------ */
+.lt-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: space-between;
+    margin-top: clamp(26px, 5vw, 40px);
+}
+.lt-nav a,
+.lt-nav span {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 10px 14px;
+    font-family: var(--us-mono);
+    font-size: 0.74rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    border: 1px solid var(--concrete-2);
+    border-radius: 2px;
+    text-decoration: none;
+    color: var(--chalk-dim);
+    max-width: 100%;
+}
+.lt-nav a:hover { border-color: var(--blue-light); color: var(--chalk); }
+.lt-nav a:focus-visible {
+    outline: 2px solid var(--blue-light);
+    outline-offset: 2px;
+}
+/* The end of the row. A <span>, not a dead link. */
+.lt-nav span {
+    color: var(--concrete-3);        /* 5.76:1 on void — the wing's floor */
+    border-style: dashed;
+}
+.lt-nav-label { font-size: 0.62rem; opacity: 1; margin-right: 8px; color: var(--concrete-4); }
+
+/* ============================================================
+   MOTION
+
+   There is very little of it, and all of it is removable.
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+    .lt-card { transition: none; }
+    .lt-card:hover,
+    .lt-card:focus-visible { transform: none; }
+}
+
+/* ============================================================
+   PRINT
+
+   A letter is the one thing in this wing somebody might
+   reasonably want on paper. Ink on white, no chrome, no forms,
+   and the measure held — a printed page at 60ch is right for
+   exactly the same reason the screen one is.
+   ============================================================ */
+@media print {
+    .letters {
+        background: #fff !important;
+        background-image: none !important;
+        color: #000;
+    }
+    .lt-topbar,
+    .lt-nav,
+    .lt-write,
+    .lt-status,
+    .notice,
+    .studio-foot,
+    .studio-rule { display: none !important; }
+
+    .lt-sheet,
+    .lt-reply-card {
+        background: #fff !important;
+        border: 0 !important;
+        box-shadow: none !important;
+        max-width: 100%;
+        padding: 0;
+    }
+    .lt-prose,
+    .lt-title,
+    .lt-signoff { color: #000 !important; }
+    .lt-dateline,
+    .lt-hers-head { color: #444 !important; }
+    /* Keep her half from being orphaned onto its own sheet. */
+    .lt-reply-card { break-inside: avoid; }
+}

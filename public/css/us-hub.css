@@ -1,0 +1,179 @@
+/* ============================================================
+   us-hub.css — the two things the hub says out loud.
+
+   Loaded ONLY by /stronger/vault, and only ever AFTER us.css:
+   every token used below is declared there, and one rule here
+   (.room.is-fresh) deliberately overrides a resting border that
+   us.css sets. Load it first and the border rule silently loses.
+
+   Path is ABSOLUTE (/css/us-hub.css) for the reason us.css
+   states: this page lives at /stronger/vault, so a relative
+   href would resolve to /stronger/vault/css/... and 404.
+
+   THE ONE RULE STILL HOLDS. Nothing in here is warm. Blue is
+   light in the room — it is the wash on a card that has
+   something in it, never a "notification" colour, and never the
+   only thing carrying a state. Every state below is spelled out
+   in words in the markup; the colour is on top of the words.
+
+   CONTRAST, computed rather than eyeballed, on --void #000
+   unless stated:
+     --chalk      #ffffff  21.00:1
+     --chalk-dim  #d7d9dd  15.22:1
+     --blue-glow  #7fb2ff   9.71:1  (8.49:1 on --machine #15161a)
+     --concrete-4 #9a9ca1   7.68:1
+   The floor for the wing is --concrete-3 at 5.76:1, so all four
+   clear it with room to spare.
+
+   NO ANIMATION ANYWHERE IN THIS FILE, which is a design decision
+   and not an omission: a pulsing dot is the exact visual idiom
+   of an unread-message badge, and this is meant to read as a
+   light left on in a room. There is consequently nothing for
+   prefers-reduced-motion to reduce — us.css keeps its own
+   reduced-motion block for .room's hover transform, and nothing
+   here touches it.
+   ============================================================ */
+
+/* ---------- the countdown ----------------------------------
+   Renders only when Sam has set a date. See NEXT_TIME in
+   src/lib/us/status.ts.
+
+   Laid out as a baseline-aligned row so the big number and the
+   small type sit on one line, and wraps to two on a narrow
+   phone rather than shrinking the number. `align-items:
+   baseline` is what keeps the mono caps optically seated
+   against the display face instead of floating mid-cap.
+   ---------------------------------------------------------- */
+.hub-until {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 12px;
+    margin: 26px 0 0;
+    max-width: 46ch;   /* matches .studio-lede's measure, so the block reads as one column */
+}
+
+.hub-until-count {
+    font-family: var(--us-display);
+    /* Deliberately smaller than .studio-tag and larger than the lede: this is the
+       second-loudest thing on the page, never the first. The wordmark stays the
+       first. */
+    font-size: clamp(1.5rem, 4.6vw, 2.2rem);
+    font-weight: 600;
+    letter-spacing: -0.03em;
+    line-height: 1.05;
+    color: var(--chalk);
+}
+
+/* inline-flex with a gap, NOT whitespace between inline elements. The connector,
+   the date and the label are three boxes and the space between them is `gap`,
+   because Astro collapses the whitespace around a template expression and the
+   first version of this rendered a literal "untilTue 8 Sept". Spacing that lives
+   in CSS cannot be eaten by a compiler, and on a narrow phone the three parts wrap
+   onto their own lines instead of breaking mid-phrase. */
+.hub-until-rest {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.2em 0.45em;
+    font-family: var(--us-mono);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--concrete-4);
+}
+
+/* The date itself, which is the one piece of the line that is a fact rather than
+   a phrasing — so it gets the light. It is also a real <time datetime>, so this
+   is styling something that already means something. */
+.hub-until-date {
+    color: var(--blue-glow);
+}
+
+/* Sam's label. The em dash lives in the markup rather than in a ::before, so the
+   separator does not exist on the renders where the label does not. */
+.hub-until-label {
+    color: var(--concrete-4);
+}
+
+/* ---------- the "what changed" summary --------------------- */
+.hub-status {
+    max-width: 52ch;
+    margin: 0 0 18px;
+    font-size: 0.98rem;
+    line-height: 1.55;
+    color: var(--chalk-dim);
+}
+
+/* The calm state. Dimmer, because it is a room at rest and should not compete
+   with the cards — but still 7.68:1, because "nothing new" is a sentence she is
+   meant to read and believe, not a greyed-out placeholder. The words differ
+   completely between the two states, so this shade is emphasis and never the
+   signal. */
+.hub-status[data-any='no'] {
+    color: var(--concrete-4);
+}
+
+/* ---------- a room with something in it --------------------
+   A light left on, not a badge: the resting border warms from
+   concrete to --blue-brand and the words say what it means.
+
+   BOTH the resting rule and the interactive rule are restated
+   here on purpose. us.css sets `.room:hover, .room:focus-visible
+   { border-color: var(--blue-light) }` at the same specificity
+   as `.room.is-fresh`, and because this file loads later, the
+   resting colour would otherwise beat hover and focus — a card
+   with something new in it would stop responding to the pointer
+   and, much worse, stop showing a border change on keyboard
+   focus. Pairing the two rules is cheaper and more obvious than
+   a :not(:hover):not(:focus-visible) chain, and it keeps the
+   focus ring (a separate outline in us.css) intact regardless.
+   ---------------------------------------------------------- */
+.room.is-fresh {
+    border-color: var(--blue-brand);
+}
+.room.is-fresh:hover,
+.room.is-fresh:focus-visible {
+    border-color: var(--blue-light);
+}
+
+.room-fresh {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 14px 0 0;
+    font-family: var(--us-mono);
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    /* 8.49:1 against the card's --machine body. */
+    color: var(--blue-glow);
+}
+
+/* Decoration, and marked aria-hidden in the markup. It carries no information the
+   adjacent words do not already carry, which is the only reason a 7px dot is
+   allowed to exist here at all. */
+.room-fresh-dot {
+    flex: 0 0 auto;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--blue-glow);
+    /* The bloom is what makes it read as a source rather than a sticker, and it is
+       the same trick the studio uses: --blue-light spilling off a --blue-glow core. */
+    box-shadow: 0 0 8px var(--blue-light);
+}
+
+/* ---------- forced colours ---------------------------------
+   In a high-contrast / forced-colours mode the browser replaces
+   every colour above, which would leave the dot and the warmed
+   border indistinguishable from the plain card. That is fine and
+   is precisely why the state is also written in words — but the
+   dot becomes a meaningless filled circle, so it is dropped
+   rather than left as a decoration the user has to interpret.
+   ---------------------------------------------------------- */
+@media (forced-colors: active) {
+    .room-fresh-dot {
+        display: none;
+    }
+}

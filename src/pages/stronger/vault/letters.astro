@@ -1,0 +1,786 @@
+---
+/**
+ * /stronger/vault/letters — line 03. The long-form room.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THIS ROOM EXISTS
+ *
+ * Everything else in the wing is short, and the shortness is correct for what it
+ * is: the song takes a note because it is written at 7am one-handed, a photo
+ * caption is one line because it sits on a panel in a 3D room. Added up, though,
+ * that is a wing with nowhere to say anything at length — and this was built to
+ * carry a year of long distance, which is not made of one-liners.
+ *
+ * So this page is prose and nothing else. No embeds, no reactions, no 3D, no
+ * counters competing with the words. The measure, the leading and the ink are the
+ * feature; see the header of public/css/us-letters.css for why none of them are
+ * shared with the rest of the wing.
+ *
+ * ---------------------------------------------------------------------------
+ * THE SESSION IS RE-VERIFIED HERE, AND THAT IS NOT THEATRE
+ *
+ * src/middleware.ts has already checked a signed, unexpired token for anything
+ * under /stronger/vault, or this render never happened. The check below is what
+ * makes a routing mistake up there degrade to "she gets sent to the gate" instead
+ * of "the internet gets my letters". Copied verbatim from the vault hub and from
+ * today.astro so there is one pattern to audit rather than three.
+ *
+ * `session` specifically, NOT `session ?? admin`. My admin token cannot open this
+ * page. Same deliberate inconvenience today.astro documents: the vault is hers,
+ * that is one rule, and one rule is worth more than the convenience of previewing
+ * her page without answering the questions.
+ *
+ * ---------------------------------------------------------------------------
+ * IT READS THE STORE DIRECTLY, NOT ITS OWN API
+ *
+ * This page is server-rendered, so calling /api/us/letter from here would mean the
+ * server making an HTTP request to itself, forwarding her cookie, and paying a
+ * round trip to reach a module it can just import. The endpoint exists for the
+ * client; the page uses the store.
+ *
+ * ---------------------------------------------------------------------------
+ * TWO VIEWS, ONE FILE
+ *
+ *   no `?read`      THE SHELF. Every letter, grouped: waiting / again / sealed.
+ *   `?read=<id>`    ONE LETTER, full width of its measure, and her reply under it.
+ *
+ * One file rather than two because the second view is a query parameter on the
+ * first, which means the URL she gets back to is a normal link, the back button
+ * behaves, and there is exactly one place that re-checks the session and one place
+ * that owns the copy.
+ *
+ * ---------------------------------------------------------------------------
+ * THE SEAL IS ENFORCED ON THE SERVER
+ *
+ * A sealed letter's text is never in the response. visibleLetter() strips the body,
+ * the signoff AND the title before this page ever holds the object, and `?read=` on
+ * a sealed id is refused up here rather than hidden down there. `display: none` on
+ * something I promised not to show her until October is a promise broken by View
+ * Source.
+ *
+ * ---------------------------------------------------------------------------
+ * IT WORKS WITH JAVASCRIPT OFF
+ *
+ * Her reply is a real <form method="post" action="/api/us/letter"> that 303s back
+ * here. The script at the bottom upgrades it to a fetch for ONE reason that is not
+ * cosmetic: a native submit that fails has already navigated away and taken several
+ * hundred words with it, and retyping a letter is the difference between answering
+ * and not.
+ *
+ * ---------------------------------------------------------------------------
+ * THE READ RECEIPT IS WRITTEN ON RENDER, AND THAT IS A TRADE
+ *
+ * Opening a letter records that she opened it — a write on a GET. The alternative
+ * (a fetch from the client, the way StudioRoom posts `seen`) is cleaner in theory
+ * and does not work with JavaScript switched off, which this wing insists on
+ * everywhere else. So: server-side, through the *Safe wrapper so a dead store costs
+ * her the new/read badge and never the letter.
+ *
+ * THE COST, STATED: a browser that PREFETCHED a shelf link would mark that letter
+ * read before she looked at it. Nothing here opts into prefetching — no
+ * speculation rules, no rel=prefetch, and the middleware sends
+ * `Cache-Control: private, no-store` on every response in the wing, which
+ * suppresses it in the engines that do it speculatively. If that ever changes, this
+ * is the line that breaks, and the fix is to move the receipt into the endpoint and
+ * accept that it stops working without JavaScript.
+ * ---------------------------------------------------------------------------
+ */
+import { HER_NAME, SESSION_SECRET } from '../../../lib/us/config';
+import { readCookie, verify } from '../../../lib/us/session';
+import { wingDate, wingDateLabel } from '../../../lib/us/kv';
+import {
+  REPLY_MAX,
+  findLetter,
+  getStatesSafe,
+  isSealed,
+  lettersTier,
+  loadLetters,
+  markReadSafe,
+  shelf,
+  summarize,
+  usingPlaceholders,
+  visibleLetter,
+  type VisibleLetter,
+} from '../../../lib/us/letters';
+
+export const prerender = false;
+
+const secret = SESSION_SECRET();
+const session = secret ? verify(secret, 'session', readCookie(Astro.cookies, 'session', Astro.url)) : null;
+if (!session) return Astro.redirect('/stronger', 302);
+
+const her = HER_NAME();
+const today = wingDate();
+
+/* Read the state once, up front, and use it for everything. It is one pipelined
+   round trip on Upstash and one GET on R2, and holding it in a variable is what
+   stops the reading view and the shelf disagreeing about what she has read. */
+const states = await getStatesSafe();
+
+/* ---- which view -----------------------------------------------------------
+   `read` is matched against the authored list by findLetter(), which SELECTS a
+   record and never builds a key. So an id that is not a letter is simply not a
+   letter: there is no path from this parameter to a store key, an R2 object or a
+   file. `?read=../../.env` cannot select anything. */
+const wanted = Astro.url.searchParams.get('read') ?? '';
+const requested = wanted ? findLetter(wanted) : null;
+const askedForMissing = Boolean(wanted) && !requested;
+
+const view: VisibleLetter | null = requested ? visibleLetter(requested, today) : null;
+/* Split into two variables rather than checked inline, so that every use below is
+   unambiguous about whether it is allowed to see a body. `reading` is only ever an
+   OPEN letter; a sealed request falls into `sealedRequest` and gets a card. */
+const reading = view && !view.sealed ? view : null;
+const sealedRequest = view && view.sealed ? view : null;
+
+const herReply = reading ? (states[reading.id]?.reply ?? '') : '';
+const herRepliedAt = reading ? (states[reading.id]?.repliedAt ?? 0) : 0;
+/* Read BEFORE markReadSafe runs, so "you have had this open before" is a fact about
+   her previous visits and not about this one. */
+const readBefore = reading ? (states[reading.id]?.firstReadAt ?? 0) > 0 : false;
+
+/* The receipt. Awaited rather than fired and forgotten: a serverless function that
+   returns before its writes land does not finish them. It is the *Safe wrapper, so
+   the worst a dead store can do is cost her the badge. */
+if (reading) await markReadSafe(reading.id);
+
+/* ---- the shelf ------------------------------------------------------------ */
+const board = shelf(states, today);
+const totals = summarize(states, today);
+const nothingAtAll = board.waiting.length + board.again.length + board.sealed.length === 0;
+
+/* ---- previous / next, among OPEN letters only -----------------------------
+   Sealed ones are skipped rather than shown as an inaccessible step, because a
+   "next" that refuses to open is a dead end with a label on it. In written order,
+   which is loadLetters()' canonical order — a letter is part of a sequence. */
+const openLetters = loadLetters().filter((l) => !isSealed(l, today));
+const here = reading ? openLetters.findIndex((l) => l.id === reading.id) : -1;
+/* Only the id is used, so these stay raw Letters rather than going through
+   visibleLetter(): splitting a whole body into paragraphs to build a link is work
+   for nothing, and the neighbour's TITLE deliberately does not appear on the button
+   — "the one before" is enough, and naming it would put a second letter's title on
+   the page she is trying to read. */
+const older = here > 0 ? openLetters[here - 1] : null;
+const newer = here >= 0 && here < openLetters.length - 1 ? openLetters[here + 1] : null;
+
+/* ---- outcomes from the no-JavaScript reply path ---------------------------
+   They arrive back here as a 303 with ?e=<code>, written in her language rather
+   than in HTTP: she does not need to know what a 502 is, only that it was not her
+   fault and it is worth another try. */
+const errorCode = Astro.url.searchParams.get('e') ?? '';
+const ERRORS: Record<string, string> = {
+  store: "that didn't save — not your fault. Try it again? Your words are still in the box.",
+  rate: 'okay, easy. Give it a minute and send it again.',
+  unauthorized: 'your session ran out. Answer the questions again and you are back in.',
+  unconfigured: 'something is unplugged on my end. Not your fault.',
+  'bad-request': "the server couldn't read that. Try again?",
+  'no-such-letter': "I can't find that one. It may have a different name now — everything is still here.",
+  sealed: 'that one is still sealed. It opens on its own, I promise.',
+  empty: 'there was nothing in the box.',
+  'too-long': `that is longer than ${REPLY_MAX} characters and the box will not hold all of it. Trim it a little?`,
+};
+const errorText = errorCode ? (ERRORS[errorCode] ?? "that didn't go through. Try again?") : '';
+const justSent = Astro.url.searchParams.get('sent') === '1';
+
+/* ---- copy helpers --------------------------------------------------------- */
+
+/**
+ * "one", "two", ... "ten", then digits.
+ *
+ * Because "1 waiting for you" is a dashboard and "one waiting for you" is a
+ * sentence, and this page is made of sentences. Past ten, digits read better than
+ * words anyway.
+ */
+const SMALL = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+function countWord(n: number): string {
+  return n >= 0 && n < SMALL.length ? SMALL[n] : String(n);
+}
+
+/**
+ * The one line at the top of the shelf that answers "is there anything for me".
+ *
+ * Every branch is a real sentence and none of them prints a zero. A page that
+ * greets her with "0 unread" is a page telling her this is empty and probably
+ * broken — the same reasoning behind today.astro's conditional stat strip.
+ */
+function statusLine(): string {
+  if (totals.unread === 1) return 'one waiting for you.';
+  if (totals.unread > 1) return `${countWord(totals.unread)} waiting for you.`;
+  if (totals.open > 0) return 'nothing new. Everything here keeps.';
+  if (totals.sealed > 0) return 'nothing open yet.';
+  return '';
+}
+
+/**
+ * "about four minutes", or '' for anything short.
+ *
+ * Only shown past two minutes, and that threshold is the whole reason this is
+ * tolerable: stamping a reading time on every letter would make them feel like
+ * posts, but a letter she opens on a train deserves to say whether she has time for
+ * it now. 220 words a minute is a normal adult rate for easy prose.
+ */
+function readingTime(paras: string[]): string {
+  const words = paras.join(' ').split(/\s+/).filter(Boolean).length;
+  const minutes = Math.round(words / 220);
+  return minutes >= 2 ? `about ${countWord(minutes)} minutes` : '';
+}
+
+/** The title, or a description that reads as a description. */
+function titleOf(letter: VisibleLetter): string {
+  return letter.title || 'a letter I did not name';
+}
+
+/** e.g. `Sat 14 Feb 2026`. '' when the authored date was unusable. */
+function dayLabel(date: string): string {
+  return date ? wingDateLabel(date, { withYear: true }) : '';
+}
+
+/** Her reply, as paragraphs, so it is rendered exactly like a letter is. */
+function replyParagraphs(text: string): string[] {
+  return text
+    .split(/\n{2,}/)
+    .map((p) => p.replace(/\n/g, ' ').trim())
+    .filter(Boolean);
+}
+---
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="dark">
+    <!-- Belt and braces: the middleware also sends X-Robots-Tag, which covers the
+         redirects and JSON responses that cannot carry a meta tag. -->
+    <meta name="robots" content="noindex, nofollow, noarchive">
+    <meta name="referrer" content="no-referrer">
+    <title>[us]</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- Space Grotesk and DM Mono only. THE READING FACE IS A SYSTEM SERIF AND
+         THAT IS DELIBERATE — public/css/us-letters.css explains why the one page
+         whose product is uninterrupted reading is the worst place to introduce a
+         font swap. Do not add a webfont here without reading that comment. -->
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <!-- Absolute paths: this page is at /stronger/vault/letters, so a relative href
+         would resolve to /stronger/vault/css/... and 404.
+
+         us.css first — it owns every token the other two use. us-song.css second,
+         and NOT because this page shows songs: it owns the wing's shared form and
+         status primitives (.notice, .sr-only, .dj-*), and its own comment says to
+         treat them that way. Redefining them here is the drift that comment warns
+         about, and every rule in that file is class-scoped (there is not one bare
+         element selector in it), so loading it has no side effects on this page. -->
+    <!-- Installable-app metadata. `scope: /stronger/` in the manifest keeps the
+         installed app inside the wing, so tapping the icon can never land her on
+         the public portfolio, and `start_url: /stronger/vault` opens at the hub
+         rather than the gate — she already holds a session cookie, so she skips
+         the quiz on every launch.
+
+         DELIBERATELY NO SERVICE WORKER. Every page here is behind a session and
+         several are per-day; a worker that cached the wrong response would serve
+         her a stale room, or worse, hand a cached authorised page to whoever
+         opened the app next. Standalone display, the icon and the black status
+         bar all work without one. The only thing given up is offline, which for
+         a room whose whole content is fetched per visit is not a real loss. -->
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="apple-touch-icon" href="/assets/us/icons/apple-touch-icon.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="[us]">
+    <meta name="theme-color" content="#000000">
+    <link rel="stylesheet" href="/css/us.css">
+    <link rel="stylesheet" href="/css/us-song.css">
+    <link rel="stylesheet" href="/css/us-letters.css">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23000'/%3E%3Ctext x='16' y='23' font-family='monospace' font-size='20' font-weight='700' text-anchor='middle' fill='%233e7bff'%3E%5B%5D%3C/text%3E%3C/svg%3E">
+</head>
+<body class="studio letters">
+<main class="studio-wrap">
+
+    {reading ? (
+        /* ==============================================================
+           VIEW TWO — ONE LETTER
+
+           The letter's own title is the <h1>. The wordmark shrinks to a
+           small link in the top bar, which is also the way back, because
+           on a reading page the biggest words on screen should be the
+           ones I wrote to her.
+           ============================================================== */
+        <>
+            <div class="lt-topbar">
+                <a class="lt-topbar-mark" href="/stronger/vault/letters">
+                    <span class="us-mark-bracket" aria-hidden="true">[</span>letters<span
+                          class="us-mark-bracket" aria-hidden="true">]</span>
+                </a>
+                <p class="lt-topbar-where">
+                    line 03 &middot; {readBefore ? 'again' : 'for you'}
+                </p>
+            </div>
+
+            {errorText && (
+                <p class="notice" data-kind="bad" role="status">hm &mdash; {errorText}</p>
+            )}
+            {justSent && !errorText && (
+                <p class="notice" data-kind="ok" role="status">
+                    sent &mdash; it is on the shelf next to the letter. I will read it.
+                </p>
+            )}
+
+            {/* An <article>, because a letter is a self-contained piece of
+                content and that is precisely what the element is for. */}
+            <article class="lt-column lt-sheet">
+                {(dayLabel(reading.written) || readingTime(reading.paragraphs)) && (
+                    <p class="lt-dateline">
+                        {[dayLabel(reading.written), readingTime(reading.paragraphs)]
+                            .filter(Boolean)
+                            .join(' · ')}
+                    </p>
+                )}
+
+                <h1 class={reading.title ? 'lt-title' : 'lt-title lt-title--untitled'}>
+                    {titleOf(reading)}
+                </h1>
+
+                {/* Every paragraph is a real <p> holding ESCAPED text. Astro
+                    escapes `{expression}` by default and there is no
+                    `set:html` anywhere on this page, which is the whole
+                    reason a letter is allowed to contain any character at
+                    all. paragraphs() in letters.ts is the only thing that
+                    interprets the body format. */}
+                <div class="lt-prose">
+                    {reading.paragraphs.map((para) => <p>{para}</p>)}
+                </div>
+
+                {reading.signoff && <p class="lt-signoff">{reading.signoff}</p>}
+            </article>
+
+            {/* ==========================================================
+                HER HALF
+
+                Same reading face as the letter, one step up in elevation,
+                mirrored accent. today.astro makes the same call and states
+                the reason: an exchange is not a receipt stapled to the
+                bottom of a broadcast.
+                ========================================================== */}
+            <section class="lt-column lt-hers" aria-labelledby="hers-head">
+                <p class="lt-hers-head" id="hers-head">
+                    {herReply ? 'what you wrote back' : 'your half'}
+                </p>
+
+                {herReply && (
+                    <div class="lt-reply-card">
+                        <div class="lt-prose">
+                            {replyParagraphs(herReply).map((para) => <p>{para}</p>)}
+                        </div>
+                        {herRepliedAt > 0 && (
+                            /* The stored timestamp is epoch millis, so it is turned
+                               into a WING date before it is labelled. Formatting it
+                               in the reader's own timezone would mean a reply she
+                               sent at 11pm reads as the next day on one device and
+                               not on another. */
+                            <p class="lt-dateline lt-dateline--after">
+                                you sent this {wingDateLabel(wingDate(new Date(herRepliedAt)), { withYear: true })}
+                            </p>
+                        )}
+                    </div>
+                )}
+
+                {/* <details> rather than two markup paths, and `open` only when
+                    she has not answered yet: a letter she has already
+                    answered should look answered, not like a big empty form.
+                    It collapses natively with no JavaScript at all. */}
+                <details class="lt-write" open={!herReply}>
+                    <summary class="lt-write-summary">
+                        {herReply ? 'write a different one' : 'write back'}
+                    </summary>
+
+                    <form
+                        class="dj-form"
+                        id="letter-form"
+                        method="post"
+                        action="/api/us/letter"
+                    >
+                        <input type="hidden" name="id" value={reading.id}>
+
+                        <div class="dj-field">
+                            <label class="dj-label" for="letter-reply">
+                                Your letter back
+                                <span class="dj-opt">&mdash; as long as you want, up to {REPLY_MAX}</span>
+                            </label>
+                            {/* maxlength matches REPLY_MAX in letters.ts, which the
+                                endpoint also checks. The browser stopping her at the
+                                limit is friendlier than the server refusing a
+                                paragraph she has already written. */}
+                            <textarea
+                                class="dj-textarea"
+                                id="letter-reply"
+                                name="reply"
+                                rows="12"
+                                maxlength={REPLY_MAX}
+                            >{herReply}</textarea>
+                            {/* aria-hidden on purpose, and therefore deliberately NOT
+                                wired up as aria-describedby: a counter that fires on
+                                every keystroke is hostile to a screen reader, and
+                                pointing a description at a hidden node produces an
+                                empty description rather than a useful one. The label
+                                above states the number once, where it belongs, and
+                                maxlength enforces it without being announced. */}
+                            <p class="lt-count" id="letter-count" aria-hidden="true">
+                                {herReply.length} / {REPLY_MAX}
+                            </p>
+                        </div>
+
+                        <button class="dj-submit" id="letter-submit" type="submit">
+                            {herReply ? 'replace it' : 'send it'}
+                        </button>
+
+                        {/* The enhancement script's channel. aria-live so the outcome
+                            is announced without moving focus; hidden until there is
+                            something to say. */}
+                        <p class="notice" id="letter-status" role="status" aria-live="polite" hidden></p>
+                    </form>
+                </details>
+            </section>
+
+            <nav class="lt-column lt-nav" aria-label="other letters">
+                {older ? (
+                    <a href={`/stronger/vault/letters?read=${encodeURIComponent(older.id)}`}>
+                        <span class="lt-nav-label" aria-hidden="true">&larr;</span>
+                        the one before
+                    </a>
+                ) : (
+                    <span>this is the first one</span>
+                )}
+                {newer ? (
+                    <a href={`/stronger/vault/letters?read=${encodeURIComponent(newer.id)}`}>
+                        the one after
+                        <span class="lt-nav-label lt-nav-label--after" aria-hidden="true">&rarr;</span>
+                    </a>
+                ) : (
+                    <span>that is the last one</span>
+                )}
+            </nav>
+
+            <hr class="studio-rule">
+
+            <div class="studio-foot">
+                <span class="studio-tag">Stronger for it.</span>
+                <a href="/stronger/vault/letters">&larr; all the letters</a>
+            </div>
+        </>
+    ) : (
+        /* ==============================================================
+           VIEW ONE — THE SHELF
+           ============================================================== */
+        <>
+            <p class="studio-kicker">line 03 &middot; letters</p>
+
+            <h1 class="us-mark">
+                <span class="us-mark-bracket" aria-hidden="true">[</span>letters<span
+                      class="us-mark-bracket" aria-hidden="true">]</span>
+            </h1>
+
+            <p class="studio-lede">
+                The rest of this place makes me be brief, {her}. This one does not.
+            </p>
+
+            {statusLine() && (
+                <p class="lt-status-line" data-quiet={totals.unread > 0 ? '0' : '1'}>
+                    {statusLine()}
+                </p>
+            )}
+
+            {askedForMissing && (
+                <p class="notice" data-kind="bad" role="status">
+                    hm &mdash; I could not find that one. Nothing is lost; everything
+                    there is is below.
+                </p>
+            )}
+
+            {sealedRequest && (
+                /* Reached when she opens a link to a letter that is still
+                   sealed. Refused HERE, before any body could have been
+                   rendered — and there is nothing to refuse anyway, because
+                   visibleLetter() already removed it. */
+                <p class="notice" data-kind="warn" role="status">
+                    that one is still sealed
+                    {sealedRequest.opensOn && <> until {wingDateLabel(sealedRequest.opensOn, { withYear: true })}</>}.
+                    It opens on its own.
+                </p>
+            )}
+
+            {errorText && (
+                <p class="notice" data-kind="bad" role="status">hm &mdash; {errorText}</p>
+            )}
+            {justSent && !errorText && (
+                <p class="notice" data-kind="ok" role="status">sent &mdash; I will read it.</p>
+            )}
+
+            {/* Dev only, both of them. She should never be shown a sentence about
+                environment variables or serverless instances; on /stronger/dj the
+                equivalent warnings are permanent, because there they are
+                actionable. */}
+            {import.meta.env.DEV && usingPlaceholders() && (
+                <p class="notice" data-kind="warn">
+                    dev &mdash; US_LETTERS is not set, so these are the committed
+                    PLACEHOLDER letters. Nothing below is real.
+                </p>
+            )}
+            {import.meta.env.DEV && lettersTier() === 'memory' && (
+                <p class="notice" data-kind="warn">
+                    dev &mdash; in-process store. Read receipts and replies are
+                    non-durable and per-instance.
+                </p>
+            )}
+
+            {nothingAtAll ? (
+                <>
+                    <hr class="studio-rule">
+                    <p class="lt-empty">
+                        Nothing here yet. Which means I have not written one yet, not
+                        that there is nothing to write.
+                    </p>
+                </>
+            ) : (
+                <>
+                    {board.waiting.length > 0 && (
+                        <>
+                            <hr class="studio-rule">
+                            <h2 class="lt-section-head">waiting for you</h2>
+                            {/* A <ul>, because this is a list of things and a screen
+                                reader should be told how many. Oldest first: a letter
+                                is part of a sequence, and number five arrives before
+                                the thing number three explains otherwise. See
+                                shelf() in letters.ts. */}
+                            <ul class="lt-shelf">
+                                {board.waiting.map((letter, i) => (
+                                    <li>
+                                        <a
+                                            class={i === 0 ? 'lt-card lt-card--hero' : 'lt-card'}
+                                            href={`/stronger/vault/letters?read=${encodeURIComponent(letter.id)}`}
+                                        >
+                                            <span class="lt-new">new</span>
+                                            <h3 class={letter.title ? 'lt-card-title' : 'lt-card-title lt-card-title--untitled'}>
+                                                {titleOf(letter)}
+                                            </h3>
+                                            {dayLabel(letter.written) && (
+                                                <p class="lt-card-meta lt-card-meta--under">
+                                                    written {dayLabel(letter.written)}
+                                                </p>
+                                            )}
+                                        </a>
+                                    </li>
+                                ))}
+                            </ul>
+                        </>
+                    )}
+
+                    {board.again.length > 0 && (
+                        <>
+                            <hr class="studio-rule">
+                            <h2 class="lt-section-head">read again</h2>
+                            <ul class="lt-shelf">
+                                {board.again.map((letter) => (
+                                    <li>
+                                        <a
+                                            class="lt-card"
+                                            href={`/stronger/vault/letters?read=${encodeURIComponent(letter.id)}`}
+                                        >
+                                            <p class="lt-card-meta">
+                                                {[
+                                                    dayLabel(letter.written),
+                                                    (states[letter.id]?.reply ?? '') ? 'you answered' : '',
+                                                ].filter(Boolean).join(' · ')}
+                                            </p>
+                                            <h3 class={letter.title ? 'lt-card-title' : 'lt-card-title lt-card-title--untitled'}>
+                                                {titleOf(letter)}
+                                            </h3>
+                                            {/* The first line, and only on a letter she
+                                                has already read. On an unread card this
+                                                would be a spoiler; here it is the thing
+                                                that reminds her which letter this is. */}
+                                            {letter.paragraphs[0] && (
+                                                <p class="lt-card-excerpt">{letter.paragraphs[0]}</p>
+                                            )}
+                                        </a>
+                                    </li>
+                                ))}
+                            </ul>
+                        </>
+                    )}
+
+                    {board.sealed.length > 0 && (
+                        <>
+                            <hr class="studio-rule">
+                            <h2 class="lt-section-head">not yet</h2>
+                            <ul class="lt-shelf">
+                                {board.sealed.map((letter) => (
+                                    /* A <li> holding a <div>, never an <a
+                                       aria-disabled>: a disabled link is still a link
+                                       to a keyboard and to most screen readers, and
+                                       aria-disabled does not prevent activation. No
+                                       href, no problem — us.css's .room makes the same
+                                       call.
+
+                                       There is no title and no body in this object.
+                                       Not hidden: absent. */
+                                    <li>
+                                        <div class="lt-card lt-card--sealed">
+                                            <span class="lt-seal">sealed</span>
+                                            <p class="lt-opens">
+                                                {letter.opensOn
+                                                    ? `opens ${wingDateLabel(letter.opensOn, { withYear: true })}`
+                                                    : 'opens when it opens'}
+                                            </p>
+                                            {letter.teaser && <p class="lt-teaser">{letter.teaser}</p>}
+                                        </div>
+                                    </li>
+                                ))}
+                            </ul>
+                        </>
+                    )}
+                </>
+            )}
+
+            <hr class="studio-rule">
+
+            <div class="studio-foot">
+                <span class="studio-tag">Stronger for it.</span>
+                <a href="/stronger/vault">&larr; back to the room</a>
+            </div>
+        </>
+    )}
+</main>
+
+<script is:inline define:vars={{ replyMax: REPLY_MAX }}>
+/* --------------------------------------------------------------------------
+   TWO JOBS, AND DELIBERATELY NO MORE.
+
+   Rendered unconditionally rather than wrapped in a template expression: a
+   <script> inside `{...}` asks the Astro compiler to read JavaScript braces as
+   template braces, and the failure mode is a build error in a file that reads as
+   correct. Each block below bails out on its own if its markup is absent — which
+   it is on the shelf view.
+
+   1. HER LETTER BACK, WITHOUT LOSING WHAT SHE TYPED. This is the only one that
+      matters. The form already works without any of this: 303, re-render, done.
+      What a native submit cannot do is fail without navigating away, and on this
+      page the thing it would take with it is several hundred words. Everything
+      this block buys is: on failure, her letter is still in the textarea.
+
+   2. THE CHARACTER COUNT. Visual only, aria-hidden, because a live region that
+      fires on every keystroke is hostile to a screen reader and `maxlength`
+      already enforces the limit without being announced.
+
+   WHAT IS DELIBERATELY ABSENT: a localStorage draft. It is the obvious next idea
+   for a long textarea and it was rejected on purpose. It would persist her private
+   words outside the session cookie's lifetime, on disk, surviving sign-out — a new
+   privacy surface in the one wing built around not having any, in exchange for
+   covering a crash that job 1 already covers for the failure that actually
+   happens. If it is ever added, it must be cleared on sign-out and on a successful
+   send, and that is two more things to get right.
+   -------------------------------------------------------------------------- */
+(function () {
+    var form = document.getElementById('letter-form');
+    if (!form) return;  // the shelf view. Nothing to enhance.
+
+    var submit = document.getElementById('letter-submit');
+    var out = document.getElementById('letter-status');
+    var box = document.getElementById('letter-reply');
+    var counter = document.getElementById('letter-count');
+
+    /* ---- 2. the counter ------------------------------------------------ */
+    if (box && counter) {
+        var paint = function () {
+            var n = box.value.length;
+            counter.textContent = n + ' / ' + replyMax;
+            // The threshold is a warning, not a limit — maxlength is the limit.
+            counter.dataset.over = n > replyMax - 100 ? '1' : '0';
+        };
+        box.addEventListener('input', paint);
+        paint();
+    }
+
+    /* ---- 1. the send --------------------------------------------------- */
+    if (!submit || !out || !box) return;
+
+    var MESSAGES = {
+        'no-such-letter': "I cannot find that letter any more. Nothing was sent.",
+        sealed: 'that letter is sealed again somehow. Nothing was sent.',
+        empty: 'there is nothing in the box yet.',
+        'too-long': 'that is longer than the box will hold. Trim it a little and send again.',
+        'bad-request': "the server couldn't read that. Nothing was sent.",
+        unauthorized: 'your session ran out. Answer the questions again and you are back in.',
+        unconfigured: 'something is unplugged on his end. Not your fault.',
+        store: "that didn't save. Nothing was sent — your words are still here. Try again?",
+        rate: 'give it a minute, then send it again.'
+    };
+
+    function say(kind, text) {
+        // The word is part of the message, so this never depends on colour.
+        out.dataset.kind = kind;
+        out.textContent = (kind === 'bad' ? 'hm — ' : 'sent — ') + text;
+        out.hidden = false;
+    }
+
+    var label = submit.textContent;
+
+    form.addEventListener('submit', async function (event) {
+        event.preventDefault();
+
+        var body = {
+            id: form.elements.id.value,
+            reply: box.value
+        };
+        if (!body.reply.trim()) {
+            say('bad', 'write something first.');
+            box.focus();
+            return;
+        }
+
+        submit.disabled = true;
+        submit.textContent = 'sending';
+
+        var res, data;
+        try {
+            res = await fetch('/api/us/letter', {
+                // JSON in, JSON out. The endpoint keys its response shape off this
+                // header, so the no-JS form POST still gets its redirect.
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify(body)
+            });
+            data = await res.json();
+        } catch (err) {
+            say('bad', 'the server did not answer. Nothing was sent, and what you wrote is still here.');
+            return;
+        } finally {
+            submit.disabled = false;
+            submit.textContent = label;
+        }
+
+        if (!res.ok || !data || data.ok !== true) {
+            var code = (data && data.error) || 'no';
+            say('bad', MESSAGES[code] || 'that did not go through. Nothing was sent.');
+            return;
+        }
+
+        say('ok', 'it is on the shelf next to the letter. I will read it.');
+
+        /* Hand control back to the SERVER rather than painting her card from this
+           response. Patching it here would mean a second renderer in JavaScript —
+           paragraph splitting, the date line, the open/closed state of the
+           <details> — that can disagree with the Astro one, and a card that
+           disagrees with the store is worse than a reload. The short pause is so
+           the line above is readable first. */
+        setTimeout(function () {
+            window.location.assign(
+                '/stronger/vault/letters?read=' + encodeURIComponent(data.id) + '&sent=1'
+            );
+        }, 700);
+    });
+})();
+</script>
+</body>
+</html>
