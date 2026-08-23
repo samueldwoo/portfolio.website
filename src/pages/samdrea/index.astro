@@ -199,7 +199,7 @@ const showPlaceholderWarning = import.meta.env.DEV && gateNeedsReview();
     null: setStatus() already returned early when its cell was
     missing, and the q-n write is now guarded the same way.
     ============================================================ */}
-<div class="crude-wrap">
+<div class="crude-wrap" id="crude-wrap" data-spot="0">
 
     {/* Only when she has been sent back here by an expired session. Arriving at
         a bare question with no explanation is fine; being BOUNCED to one is not. */}
@@ -253,6 +253,17 @@ const showPlaceholderWarning = import.meta.env.DEV && gateNeedsReview();
             </a>
         </p>
     </div>
+
+    {/* SHE IS BEING SENT A LINK to a page with no branding, one question and a
+        submit button — which is, structurally, what a phishing page looks like.
+        One line fixes that, and it does the job better by also explaining why the
+        page looks like this, so it reassures and lands the joke at once.
+
+        Outside #quiz on purpose: the box moves, this does not. It is a fixed fact
+        about the page rather than part of the question. */}
+    <p class="crude-sig">
+        it&rsquo;s sam. <a href="https://www.samueldwoo.com">samueldwoo.com</a>. i know how this looks.
+    </p>
 </div>
 
 <script is:inline define:vars={{ questions, ready }}>
@@ -293,8 +304,26 @@ const showPlaceholderWarning = import.meta.env.DEV && gateNeedsReview();
         cell.className = cls;
     }
 
+    /* THE BOX MOVES ON EVERY ANSWER.
+
+       Derived from the step index, not Math.random(): the same question always
+       lands in the same place, so it is reproducible and it can never twice in a
+       row put the input somewhere awkward. Random would eventually drop it under
+       her thumb or half off the screen, and that is where whimsy turns into a bug.
+
+       Question 1 stays at spot 0, which is centred — the first impression has to
+       look deliberate. The CSS owns where each spot actually is, and clamps the
+       range hard on a phone; this only says WHICH one. */
+    var SPOTS = 4;
+    function moveBox(i) {
+        var wrap = document.getElementById('crude-wrap');
+        if (!wrap) return;
+        wrap.dataset.spot = String(i % SPOTS);
+    }
+
     function goTo(i) {
         step = i;
+        moveBox(i);
         prompt.textContent = questions[i].prompt;
         input.placeholder = questions[i].placeholder || '';
         input.value = '';

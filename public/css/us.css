@@ -115,11 +115,130 @@
        so a notch hid most of it — and this is the page a 30-day session
        expiry lands on INSIDE the installed app. One inset, no design. */
     margin-top: max(8px, env(safe-area-inset-top));
+    /* THE SPOTS USE `transform`, which does not affect layout but CAN paint
+       outside the viewport and produce a horizontal scrollbar. This makes that
+       impossible by construction instead of by measurement — the offsets below
+       are all small enough that nothing is ever actually clipped, and this is the
+       guarantee that a future, bolder offset still cannot break the page. */
+    overflow-x: clip;
 }
 
 /* No max-width, no centring. Text runs the full window like a
    document nobody laid out. */
-.crude-wrap { max-width: none; margin: 0; padding: 0; }
+/* ============================================================
+   THE BOX MOVES.
+
+   Question 1 is CENTRED — first impression, so it has to look
+   deliberate. Every answer after that lands the box somewhere
+   else on the page, and the joke is that nothing explains why.
+
+   THE SPOTS ARE DELIBERATE, NOT RANDOM. `data-spot` is set by
+   the script from the step index, so the same question always
+   appears in the same place: reproducible, testable, and it
+   cannot land twice in a row somewhere useless. Math.random()
+   here would eventually put the input under her thumb or half
+   off the screen, and "funny" stops being funny at that point.
+
+   CONSTRAINTS THE JOKE IS NOT ALLOWED TO BREAK:
+     - the input and button stay fully on screen at 320px
+     - nothing lands under the notch or the home indicator
+     - no horizontal overflow (the mobile audit already caught
+       one of those on another page)
+     - 44px targets and the 16px input floor are untouched
+   So the offsets are percentages of the VIEWPORT with generous
+   insets, not fixed pixel jumps, and the phone gets a narrower
+   range than the desktop.
+
+   No transition. It should CUT to the new place — a slide would
+   read as an animation somebody wrote, which is the opposite of
+   the effect. That also means prefers-reduced-motion has nothing
+   to withdraw.
+   ============================================================ */
+
+.crude-wrap {
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    /* Centred by default, which is also the no-JavaScript state and
+       the state question 1 is in. min-height uses svh so the iOS URL
+       bar collapsing does not shift it. */
+    min-height: calc(100svh - 16px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+
+/* The box itself is what moves, so it needs to be its own block. */
+#quiz {
+    /* Never wider than the screen, whatever the spot does. */
+    max-width: min(30em, 100%);
+}
+
+/* THE SPOTS. Each is a nudge away from centre, expressed as a
+   translate so it never affects layout and therefore can never
+   introduce a scrollbar. Percentages are of #quiz's own size,
+   which is small, so these stay well inside the viewport. */
+.crude-wrap[data-spot='1'] { align-items: flex-start;  justify-content: flex-start; }
+.crude-wrap[data-spot='1'] #quiz { transform: translate(4vw, 6vh); text-align: left; }
+
+.crude-wrap[data-spot='2'] { align-items: flex-end; justify-content: flex-end; }
+/* -12vh, not -8vh: this spot is bottom-anchored and .crude-sig is fixed to
+   the bottom, so a smaller lift left the input almost touching it. */
+.crude-wrap[data-spot='2'] #quiz { transform: translate(-3vw, -12vh); text-align: right; }
+
+.crude-wrap[data-spot='3'] { align-items: flex-start; justify-content: flex-end; }
+.crude-wrap[data-spot='3'] #quiz { transform: translate(6vw, -5vh); text-align: left; }
+
+/* A right-aligned block would push the input's left edge around;
+   the controls stay in reading order regardless of the spot. */
+.crude-wrap[data-spot='2'] .crude-input { margin-left: auto; }
+
+/* ON A PHONE the horizontal range collapses to almost nothing —
+   there is no room to move sideways without clipping a 20em input
+   — so the movement becomes vertical only. Still visibly jumps,
+   still cannot clip. */
+@media (max-width: 620px) {
+    .crude-wrap[data-spot='1'] #quiz { transform: translateY(2vh); }
+    .crude-wrap[data-spot='2'] #quiz { transform: translateY(-8vh); }
+    .crude-wrap[data-spot='3'] #quiz { transform: translateY(3vh); }
+    .crude-wrap[data-spot='2'] .crude-input,
+    .crude-wrap[data-spot='3'] .crude-input { margin-left: 0; }
+    .crude-wrap[data-spot='1'] #quiz,
+    .crude-wrap[data-spot='2'] #quiz,
+    .crude-wrap[data-spot='3'] #quiz { text-align: left; }
+}
+
+/* The input is 20em and centred, so it needs to not sit flush left
+   inside a centred column. */
+.crude-wrap[data-spot='0'] .crude-input,
+.crude-wrap:not([data-spot]) .crude-input { margin-left: auto; margin-right: auto; }
+
+/* ============================================================
+   "it's me"
+
+   She is being sent a link to a page with no branding, one
+   question and a submit button, which is exactly what a phishing
+   page looks like. One line fixes that, and it does the job
+   better by ALSO explaining why the page looks like this — so it
+   reassures and lands the joke in the same breath.
+
+   Bottom of the viewport, smallest type on the page, and it
+   never moves with the box: it is a fixed fact about the page,
+   not part of the question.
+   ============================================================ */
+.crude-sig {
+    position: fixed;
+    left: 8px;
+    right: 8px;
+    bottom: max(8px, env(safe-area-inset-bottom));
+    margin: 0;
+    font-size: 13px;
+    color: #000;
+    text-align: center;
+}
+.crude-sig a { color: #0000ee; }
 
 .crude h1 {
     /* Default h1 size and weight. The only change is removing the
