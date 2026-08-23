@@ -51,6 +51,7 @@
  */
 
 import type { APIRoute } from 'astro';
+import { crossSite } from '../../../lib/us/together';
 import { ADMIN_PASSCODE_DIGEST, ANSWER_PEPPER, SESSION_SECRET, checkAdminPasscode } from '../../../lib/us/config';
 import { TTL, sign, writeCookie } from '../../../lib/us/session';
 import { clientKey, hit } from '../../../lib/us/ratelimit';
@@ -132,6 +133,17 @@ export const POST: APIRoute = async ({ request, cookies, url, clientAddress, red
   }
 
   // ---- 2. Rate limit before doing any crypto ----------------------------
+  /* CROSS-SITE, checked here because Astro's own checkOrigin is now OFF — see the
+     long comment in astro.config.mjs. The short version: Astro compares the Origin
+     header to the full origin and treats a MISSING Origin as cross-site, and iOS
+     Safari does not send Origin on a same-origin form submission. That 403'd every
+     plain form in the wing on her phone. crossSite() reads Sec-Fetch-Site first,
+     compares HOST rather than full origin so a proxy hop cannot break it, and
+     refuses only on a positive mismatch. */
+  if (crossSite(request, url)) {
+    return answer(false, 403, 'cross-site');
+  }
+
   const limit = await hit(`admin:${clientKey(request, clientAddress)}`, RATE_LIMIT, RATE_WINDOW_SEC);
   if (!limit.ok) {
     if (wantsJson) {

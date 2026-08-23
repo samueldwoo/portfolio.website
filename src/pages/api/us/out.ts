@@ -26,11 +26,27 @@
  */
 
 import type { APIRoute } from 'astro';
+import { crossSite } from '../../../lib/us/together';
 import { clearCookie } from '../../../lib/us/session';
 
 export const prerender = false;
 
-export const POST: APIRoute = ({ cookies, redirect }) => {
+export const POST: APIRoute = ({ request, cookies, redirect, url }) => {
+  /* CROSS-SITE, checked here because Astro's own checkOrigin is now OFF — see the
+     long comment in astro.config.mjs. The short version: Astro compares the Origin
+     header to the full origin and treats a MISSING Origin as cross-site, and iOS
+     Safari does not send Origin on a same-origin form submission. That 403'd every
+     plain form in the wing on her phone. crossSite() reads Sec-Fetch-Site first,
+     compares HOST rather than full origin so a proxy hop cannot break it, and
+     refuses only on a positive mismatch. */
+  if (crossSite(request, url)) {
+    console.warn('[us] refused a cross-site sign-out.');
+    return new Response(JSON.stringify({ ok: false, error: 'cross-site' }), {
+      status: 403,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
   clearCookie(cookies, 'session');
   clearCookie(cookies, 'progress');
   clearCookie(cookies, 'admin');

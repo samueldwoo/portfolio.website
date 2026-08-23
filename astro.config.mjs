@@ -40,6 +40,50 @@ export default defineConfig({
      own session cookie rather than leaning on this. `sameSite: 'lax'` on the
      cookies is the control that actually stops a browser sending credentials
      cross-site; checkOrigin is the belt, not the braces. */
+  /* ASTRO'S OWN checkOrigin IS OFF, and this is a bug fix rather than a
+     loosening — every endpoint that changes anything now performs a STRICTER
+     check of its own.
+  
+     WHAT WENT WRONG. Astro's origin-check middleware
+     (node_modules/astro/dist/core/app/origin-check.js) is, in full:
+  
+         const isSameOrigin = request.headers.get("origin") === url.origin;
+         if (hasContentType) return formLikeHeader && !isSameOrigin;
+         return !isSameOrigin;
+  
+     Two problems, and both bit in production:
+  
+       1. A MISSING Origin header fails `null === "https://..."`, so it counts as
+          cross-site. iOS Safari does not send Origin on a SAME-ORIGIN form
+          submission, so every plain <form> in the wing returned
+          "Cross-site POST form submissions are forbidden" on her phone.
+          Reproduced against the live deployment: identical request, 303 with an
+          Origin header and 403 without one.
+  
+       2. It compares the FULL ORIGIN, which means it is betting on the protocol.
+          Behind a proxy that hands the function `http://` while the browser used
+          `https://`, that comparison fails on every write — a security control
+          turning into an outage.
+  
+     It also ignores Sec-Fetch-Site entirely, which is the one signal here a
+     script cannot forge.
+  
+     WHAT REPLACES IT: crossSite() in src/lib/us/together.ts, on all twelve
+     endpoints under /api/us (verified one by one, including gate, admin and out,
+     which were added for exactly this change). It reads Sec-Fetch-Site FIRST,
+     falls back to comparing HOST rather than full origin so a proxy hop cannot
+     break it, and refuses only on a POSITIVE mismatch — never on absence.
+  
+     So a real forgery is still caught (a cross-site POST carries either
+     Sec-Fetch-Site: cross-site or a mismatched Origin, and modern browsers send
+     both), while a legitimate same-origin form submission from a browser that
+     omits Origin now works. `sameSite: 'lax'` on every cookie remains the control
+     that actually stops credentials being sent cross-site.
+  
+     ONE CONSEQUENCE TO KNOW: the comment below about buildOutput no longer
+     matters, because nothing now depends on Astro computing this flag at all. */
+  security: { checkOrigin: false },
+
   adapter: vercel({
     // Astro's own middleware (src/middleware.ts) runs inside the serverless
     // function. We deliberately do NOT hoist it to a Vercel Edge Middleware:
