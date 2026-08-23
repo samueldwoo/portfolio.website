@@ -608,7 +608,6 @@ a { color: inherit; text-decoration: none; }
     color: var(--sage-deep);
     margin-bottom: var(--sp-kicker);
 }
-.kicker-num { color: var(--sage-deep); }
 /* Level 5 — section title. Step 12 of the scale (~90px at 1440): the
    masthead of everything below the fold. Set solid at 1.0 with the
    tightest optical tracking, because Space Grotesk at this size opens up

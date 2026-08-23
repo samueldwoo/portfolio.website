@@ -14,8 +14,8 @@
    - Hero name entrance + signature line-draw motif
    - Ambient drifting background shapes (pause when tab hidden)
    - Pointer-follow spotlight on cards (rAF-throttled)
-   - Count-up kicker numerals on enter
-   - Rotating hero subtitle
+   - Rotating hero subtitle (DORMANT: one entry, so it does not run —
+     see the WCAG 2.2.2 note at the subtitle block before adding a second)
    - Smooth-scroll nav + in-page links
    All motion guarded by prefers-reduced-motion.
 
@@ -1367,7 +1367,7 @@
             easing: "easeOutExpo"
         });
 
-        var motif = document.querySelectorAll(".hero-motif .motif-draw, .projects-motif .motif-draw");
+        var motif = document.querySelectorAll(".projects-motif .motif-draw");
         motif.forEach(function (el) {
             var len = 0;
             try { len = el.getTotalLength(); } catch (e) { len = 400; }
@@ -1375,7 +1375,7 @@
             el.style.strokeDashoffset = len;
         });
         window.anime({
-            targets: ".hero-motif .motif-draw, .projects-motif .motif-draw",
+            targets: ".projects-motif .motif-draw",
             strokeDashoffset: [window.anime.setDashoffset, 0],
             duration: 2200,
             delay: window.anime.stagger(260, { start: 400 }),
@@ -1383,32 +1383,13 @@
         });
     }
 
-    /* ---------- Count-up kicker numerals on enter ---------- */
-    if (animate) {
-        var kickerNums = Array.prototype.slice.call(document.querySelectorAll(".kicker-num"));
-        var numObs = new IntersectionObserver(function (entries, obs) {
-            entries.forEach(function (entry) {
-                if (!entry.isIntersecting) return;
-                var el = entry.target;
-                obs.unobserve(el);
-                var target = parseInt(el.textContent, 10);
-                if (isNaN(target)) return;
-                var pad = el.textContent.length;
-                var obj = { v: 0 };
-                window.anime({
-                    targets: obj,
-                    v: target,
-                    duration: 900,
-                    easing: "easeOutCubic",
-                    round: 1,
-                    update: function () {
-                        el.textContent = String(Math.round(obj.v)).padStart(pad, "0");
-                    }
-                });
-            });
-        }, { rootMargin: "0px 0px -20% 0px", threshold: 0.4 });
-        kickerNums.forEach(function (el) { numObs.observe(el); });
-    }
+    /* Count-up kicker numerals: REMOVED. It observed `.kicker-num`, which
+       appears in no markup on any page (verified: 0 hits in src/ and 0 in all
+       four built pages), so it constructed an IntersectionObserver and then
+       observed an empty list. The matching `.kicker-num` colour rule in
+       styles.css went with it. If numeric count-ups are wanted again, the
+       numerals that exist today are `.project-index`, `.interest-index`,
+       `.case-index` and `.bento-plate-n`. */
 
     /* ---------- Pointer-follow spotlight on cards (rAF-throttled) ---------- */
     if (!reduceMotion && window.matchMedia("(hover: hover)").matches) {
