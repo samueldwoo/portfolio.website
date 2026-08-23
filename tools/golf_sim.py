@@ -198,18 +198,40 @@ class Green:
 
     def _pick_start(self):
         b = self.box
-        min_d = min(b["w"], b["h"]) * 0.42
-        best_fx, best_fy, best_d = 0.2, 0.7, -1.0
-        for k in range(12):
+        # MIRROR of HeroCanvas.tsx: the gimme floor is physics, not screen size.
+        # The box-relative term scaled with the viewport and forced every putt
+        # long on a big display (336px at 2560 vs a ~399px reach cap), which the
+        # difficulty rating reported as Brutal 19 times in 20. 0.35 of the flat
+        # run (MAX_SPEED / -ln(FRICTION)) is viewport-independent; the old term
+        # survives as an upper bound so a small box still gets a reachable floor.
+        min_d = min(min(b["w"], b["h"]) * 0.42,
+                    0.35 * (self.max_speed / -math.log(self.friction)))
+        # MIRROR of HeroCanvas.tsx: aim for a TARGET hole length instead of
+        # taking the first lie past the floor. The old early-break made hole
+        # length a property of the box (big box -> almost every candidate clears
+        # the floor -> distance pinned at the reach cap -> every hole Brutal).
+        # 0.55..1.00 of the reach budget, top-heavy on purpose.
+        flat_run = self.max_speed / -math.log(self.friction)
+        budget = 0.9 if self.reach_safety is None else self.reach_safety
+        target_len = max(min_d,
+                         (0.55 + hash2(self.round * 131 + 7, 37) * 0.45) * budget * flat_run)
+        best_fx, best_fy, best_err = 0.2, 0.7, float("inf")
+        far_fx, far_fy, far_d = 0.2, 0.7, -1.0
+        for k in range(24):
             fx = 0.08 + hash2(self.round * 97 + k, 17) * 0.84
             fy = 0.08 + hash2(self.round * 89 + k, 23) * 0.84
             px = b["x"] + b["w"] * fx
             py = b["y"] + b["h"] * fy
             dd = math.hypot(px - self.cup_x, py - self.cup_y)
-            if dd > best_d:
-                best_d, best_fx, best_fy = dd, fx, fy
-            if dd > min_d:
-                break
+            if dd > far_d:
+                far_d, far_fx, far_fy = dd, fx, fy
+            if dd < min_d:
+                continue
+            err = abs(dd - target_len)
+            if err < best_err:
+                best_err, best_fx, best_fy = err, fx, fy
+        if best_err == float("inf"):
+            best_fx, best_fy = far_fx, far_fy
 
         if self.reach_safety is not None:
             # Pull the tee IN along its own line until a full-power putt can

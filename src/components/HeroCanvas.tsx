@@ -929,8 +929,18 @@ export default function HeroCanvas() {
       return z <= HOLE_CUTS[0] ? 0 : z <= HOLE_CUTS[1] ? 1 : z <= HOLE_CUTS[2] ? 2 : 3;
     };
 
+    /* CACHED PER HOLE, and that is the fix for a real bug rather than an
+       optimisation. renderCard() runs the moment a putt is holed, and at that
+       instant the ball is IN the cup — so recomputing from live ball/cup
+       positions gave distance ~0 and the card flashed "Gentle" for the fraction
+       of a second before the next hole was teed. The rating describes the hole
+       you were given, so it is computed once when the tee is set and held until
+       the tee moves. */
+    let holeBandIdx = 0;
+    const refreshBand = () => { holeBandIdx = holeBand(); };
+
     const renderDiff = () => {
-      const i = holeBand();
+      const i = holeBandIdx;
       cardDiffWord.textContent = HOLE_BANDS[i];
       /* Filled pip COUNT carries the rating as well as the word, so the rating
          never depends on colour alone (1.4.1) and stays legible to anyone who
@@ -1188,19 +1198,62 @@ export default function HeroCanvas() {
       if (vary) {
         rollGreen();
         placeCup();
-        const minD = Math.min(b.w, b.h) * 0.42;
+        /* THE GIMME FLOOR IS PHYSICS, NOT SCREEN SIZE.
+           This was `min(b.w, b.h) * 0.42` — it scaled with the play box, so on a
+           big display every putt was forced long: measured 189px at 1440 but
+           336px at 2560, against a reach cap of only ~399px. The tee sampler was
+           squeezed into a narrow band just under its ceiling, and the difficulty
+           rating (correctly) reported that as Brutal almost every hole — 19 of 20
+           at 2560, 15 of 20 at 1920, against a healthy 5/4/5/6 spread at 1440.
+
+           A gimme is a function of how far the ball can travel, not how big the
+           monitor is: MAX_SPEED and FRICTION give ~425px of run on the flat at
+           every viewport, so 0.35 of that is the point below which a putt stops
+           being interesting. The box-relative term stays as an UPPER bound, so a
+           genuinely small box (a phone, a short landscape window) still gets a
+           floor it can satisfy. */
+        const minD = Math.min(Math.min(b.w, b.h) * 0.42, 0.35 * (MAX_SPEED / -Math.log(FRICTION)));
+        /* AIM FOR A HOLE LENGTH, rather than taking the first lie past the floor.
+           The old loop broke as soon as a candidate cleared `minD`, so the tee
+           was "wherever the first far-enough random point landed". On a small box
+           that produces variety by accident; on a big one almost every random
+           point IS far enough, so the distance ran straight into the reach cap
+           and every hole came out the same length. Measured after the minD fix
+           alone, 24 re-tees: 1440 gave 9/8/4/3 across the four ratings but 2560
+           was still 19 Brutal.
+           So each round now draws a TARGET length as a fraction of what a
+           full-power putt can actually cover, and the sampler picks the candidate
+           closest to it. A real course mixes short and long holes; this is that,
+           and it makes hole length a property of the round rather than of the
+           monitor.
+           0.55..1.00 of the budget, deliberately top-heavy (mean 0.775) because
+           the reviewer asked to "lean towards brutal usually". The pull-in loop
+           below still applies the real per-position cap, so nothing here can
+           make a hole unwinnable — it can only ask for a shorter one. */
+        const flatRun = MAX_SPEED / -Math.log(FRICTION);
+        const targetLen = Math.max(
+          minD,
+          (0.55 + hash2(round * 131 + 7, 37) * 0.45) * REACH_BUDGET * flatRun
+        );
         let bestFx = 0.2;
         let bestFy = 0.7;
-        let bestD = -1;
-        for (let k = 0; k < 12; k++) {
+        let bestErr = Infinity;
+        // Fallback for a box so small that nothing clears the floor.
+        let farFx = 0.2;
+        let farFy = 0.7;
+        let farD = -1;
+        for (let k = 0; k < 24; k++) {
           const fx = 0.08 + hash2(round * 97 + k, 17) * 0.84;
           const fy = 0.08 + hash2(round * 89 + k, 23) * 0.84;
           const px = b.x + b.w * fx;
           const py = b.y + b.h * fy;
           const dd = Math.hypot(px - cupX, py - cupY);
-          if (dd > bestD) { bestD = dd; bestFx = fx; bestFy = fy; }
-          if (dd > minD) break;   // good enough, stop early
+          if (dd > farD) { farD = dd; farFx = fx; farFy = fy; }
+          if (dd < minD) continue;
+          const err = Math.abs(dd - targetLen);
+          if (err < bestErr) { bestErr = err; bestFx = fx; bestFy = fy; }
         }
+        if (bestErr === Infinity) { bestFx = farFx; bestFy = farFy; }
         /* Then pull the tee IN along its own line until a full-power putt can
            reach it. Moving the tee rather than touching the physics is the
            point: the cup stays 13px, the rim-out speed stays 520, friction and
@@ -1224,6 +1277,10 @@ export default function HeroCanvas() {
       }
       ballX = b.x + b.w * startFx;
       ballY = b.y + b.h * startFy;
+      /* The tee just moved, so the rating's two inputs (distance to the cup and
+         the slope along that line) are both new. This is the ONLY place the
+         rating is allowed to change — see the cache note at renderDiff(). */
+      refreshBand();
       velX = 0;
       velY = 0;
       phase = 'idle';
@@ -2535,6 +2592,9 @@ export default function HeroCanvas() {
          inputs (distance and the slope along the line) have both changed. Without
          this the card would keep asserting the difficulty of a hole that no
          longer exists. */
+      /* The box moved and the ball was clamped into it, so the tee is
+         effectively new even though resetBall() was not called. */
+      refreshBand();
       renderCard();
       if (!running) render(clock, Math.max(intro, 0.001));
     });
