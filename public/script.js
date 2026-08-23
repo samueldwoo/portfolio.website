@@ -1161,6 +1161,29 @@
             // Its top edge has reached the fold: it has been seen (or passed).
             if (r.top < vh * 0.94) {
                 el.classList.add("is-visible");
+                /* UNOBSERVE, or this rescue becomes a double entrance.
+                   Rescuing only added `is-visible` and cleared the inline
+                   from-state; the IntersectionObserver below was still
+                   watching. So the next time the element intersected — a
+                   scroll back up, or simply the first IO callback after the
+                   rescue — the observer ran its `anime()` on an element that
+                   was already fully visible, writing the from-state
+                   (`translateY(22px)`, `opacity: 0`) back onto it and playing
+                   the entrance a SECOND time.
+                   That is the reported "the pop and appear animation happens
+                   again after first hover": the entrance re-firing, not a
+                   hover effect. Traced by watching one `.favorite-item` —
+                   opacity reached 1, then a redundant `is-visible` write was
+                   followed by inline `transform: translateY(22px); opacity:
+                   1.11e-16` and a fresh 820ms ramp. Measured on `/`: 9
+                   elements re-entered, and 3 on `/projects/`.
+                   `revObserver` is `var`-scoped in the sibling branch below
+                   and assigned before any listener that can call this, but it
+                   is guarded anyway because this function also runs from a
+                   `setTimeout` and from `load`. */
+                if (typeof revObserver !== "undefined" && revObserver) {
+                    revObserver.unobserve(el);
+                }
                 // Drop any half-applied inline from-state so the CSS
                 // resting rule (.reveal.is-visible) fully governs it.
                 el.style.removeProperty("opacity");
@@ -1195,6 +1218,14 @@
                 if (!entry.isIntersecting) return;
                 var el = entry.target;
                 obs.unobserve(el);
+                /* ALREADY REVEALED => NEVER RE-ANIMATE. Second line of defence
+                   behind rescueStragglers' unobserve: an entrance is one-shot
+                   by definition, so re-running it on an element already at its
+                   resting state can only be a bug. Anything reaching here with
+                   `is-visible` was revealed by another path (the rescue sweep,
+                   showAll(), or an earlier callback), and the `anime()` calls
+                   below would write the from-state back onto it. */
+                if (el.classList.contains("is-visible")) return;
                 var parent = el.parentElement;
                 var key = parent ? (parent.__revId || (parent.__revId = "g" + (++showAll.__n || (showAll.__n = 1)))) : "root";
                 (groups[key] = groups[key] || []).push(el);
