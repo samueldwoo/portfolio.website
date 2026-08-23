@@ -80,5 +80,19 @@ export default defineConfig({
     '/travel.html': '/travel',
   },
 
+  /* THE DEV TOOLBAR IS OFF.
+  
+     It is dev-only and never ships, so this is purely about being able to LOOK at
+     the thing. The wing's whole front door is a question centred on a white screen
+     with one line of small print pinned to the bottom — and the toolbar sits in
+     exactly that spot, so the page could not be judged at all on the surface it is
+     designed for. It also overlaps the bottom-anchored spot the box jumps to after
+     the second answer.
+  
+     Nothing is lost that matters here: the toolbar's audits are about the public
+     marketing site, and this project checks accessibility, contrast and layout with
+     `astro check` plus measured passes instead. */
+  devToolbar: { enabled: false },
+
   integrations: [react()],
 });
