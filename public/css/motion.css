@@ -27,6 +27,11 @@
      4. Form feedback (invalid state)
      5. Page-transition veil
      6. Reduced-motion and coarse-pointer stand-downs
+     7. Throwable boarding-pass stubs — the ONE block here paired with
+        gsap-motion.js instead of motion-ux.js, and the only one scoped to
+        `html.stub-throw` rather than `html.motion-on`. It carries the static
+        coarse-pointer touch-action belt, which is deliberately scoped to no
+        flag at all.
 
    Two rules govern every block below.
 
@@ -377,5 +382,118 @@ html.mx-exiting .content {
     html.motion-on .pass.motion-spring .pass-plane {
         transform: none !important;
         transition: none !important;
+    }
+}
+
+/* ==========================================================================
+   7. Throwable boarding-pass stubs  (gsap-motion.js §7b)
+   --------------------------------------------------------------------------
+   You can lift a stub off the wall, move it around the board and throw it.
+   §7b's header carries the ownership argument in full; the part that matters
+   here is that the drag rides the INDEPENDENT `translate` property, not
+   `transform`, precisely so it never contends with motion-ux.js. Which makes
+   the division of labour:
+
+     JS  owns  translate               (gsap-motion.js §7b, one stub at a time)
+     CSS owns  box-shadow, z-index     (this block)
+
+   `cursor` and `user-select` are Draggable's: it writes `grab` / `grabbing`
+   from its own `cursor` / `activeCursor` options and `user-select: none` in
+   `enable()`, and takes all three back off in `disable()`. There is no CSS for
+   them here, so there is no second owner and nothing the unwind cannot undo.
+
+   NOTHING HERE TOUCHES `rotate`, AND THAT IS DELIBERATE. The obvious thing to
+   want is `rotate: 0deg` on a held stub — a card you have picked up is not
+   still lying at an angle. It cannot work and it was measured not working: a
+   drag forces GSAP to render a transform on the pass, which folds layout.css's
+   independent `rotate` into `transform` and writes `rotate: none` inline, and a
+   stylesheet cannot beat an inline declaration. A held stub keeps its tilt.
+   §7b's land() removes that inline `rotate` by hand, which is what gives the
+   tilt and the `:hover { rotate: 0deg }` straighten back to layout.css.
+
+   EVERYTHING IS SCOPED TO `html.stub-throw`, which gsap-motion.js adds only
+   after both plugins have loaded AND the device has passed the no-touch gate.
+   If either plugin 404s, if the reader has reduced motion set (this whole file
+   never runs then), or if there is a finger anywhere near the device, the flag
+   is absent and none of this applies. The board is then the plain static grid
+   layout.css paints, which is what it was before this feature existed.
+   ========================================================================== */
+
+/* A stub in hand.
+
+   `position: relative` is what makes `z-index` reliable, and here it is the
+   only thing that does: Draggable's `zIndexBoost` writes its 1000 onto the
+   drag TARGET, which is the offscreen proxy, not the pass. A grid item honours
+   z-index without `position`, and every one of these IS a grid item today, but
+   the narrow breakpoint sets `grid-column: auto` and a future one-column
+   flex/block wall would silently drop the held stub back under its neighbours.
+   No offsets, so it changes no layout. */
+html.stub-throw .pass-wall > .pass.is-stub-held {
+    position: relative;
+    z-index: 40;
+    /* Off the board, not off the page: a deeper contact shadow than the
+       resting one in layout.css §13, and the ONLY size cue there is. Scale is
+       deliberately untouched — every stub is the same size is a hard
+       requirement of this layout, and a held stub is exactly the size of the
+       ten it left behind. */
+    box-shadow:
+        0 14px 26px rgba(0, 0, 0, .30),
+        0 50px 80px -34px rgba(0, 0, 0, .60);
+}
+
+/* NOT HERE, DELIBERATELY: `user-select` and `-webkit-user-drag`. A drag across
+   a card would otherwise select its text, and the airline wordmark <img> would
+   start a native HTML5 image drag that eats the gesture outright — but
+   Draggable's `enable()` already nulls `ondragstart`/`onselectstart` and writes
+   `user-select: none` inline on each target, and its `disable()` puts all three
+   back. Adding a stylesheet copy would put a second owner on a property that
+   already has one, and the CSS copy is the one that could not be undone by the
+   reduced-motion unwind. Noted so nobody adds it back as a "missing" belt.
+   The cost is real and accepted: on a device where the drag is armed, the text
+   on a boarding pass is not selectable. */
+
+/* ---- THE COARSE-POINTER BELT, AND WHY IT IS NOT SCOPED TO A FLAG ----
+   Draggable with `type: "x,y"` writes `touch-action: none` as an INLINE style
+   on every target, inside its own `enable()` at create time. That timing is
+   fine — the trap is setting touch-action from a pointerdown handler, which is
+   already too late because the browser resolved it from the hit-test element
+   and its ancestors at touchstart. The problem is the target: a boarding pass
+   is a big card, the wall is one column of eleven of them on a phone, and
+   eleven of these with `touch-action: none` would take vertical pan away from
+   most of the travel page. That is precisely the failure that cost this repo a
+   working touch putt, and the fix there was static CSS.
+
+   gsap-motion.js §7b will not create a Draggable on any device that reports a
+   coarse pointer or a non-zero `maxTouchPoints`, so this should never fire.
+   It is here because "should never" is not a guarantee: it is STATIC, it is
+   UNSCOPED (no `html.stub-throw`, no `html.gsap-on` — a belt behind a flag is
+   no belt at all), and `!important` is what lets a stylesheet beat the inline
+   style Draggable would have written. A coarse pointer can always pan over a
+   stub, whatever the JS decided. The cost of being wrong in this direction is
+   a drag that scrolls instead of dragging; the cost of being wrong in the
+   other is a page you cannot scroll. */
+@media (any-pointer: coarse) {
+    .pass-wall > .pass {
+        touch-action: auto !important;
+    }
+}
+
+/* Reduced motion: gsap-motion.js returns before its first `gsap.set()` when
+   the preference is set, so `html.stub-throw` is never added and no Draggable
+   exists — there is nothing to stand down. For a MID-SESSION flip, §10's
+   unwind kills every Draggable (which is what removes the inline touch-action
+   and cursor) and drops the flag, so the selectors above stop matching.
+   This block is the belt for a stale flag, and it is written as its own rule
+   rather than folded into the block above so that a deleted comment delimiter
+   cannot silently swallow it — scroll.css lost a whole reduced-motion block
+   that way once and left 12 of 13 parallax planes transformed. */
+@media (prefers-reduced-motion: reduce) {
+    html.stub-throw .pass-wall > .pass.is-stub-held {
+        z-index: auto;
+        box-shadow: none;
+        transform: none !important;
+    }
+    .pass-wall > .pass {
+        touch-action: auto !important;
     }
 }

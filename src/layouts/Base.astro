@@ -599,10 +599,30 @@ const pageLinks = [
 
          motion-ux.js runs LAST: its nav-indicator watches the `is-active`
          class that script.js's scroll-spy sets, so the spy must have run
-         and placed the initial active link first. */}
+         and placed the initial active link first.
+
+         InertiaPlugin + Draggable power the throwable boarding-pass stubs
+         (gsap-motion.js §7b). Both are GSAP 3.13.0, matching gsap.min.js —
+         a plugin from a different minor than the core throws on
+         registerPlugin, which tools/gate_dir.py would report as a severe
+         console error. INERTIA FIRST: Draggable resolves InertiaPlugin once,
+         when its own module body initialises, so the plugin has to already be
+         on `window` by then; the reverse order leaves `inertia: true` warning
+         "please gsap.registerPlugin(InertiaPlugin)" and no throw ever runs.
+         Both must precede gsap-motion.js, which is where the one
+         `gsap.registerPlugin()` call for them lives — it registers nothing if
+         either global is missing, so a 404 on one of these two degrades the
+         wall to a plain static grid rather than throwing.
+
+         ROOT-ABSOLUTE, like every other src here. `./InertiaPlugin.min.js`
+         would resolve one level deep on the directory URLs /projects/ and
+         /travel/ and 404 — which is how this file once lost every stylesheet
+         and script on those two pages (21 severe console errors each). */}
     <script is:inline src="/gsap.min.js"></script>
     <script is:inline src="/ScrollTrigger.min.js"></script>
     <script is:inline src="/SplitText.min.js"></script>
+    <script is:inline src="/InertiaPlugin.min.js"></script>
+    <script is:inline src="/Draggable.min.js"></script>
     <script is:inline src="/gsap-motion.js"></script>
     <script is:inline src="/anime.min.js"></script>
     <script is:inline src="/script.js"></script>

@@ -941,6 +941,13 @@
             el.classList.remove("gsap-busy");
         });
         gsap.set(els, { clearProps: "all" });
+        /* §7b: a stub becomes throwable at the same instant it becomes
+           hoverable. This function is shared with the case-study prose batch,
+           so it is filtered here rather than relying on armStub's own
+           `.pass-wall` guard to no-op on a `.case-block`. */
+        els.forEach(function (el) {
+            if (el.classList.contains("pass")) armStub(el);
+        });
     }
 
     /* Release ONE element the moment its own entrance ends.
@@ -951,11 +958,20 @@
        stays hover-deaf until the last one finishes — measured at 2560 as
        ~530ms of a visibly settled pass ignoring the pointer. Per-element
        release keeps the interlock (nothing is freed early) and drops the
-       cross-element share of the wait to zero. */
+       cross-element share of the wait to zero.
+
+       It is also the one place that knows an individual pass is finally at
+       rest with no other writer on its transform, which is exactly the
+       precondition §7b's Draggable needs — so the drag is armed from here
+       (`armStub` is a hoisted declaration in §7b below; it is a no-op until
+       the plugins and the pointer gate say otherwise). Arming at init instead
+       would let a reader grab a pass whose entrance tween is still running and
+       put two writers back on `transform`. */
     function finishOne(el) {
         el.classList.add("is-visible");
         el.classList.remove("gsap-busy");
         gsap.set(el, { clearProps: "all" });
+        armStub(el);
     }
 
     var passes = toArray(".pass.gsap-reveal");
@@ -1027,6 +1043,496 @@
         finish(passes);
     }
 
+    /* ============================================================
+       7b. THE STUB BOARD IS PICK-UP-AND-THROWABLE
+           (Draggable + InertiaPlugin, 3.13.0)
+
+       You can lift a boarding pass off the wall, move it around the board,
+       and throw it: it leaves the cursor at the velocity you released it with,
+       decelerates, and curves back into its own slot. Nothing is achieved by
+       it. It is a toy, and it must leave the board exactly as it found it.
+
+       ======== READ THIS BEFORE CHANGING ANYTHING BELOW ========
+       THE OBVIOUS IMPLEMENTATION IS WRONG, AND IT WAS MEASURED WRONG, NOT
+       GUESSED WRONG.
+
+       The obvious implementation is `Draggable.create(pass, {type: "x,y"})`.
+       Do not do that. GSAP folds the INDEPENDENT `rotate` / `translate` /
+       `scale` CSS properties into `transform` the first time it renders a
+       transform on an element — it reads them, writes `rotate: none` /
+       `translate: none` inline, and carries the values in its own cache
+       instead. That fold is visually lossless (same matrix, same rect), and
+       `clearProps: "all"` undoes it, which is why §7's entrance can absorb
+       and restore the tilt on every pass without anyone noticing.
+
+       A Draggable with `inertia: true` makes it PERMANENT. InertiaPlugin's
+       velocity tracker samples the target's x/y every single frame for as
+       long as the Draggable exists, so the cache never goes cold and the
+       fold is re-applied immediately after any attempt to clear it.
+
+       Measured, on this fixture, with the wall's real CSS: arming eleven
+       Draggables directly on the passes left all eleven with
+       `rotate: none; translate: none` and a permanent inline `transform`,
+       against the committed build's `rotate: -1.5deg; translate: -3px` and
+       no inline transform at all. The board still LOOKED identical (rects
+       byte-for-byte: left 31.29 / 498.46 / 954.65, top 194.33 / 208.83 /
+       677.18 in both), but `.pass-wall > .pass:hover { rotate: 0deg }` —
+       "the stub you are looking at is the one lying flat", layout.css §13 —
+       went dead on all eleven, together with its .28s transition, because an
+       inline `rotate: none` cannot be beaten by a stylesheet. That is the
+       fourth instalment of this project's `transform`-on-`.pass` problem, and
+       it arrives from a direction the first three did not: not from a
+       runtime write, but from GSAP initialising its cache at create time.
+
+       ---- SO: DRAGGABLE NEVER TOUCHES A `.pass` ----
+       Each pass gets a zero-size, aria-hidden PROXY div (parked in one
+       container on <body>, NOT in `.pass-wall` — the tilt ladder is
+       `:nth-child(1..11)` and an extra child in there would scramble it).
+       Draggable's TARGET is the proxy; its `trigger` is the pass. So the
+       velocity tracker samples the proxy, the throw physics happen on the
+       proxy, `zIndexBoost` writes the proxy's z-index, and the pass's
+       transform cache is never touched by any of it. `onDrag` and
+       `onThrowUpdate` mirror the proxy's x/y onto the pass.
+
+       ---- AND IT MIRRORS ONTO `translate`, NOT `transform` ----
+       `transform` on `.pass` is the most contested property in this project.
+       At rest it has three writers, deliberately partitioned:
+
+         layout.css §13  the resting tilt and nudge, via the independent
+                         `rotate` / `translate` properties
+         motion-ux.js    the magnet channel — x, rotate, rotateX, rotateY
+         motion-ux.js    the lift channel   — y, scale
+
+       A drag needs two translation axes and there is no free pair left in
+       `transform`: it would collide with the magnet on x and with the lift on
+       y at once, so the axis partition cannot be extended into it. `translate`
+       is the free lane. Nothing animates it — layout.css sets it statically,
+       per index, and that is all. So the ownership for a drag is:
+
+         FROM the first 5px of movement (onDragStart) UNTIL the throw has
+         landed (land()), THIS SECTION IS THE SOLE WRITER OF `translate` ON
+         THAT ONE PASS, and it writes nothing else. `transform` stays exactly
+         where motion-ux left it. Every other pass is untouched.
+
+       ---- WHY motion-ux STILL HAS TO BE MUTED ----
+       Two reasons, and the second is the one that would bite.
+         1. `clearTransform()` in motion-ux's settle() does
+            `style.removeProperty("translate")`. That is our lane; 760ms after
+            the stub leaves the cursor it would wipe the drag.
+         2. THE FOLD AGAIN. Any `gsap.set` on the pass folds whatever is in
+            `translate` into `transform` and writes `translate: none`. The
+            hover and press springs write transform continuously while a stub
+            is in hand, so each one would absorb the current drag offset and
+            the next mirrored frame would add it on top — runaway
+            accumulation, not a fight.
+
+       The mute is `.gsap-busy`, the interlock this file already owns and §7
+       already uses: motion-ux's `ready()` refuses to write while it is
+       present, and every write path for a pass goes through it — applyLift
+       (checked at entry), applyMagnet (both callers check), settle's
+       clearTransform (checked in the callback). Audited path by path; there
+       is no fourth. `html.gsap-on .gsap-busy { transition: none !important }`
+       comes with it, so no CSS transition is chasing the mirrored frames.
+
+       `.gsap-busy` stops motion-ux STARTING a write; it cannot stop one
+       already in flight, because motion-shim.js's springs are not gsap tweens
+       — they are integrated on a `gsap.ticker` callback that writes through
+       `gsap.set` (which is exactly what makes the axis partition compose).
+       `gsap.killTweensOf()` does not touch them. At the moment a drag begins
+       there are always two running: the press dip on y/scale and the magnet
+       on x/tilt. motion-shim's public escape hatch is `duration: 0`, which
+       calls its own `cancelSprings()` per property, writes synchronously, and
+       marks the spring inactive. seize() uses it, and it is also why seize
+       zeroes GSAP's x/y: they hold the folded resting nudge, and leaving it
+       there would apply that nudge twice once we start writing `translate`.
+
+       seize() DELIBERATELY DOES NOT TOUCH `rotate`. GSAP's cache holds the
+       folded resting tilt as `rotation`, and zeroing it would flatten the stub
+       permanently — that was the first version of this code and it lost the
+       tilt on every pass that had been dragged.
+
+       ---- WHY THE PRESS DIP SURVIVES ----
+       Seizing at `onPressInit` (Draggable's documented "kill tweens here"
+       hook) would be tidier, but it fires on every press, so every plain
+       click on a pass would lose motion-ux's press dip and release overshoot.
+       Seizing at `onDragStart` costs one frame of normalisation instead, and a
+       click that never becomes a drag never touches any of this.
+
+       SIZE PARITY, a hard requirement of this layout: nothing here writes
+       `scale` except to pin it at 1, and `translate` is a paint-time offset
+       that does not participate in layout. A held stub is the exact size of
+       the ten it left behind, measured at every sample of a drag.
+
+       ---- COARSE POINTERS: OFF, DELIBERATELY, AND NOT BY MEDIA QUERY ALONE
+       Draggable with `type: "x,y"` writes `touch-action: none` as an inline
+       style on its TRIGGERS in `enable()`, i.e. at create time. The timing is
+       fine — the trap is setting touch-action inside a pointerdown handler,
+       which is already too late because the browser resolved it from the
+       hit-test element and its ancestors at touchstart. The problem is the
+       target: on a phone the wall is one column of eleven big cards, and
+       eleven `touch-action: none` cards would take vertical pan away from most
+       of the travel page. A stub is far too big a target to steal a scroll.
+
+       So the gate is not "is this a fine pointer" but "is there NO touch input
+       on this device at all" — `(any-pointer: coarse)` and
+       `navigator.maxTouchPoints` both have to come up empty, which also rules
+       out the touchscreen laptop that satisfies `(pointer: fine)`. A mouse
+       user on a Surface loses a toy; nobody loses a scroll. motion.css carries
+       a static, unflagged `@media (any-pointer: coarse)` belt that puts
+       `touch-action` back with `!important` regardless, so even a wrong answer
+       here cannot cost a coarse pointer its pan.
+
+       WCAG 2.5.7 Dragging Movements is NOT satisfied by an equivalent
+       single-pointer path, and this comment is not going to pretend
+       otherwise. There is no keyboard or click alternative: `.pass` is a plain
+       `<article>`, and the only way to give it one would be to put eleven
+       non-interactive articles into the tab order — a regression this project
+       has already had once, from Motion's `press()` setting tabIndex. The
+       judgement is that an ornament which moves a card and puts it straight
+       back conveys nothing and gates nothing, so there is no function for an
+       alternative to provide. Nothing on this page depends on it and a reader
+       who never finds it has missed no content. Draggable does cost the
+       armed passes their text selection (its `enable()` writes
+       `user-select: none`, its `disable()` puts it back) — accepted, and
+       recorded here rather than discovered later.
+
+       ---- ONE MEASURED, SELF-HEALING RESIDUE ----
+       After a throw the stub is back in its slot to the pixel (asserted), but
+       it can still be carrying a folded `transform` and an inline
+       `rotate: none` for a moment. It is not ours: motion-ux writes its own
+       REST transform when hover ends, and its settle() — the thing that would
+       normally strip it 760ms later — had already fired and given up while we
+       still held `.gsap-busy`, and settle() is only ever rescheduled from a
+       hover or press ending. So the fold survives until the next hover cycle,
+       whose settle() clears it. Measured: immediately after landing,
+       `transform: translate3d(1px, 6px, 0px) rotate(-1.8deg)` with
+       `rotate: none`; after one hover in/out, `transform: ""`,
+       `rotate: -1.8deg`, `translate: 1px 6px`, position unchanged throughout.
+
+       The only thing at stake in that window is whether
+       `.pass-wall > .pass:hover { rotate: 0deg }` can apply to that one stub,
+       and it heals the first time the reader hovers it. It is deliberately NOT
+       chased with a deferred second sweep: that would mean timing a write
+       against motion-ux's private retry interval, which is precisely the kind
+       of cross-file coupling the first four incidents came out of.
+
+       ---- REDUCED MOTION ----
+       Nothing here exists: this file returns before its first `gsap.set()`
+       when the preference is set, so no plugin is registered, no proxy is
+       built, no Draggable is created, and `html.stub-throw` — which every
+       rule in motion.css §7 hangs off — is never added. For a mid-session
+       flip, §10's unwind lands anything held, kills each Draggable
+       (`disable()` is what removes the inline `touch-action`, `cursor` and
+       `user-select` and unbinds every listener), removes the proxies and drops
+       the flag.
+       ============================================================ */
+    var stubDrags = [];          // every Draggable instance created here
+    var stubProxyHost = null;    // the one container the proxies live in
+
+    /* "none" | "3px" | "2px 13px" -> [x, y], or null when the property has
+       already been folded away into `transform` by a gsap write. */
+    function parseTranslate(value) {
+        if (!value || value === "none") return null;
+        var parts = value.trim().split(/\s+/);
+        var x = parseFloat(parts[0]);
+        var y = parts.length > 1 ? parseFloat(parts[1]) : 0;
+        if (isNaN(x) || isNaN(y)) return null;
+        return [x, y];
+    }
+
+    function stubProxy() {
+        if (!stubProxyHost) {
+            stubProxyHost = document.createElement("div");
+            stubProxyHost.className = "stub-proxies";
+            stubProxyHost.setAttribute("aria-hidden", "true");
+            /* Inline, not in motion.css: this node only exists because this
+               script ran, so its own styles travel with it and a stale
+               stylesheet can never leave a stray box on the page. Zero-size
+               and pointer-transparent, so it is not a tap target, not a
+               reachable element and not part of any layout. */
+            stubProxyHost.style.cssText =
+                "position:fixed;top:0;left:0;width:0;height:0;" +
+                "overflow:hidden;pointer-events:none;visibility:hidden";
+            document.body.appendChild(stubProxyHost);
+        }
+        var p = document.createElement("div");
+        p.style.cssText = "position:absolute;top:0;left:0;width:0;height:0";
+        stubProxyHost.appendChild(p);
+        return p;
+    }
+
+    function armStub(el) {
+        if (!stubThrowReady() || el.__stubDrag) return;
+
+        var wall = el.closest(".pass-wall");
+        if (!wall) return;
+
+        /* The resting nudge, read while it is still readable. armStub is called
+           from finishOne(), one line after its `clearProps: "all"`, which is
+           the moment the independent properties are guaranteed to be back on
+           the element. It is re-read at each press when it is still there, so a
+           breakpoint change is picked up; the cache only matters once a hover
+           spring has folded it away. */
+        var armedBase = parseTranslate(window.getComputedStyle(el).translate) || [0, 0];
+
+        /* Nothing to do about the airline wordmark <img> starting a native
+           HTML5 image drag, or about a drag selecting the card's text:
+           Draggable's `enable()` nulls `ondragstart` / `onselectstart` and
+           writes `user-select: none` on each trigger, and its `disable()` puts
+           all three back. A copy here would be a second owner, and the CSS half
+           of it is the half the unwind could not undo. */
+
+        var proxy = stubProxy();
+        var held = false;        // we own `translate` on this pass right now
+        var moved = false;       // this pointer cycle produced a real drag
+        var guard = null;        // backstop so `.gsap-busy` can never stick
+        var base = armedBase;    // origin the mirrored offset is added to
+
+        function clearGuard() {
+            if (guard) { clearTimeout(guard); guard = null; }
+        }
+
+        /* The mirror. One property, one owner, no reads — so it cannot drift
+           and there is nothing here for another writer to interleave with. */
+        function paint(dx, dy) {
+            el.style.translate = (base[0] + dx) + "px " + (base[1] + dy) + "px";
+        }
+
+        /* Take `translate`, and take motion-ux's hands off it. */
+        function seize() {
+            clearGuard();
+            held = true;
+            el.classList.add("gsap-busy", "is-stub-held");
+            /* Re-read the origin if the sheet's value is still on the element;
+               if a hover spring has already folded it into `transform`, the
+               armed-time reading is the only correct one left. */
+            base = parseTranslate(window.getComputedStyle(el).translate) || armedBase;
+            // Belt for motion-shim's non-spring path, which IS a gsap tween.
+            gsap.killTweensOf(el);
+            quiesce(el);
+        }
+
+        /* Give it back, in the one order that cannot strand anything: resync
+           motion-shim's store, drop our inline `translate` so the stylesheet's
+           value is the live one again, clear the inline transform GSAP left
+           (which is also what restores the independent properties it folded
+           away), drop the visual state, and only then unmute motion-ux. */
+        function land() {
+            clearGuard();
+            if (!held) return;
+            quiesce(el);
+            gsap.set(el, { clearProps: "all" });
+            /* MEASURED NECESSARY, not belt and braces. Folding the independent
+               properties into `transform` means GSAP also writes
+               `rotate: none` / `translate: none` inline, and `clearProps: "all"`
+               does NOT reliably take those back off — landed with
+               `style.rotate === "none"` still set, which leaves
+               `.pass-wall > .pass:hover { rotate: 0deg }` unable to apply
+               because a stylesheet cannot beat an inline declaration. Removing
+               the three by hand is what hands the tilt and the nudge back to
+               layout.css, and it is exactly what motion-ux's own
+               clearTransform() does for the same reason. Our drag `translate`
+               goes out with them, which is the whole restoration: one property
+               removed, stylesheet value live again. */
+            el.style.removeProperty("translate");
+            el.style.removeProperty("rotate");
+            el.style.removeProperty("scale");
+            el.classList.remove("is-stub-held");
+            held = false;
+            moved = false;
+            el.classList.remove("gsap-busy");
+        }
+        el.__stubLand = land;
+
+        /* Catching a stub in mid-flight: a press kills the proxy's throw tween,
+           so `onThrowComplete` never fires for it. Rather than snapping the
+           stub home from wherever it froze, fly it the rest of the way — on the
+           proxy, so the mirror stays the only writer on the pass. */
+        function homeAndLand() {
+            gsap.to(proxy, {
+                x: 0, y: 0, duration: 0.42, ease: "power3.out",
+                overwrite: "auto",
+                onUpdate: function () {
+                    paint(+gsap.getProperty(proxy, "x"), +gsap.getProperty(proxy, "y"));
+                },
+                onComplete: land
+            });
+        }
+
+        var d = window.Draggable.create(proxy, {
+            /* The pass is what you press; the proxy is what moves. */
+            trigger: el,
+            type: "x,y",
+            inertia: true,
+            /* THE THROW. `snap` is applied to the LANDING value, so
+               InertiaPlugin still builds its tween from the real release
+               velocity and merely redirects the destination to 0 — the stub
+               flies out, decelerates and curves back into its slot as ONE
+               tween. One tween is also one owner: there is no second "and now
+               return home" stage for an interruption to strand half-done, and
+               0,0 is the only value it can land on, which is what makes "leaves
+               the board as it found it" a property of the physics rather than
+               of cleanup code. */
+            snap: { x: zeroSnap, y: zeroSnap },
+            minDuration: 0.45,
+            maxDuration: 1.05,
+            /* NO `bounds` HERE ON PURPOSE — see onPressInit. Anything static
+               would be wrong by the next resize, and a placeholder of zeros
+               would be actively harmful: Draggable clamps against the bounds it
+               already has while it records the press. */
+            /* 1 = a hard stop at the bound, no rubber-band. Measured at the
+               default-ish 0.72: edge resistance lets the stub travel PAST the
+               bound in proportion to how hard you push, which put +20px of
+               scrollable overflow on the document — the bound stops being a
+               guarantee. The bound is already 40px outside the wall, so a hard
+               stop reads as "the board has edges" rather than as a snag. */
+            edgeResistance: 1,
+            minimumMovement: 5,
+            cursor: "grab",
+            activeCursor: "grabbing",
+            allowContextMenu: true,
+
+            /* Bounds, measured fresh, in the one hook that runs BEFORE
+               Draggable records the starting position and clamps against it.
+               Passing `wall` as an element would be wrong twice over: the
+               proxy is not in the wall, and the resting `translate` already
+               carries some stubs up to 16px past the wall's own box, which
+               Draggable would read as "already at the limit". Working in
+               minX/maxX/minY/maxY — limits on the proxy's own x/y, which IS the
+               offset we mirror — off the pass's real rendered rect sidesteps
+               both: `s` already contains the tilt, the nudge and any offset
+               currently applied, so the arithmetic needs to know about none of
+               them. */
+            onPressInit: function () {
+                moved = false;
+                clearGuard();
+                var w = wall.getBoundingClientRect();
+                var s = el.getBoundingClientRect();
+                var pad = 40;
+                /* Intersected with the visible viewport, inset a little. The
+                   wall alone is not a safe bound: `translate` still counts
+                   toward scrollable overflow, so a stub allowed past the
+                   viewport edge grows scrollWidth and pops a horizontal
+                   scrollbar mid-drag — measured at +20px with a bare wall
+                   bound — and past the bottom it grows scrollHeight, which
+                   moves the scrollbar under the reader's hand. Clamping to
+                   what is on screen makes both impossible, and "the visible
+                   part of the board" is the area a mouse can reach anyway. */
+                var doc = document.documentElement;
+                var inset = 10;
+                var lo = Math.max(w.left - pad, inset);
+                var hi = Math.min(w.right + pad, doc.clientWidth - inset);
+                var to = Math.max(w.top - pad, inset);
+                var bo = Math.min(w.bottom + pad, doc.clientHeight - inset);
+                this.applyBounds({
+                    minX: this.x - Math.max(s.left - lo, 0),
+                    maxX: this.x + Math.max(hi - s.right, 0),
+                    minY: this.y - Math.max(s.top - to, 0),
+                    maxY: this.y + Math.max(bo - s.bottom, 0)
+                });
+            },
+
+            onDragStart: function () {
+                moved = true;
+                seize();
+                paint(this.x, this.y);
+            },
+            onDrag: function () { paint(this.x, this.y); },
+            onThrowUpdate: function () { paint(this.x, this.y); },
+
+            onRelease: function () {
+                if (!held) return;
+                if (!moved) { homeAndLand(); return; }   // caught it mid-flight
+                /* The throw tween is created around now. Check on the next
+                   frame rather than trusting callback order: a drag that ends
+                   exactly on 0,0 has nothing to snap to and makes no tween, and
+                   waiting on an onThrowComplete that never comes would leave
+                   this pass hover-deaf for good. */
+                var self = this;
+                guard = setTimeout(land, 2200);          // hard backstop
+                window.requestAnimationFrame(function () {
+                    if (!self.isThrowing) land();
+                });
+            },
+
+            onThrowComplete: land
+        })[0];
+
+        el.__stubDrag = d;
+        stubDrags.push(d);
+    }
+
+    /* Always 0: the landing value, not the natural one. */
+    function zeroSnap() { return 0; }
+
+    /* Stop motion-shim's in-flight springs on the pass and put GSAP's own x/y
+       at zero, in one synchronous call. `duration: 0` is the shim's documented
+       "be there now" path — it cancels the spring for each property before
+       writing, which a gsap kill cannot do because these springs are ticker
+       callbacks rather than tweens. x/y have to be zeroed because GSAP folded
+       the resting `translate` into them and the mirror is about to apply that
+       same nudge itself. `rotate` is NOT in the list: GSAP folded the resting
+       TILT into it, and zeroing that flattens the stub for good. The gsap.set
+       fallback is for the build where motion-shim never loaded — then no spring
+       exists and the write is all that is needed. */
+    function quiesce(el) {
+        var M = window.Motion;
+        var vals = { x: 0, y: 0, scale: 1, rotateX: 0, rotateY: 0 };
+        if (M && typeof M.animate === "function") {
+            M.animate(el, vals, { duration: 0 });
+        } else {
+            gsap.set(el, { x: 0, y: 0, scale: 1, rotationX: 0, rotationY: 0 });
+        }
+    }
+
+    /* One gate, answered once, eagerly. Registering the plugins at init rather
+       than on the first entrance means a version mismatch surfaces as a console
+       error at load, where tools/gate_dir.py is looking. */
+    var stubGate = null;
+    function stubThrowReady() {
+        if (stubGate !== null) return stubGate;
+        stubGate = false;
+
+        var Drag = window.Draggable;
+        var Inertia = window.InertiaPlugin;
+        if (typeof Drag !== "function" || !Inertia) return stubGate;
+
+        /* No touch input AT ALL. `(pointer: fine)` is not sufficient: a
+           touchscreen laptop satisfies it and would still hand eleven big cards
+           an inline `touch-action: none`. See the section header. */
+        var mm = window.matchMedia;
+        if (typeof mm !== "function") return stubGate;
+        if (!mm("(hover: hover) and (pointer: fine)").matches) return stubGate;
+        if (mm("(any-pointer: coarse)").matches) return stubGate;
+        if ((navigator.maxTouchPoints | 0) > 0) return stubGate;
+
+        gsap.registerPlugin(Inertia, Drag);
+        document.documentElement.classList.add("stub-throw");
+        stubGate = true;
+        return stubGate;
+    }
+    if (passes.length) stubThrowReady();
+
+    /* §10 unwind. `disable()` (inside kill()) is the part a stylesheet cannot
+       do: it removes the inline `touch-action`, `cursor` and `user-select`
+       Draggable wrote on each trigger and unbinds every listener. Landing first
+       means §10's own `clearProps` on `.pass.gsap-reveal` lands on a pass whose
+       shim store already reads zero and whose `translate` is the stylesheet's
+       again. */
+    unwindHooks.push(function () {
+        toArray(".pass").forEach(function (el) {
+            if (el.__stubLand) el.__stubLand();
+        });
+        stubDrags.forEach(function (d) {
+            try { d.kill(); } catch (err) { /* already dead */ }
+        });
+        stubDrags.length = 0;
+        if (stubProxyHost && stubProxyHost.parentNode) {
+            stubProxyHost.parentNode.removeChild(stubProxyHost);
+        }
+        stubProxyHost = null;
+        document.documentElement.classList.remove("stub-throw");
+    });
     /* ---- Case-study prose: staggered within its own block ----
        These are the 2x2 .case-block grid on projects.html. Batching by
        proximity is right here (they genuinely enter in clusters), but the
