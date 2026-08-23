@@ -930,13 +930,28 @@
     // `.gsap-busy` mutes the element's own CSS transitions for the
     // duration of the tween (see styles.css) so a .3s CSS transition
     // isn't chasing our per-frame inline transform.
+    /* `__gsapEntered` EXISTS BECAUSE begin() CAN OUTLIVE ITS OWN TWEEN.
+       §7b's straggler watchdog can rescue a pass BEFORE the wall's ScrollTrigger
+       fires. When it does it kills that pass's entrance tween — and then begin()
+       stamps `.gsap-busy` on all eleven, while the killed tween no longer has an
+       onComplete to take it off again. Those passes stayed busy for the whole
+       visit, which meant motion-ux's `ready()` refused to write their hover
+       spring (hover-deaf) and, once stubs became draggable, they were also
+       refused as swap targets because a busy stub is skipped.
+       Measured on the served build BEFORE this fix: stubs 0, 1 and 2 were still
+       `.gsap-busy` five seconds after the wall had finished revealing, and a drag
+       of 0 onto 1 correctly refused to trade. After: 0 of 11 busy.
+       The flag is one-way, like `is-visible`: once a pass has entered, nothing
+       may mark it busy again. */
     function begin(els) {
         els.forEach(function (el) {
+            if (el.__gsapEntered) return;
             el.classList.add("gsap-busy", "is-visible");
         });
     }
     function finish(els) {
         els.forEach(function (el) {
+            el.__gsapEntered = true;
             el.classList.add("is-visible");
             el.classList.remove("gsap-busy");
         });
@@ -968,6 +983,7 @@
        would let a reader grab a pass whose entrance tween is still running and
        put two writers back on `transform`. */
     function finishOne(el) {
+        el.__gsapEntered = true;   // see the note at begin()
         el.classList.add("is-visible");
         el.classList.remove("gsap-busy");
         gsap.set(el, { clearProps: "all" });
@@ -1163,6 +1179,251 @@
        that does not participate in layout. A held stub is the exact size of
        the ten it left behind, measured at every sample of a drag.
 
+       ============================================================
+       ---- SWAP ON FLING: THROW ONE STUB AT ANOTHER AND THEY TRADE SLOTS ----
+
+       Fling a stub onto another stub and the two change places. The thrown one
+       flies into the target's slot; the target slides into the slot the thrown
+       one came from. Same toy, one more verb.
+
+       THE RULE, AND WHY IT IS THIS ONE
+       The target is decided from the PROJECTED LANDING, not from where the
+       cursor let go. It is a fling: the reader aims at where the card will end
+       up. InertiaPlugin already computes that projection from the release
+       velocity, so using it costs nothing and it degrades exactly right — a
+       slow drag-and-drop projects ~0px past the release point, so the same rule
+       covers "place it on that one" and "hurl it at that one" with no second
+       code path. (Measured from the plugin's own model: displacement is
+       3.5e-4 * v * |v| px at `throwResistance` 1000, so 500px/s carries ~88px
+       and 1000px/s carries ~350px — about one column pitch at 1440.)
+
+       Among the candidates the winner is the one the landing BOX covers most,
+       and it must cover at least a THIRD of a stub's area (SWAP_COVER). Not
+       "nearest slot centre": nearest-centre always finds a winner, so a card
+       dropped into the gutter between rows would swap with a neighbour it is
+       barely touching. Coverage means the gesture has to actually land the card
+       on another card. The three cases, computed against the real 1440 geometry
+       (stub ~299x197, gap ~24px, column pitch 323, row pitch 221):
+
+         aimed at a stub            ~100% coverage   -> swap
+         dropped in the gutter
+           between two stubs        ~46% each        -> swap, with the larger
+         dropped on the crossroads
+           of four stubs            ~20% each        -> NO swap, returns home
+         dropped in the empty 12th
+           cell of the last row     ~0%              -> NO swap, returns home
+
+       The crossroads case is deliberately a no-swap: an ambiguous gesture gets
+       the answer it had before this feature existed. A third is also nowhere
+       near any of those numbers, so the threshold is not a knife edge.
+
+       Boxes are built from `offsetWidth`/`offsetHeight` around each stub's rect
+       CENTRE, not from the rects themselves: a rect is grown by the resting
+       tilt, but `rotate` turns about the centre, so the centre is exact and the
+       layout box is the true slot footprint. Size parity means every box is
+       identical, which is why one `w*h` covers both sides of the comparison.
+
+       CANDIDATES MUST BE ARMED AND IDLE — `__stubDrag && !.gsap-busy`. Armed
+       means its entrance tween finished (armStub is only ever called from
+       finishOne), so a swap can never reach into §7's staggered entrance and
+       strand it. `.gsap-busy` means somebody is writing to that pass right now:
+       a held stub, the other half of a trade already in flight, or one still
+       entering. Both halves of that predicate are interlocks this file already
+       owns; no new state was invented for it.
+
+       ONE TRADE AT A TIME (`stubSwapLock`). You cannot drag two stubs with one
+       mouse, but you can fling one and immediately fling another while the
+       first is still in the air — and two overlapping reorders of the same
+       parent is a race with no correct answer. While a trade is pending the
+       decision function returns "home" for everybody, so the second fling is
+       simply an ordinary throw. Pressing either participant ABORTS the pending
+       trade and sends the other half back to its own slot: catching a card
+       cancels the deal, which is the only reading a reader could expect.
+
+       ---- THE `translate` ARITHMETIC, WRITTEN OUT ----
+       `translate` is shared: it carries the slot's authored nudge AND the live
+       drag offset, and a swap moves a stub to a slot with a DIFFERENT nudge.
+       That sounds like it needs bookkeeping. It needs none, and here is why.
+
+       The mirror writes `translate = base + offset`, where `base` is the
+       stub's authored nudge for the slot it is IN. So for a stub in slot i:
+
+         painted centre  =  centre(slotBox i) + T_i + offset
+         rest centre     =  centre(slotBox i) + T_i          (offset 0)
+
+       Both halves measure their own REST CENTRE the same way — seize, paint
+       offset 0, read the rect centre — so `restCentre` is a single measured
+       number that already contains the slot box, the nudge, and nothing else.
+       (It has to be measured after seize(): seize's quiesce() folds the
+       independent `translate` into `transform` and then zeroes GSAP's x/y, so
+       the element is momentarily sitting on its bare slot box. paint(0,0) puts
+       the nudge back in OUR lane, which is where the arithmetic wants it.)
+
+       Let A be thrown, B the target. The throw is redirected to land on
+
+         offset = restCentre(B) - restCentre(A)
+
+       and B is slid to `restCentre(A) - restCentre(B)`, i.e. exactly minus
+       that. A difference of two measured centres — no slot boxes, no nudges,
+       no grid maths, and it is correct at every breakpoint because it never
+       assumes what the grid is doing.
+
+       Then, once BOTH have arrived, the DOM swap and the two land()s happen in
+       ONE synchronous block, and that block is a VISUAL NO-OP. Proof, for A:
+
+         before the swap   A's grid box is slotBox(i),
+                           inline translate = T_i + (rc(B) - rc(A))
+                           centre = centre(slotBox i) + T_i + rc(B) - rc(A)
+                                  = rc(A) + rc(B) - rc(A)
+                                  = rc(B)
+         after the swap    A's grid box is slotBox(j), and land() REMOVES the
+                           inline translate, so the stylesheet's value for the
+                           new `:nth-child` is live again:
+                           centre = centre(slotBox j) + T_j = rc(B)
+
+       Identical. Same argument for B with i and j exchanged. So the reorder
+       moves nothing on screen — the movement was the flight and the slide, and
+       the reorder only makes the DOM agree with what the reader already sees.
+       Nothing is animated across the reorder, so nothing can be stranded
+       half-way through it.
+
+       land() is still the guarantee, exactly as before: removing one inline
+       property puts the stub on the stylesheet's value for whatever slot it is
+       now in. The snap only decides which slot the FLIGHT ends at. That is why
+       a landing that InertiaPlugin has to clamp by a few px costs a few px of
+       snap at land and nothing worse — and why the bounds check below only has
+       to catch the gross case.
+
+       THE SNAP IS `snap.points`, NOT `snap.x`/`snap.y`. A 2D decision cannot be
+       made one axis at a time. Draggable's `snap.points`-as-a-function form
+       sets InertiaPlugin's `linkedProps: "x,y"`, which gathers the natural
+       landing for both axes into ONE point object and calls the function ONCE
+       with it (verified in the vendored 3.13.0: InertiaPlugin's `$()` caches
+       the result on the point via `calculated`, and the resolved end is written
+       back over the `end` key so the second axis cannot re-enter it). `this` is
+       the Draggable, so the gesture's own bounds are readable from inside.
+
+       The function's return set is exactly TWO values: {0,0} — this stub's own
+       slot, i.e. byte-for-byte the old behaviour — or the target's offset. Both
+       are legal slots, so "a thrown stub always ends up in a slot" survives as
+       a property of the physics rather than of cleanup code, which is the whole
+       reason the original used `snap` instead of a second return-home tween.
+
+       THE BOUNDS CHECK IS NOT OPTIONAL. InertiaPlugin clamps whatever the
+       function returns to the gesture's own min/max (Draggable passes them in
+       as the per-axis `max`/`min`). Those limits are the visible board, so a
+       target that is scrolled mostly off screen is not reachable and a clamped
+       landing would stop the card BETWEEN slots. Rejecting an out-of-bounds
+       offset turns that into "no swap", and the practical rule it produces is
+       the honest one: you can only trade with a stub you can see.
+
+       THE PROXY ORIGIN HAS TO BE RESET. This is the one place the swap reaches
+       into the drag machinery. The throw now ends somewhere other than 0,0, and
+       the proxy's x/y is the coordinate origin every subsequent gesture on that
+       pass is measured from — so land() zeroes the proxy AND writes Draggable's
+       own cached `x`/`y`/`endX`/`endY` back to zero with it. The cache write is
+       needed because Draggable dispatches `onPressInit` BEFORE it re-reads the
+       target's position (verified in the vendored source: `Mh` fires pressInit,
+       then records positions, then kills tweens), and onPressInit is where this
+       file computes its bounds off `this.x`. Without it the next press on a
+       swapped stub derives its limits from the last landing offset. The same
+       reasoning is why every proxy tween here mirrors back onto `drag.x`/`.y`.
+
+       THE ARMED BASE HAS TO BE REBASED. `armedBase` is the fallback origin,
+       cached at arm time, used only once a hover spring has folded the live
+       `translate` away. A swap changes the stub's `:nth-child`, so that cache
+       becomes the OLD slot's nudge — a stale one would surface as a =<20px jump
+       on some later grab, long after the swap, which is exactly the class of
+       bug that never gets found. rebase() re-reads it inside the commit block,
+       one line after land() handed `translate` back to the stylesheet.
+
+       ---- THE TILT LADDER MOVES WITH THE SLOT, AND THAT IS THE INTENT ----
+       Reordering the DOM re-evaluates `:nth-child`, so a swapped stub wears its
+       NEW slot's tilt and nudge. layout.css §13 is explicit that the ladder
+       describes the BOARD — "what varies is only how each one LIES on the
+       plate" — and the values are hand-picked so no two neighbours lean the
+       same way. Carrying a tilt along with its card would break that
+       neighbour-alternation at both ends of every trade.
+
+       It is also the only option the ownership map allows. Keeping the tilt
+       with the card means writing `rotate` inline, and motion.css §7 records
+       the measurement that kills that idea: a drag forces GSAP to render a
+       transform, which folds `rotate` away and writes `rotate: none` inline, so
+       an inline tilt would also permanently kill
+       `.pass-wall > .pass:hover { rotate: 0deg }` on every stub that had ever
+       been dragged. The tilt belongs to the slot.
+
+       The change is therefore visible: two stubs each pick up a new lean, by at
+       most ~3.5deg, at the instant of the commit. It is INSTANTANEOUS, not
+       eased, because `.gsap-busy` (`transition: none !important`) is still on
+       when land() removes the inline `rotate` and only comes off afterwards.
+       Deliberate: the alternative is dropping `.gsap-busy` first so layout.css's
+       `transition: rotate .28s` can run, which would unmute motion-ux for a
+       frame while this section still had the pass mid-restore. A 3-degree step
+       on a card that has just flown across the board is not worth reopening
+       land()'s ordering, which four separate incidents produced.
+
+       ---- WHY A DOM REORDER AND NOT CSS `order` ----
+       `order` on the grid items would move the cards without touching the DOM,
+       which sounds tidier and keeps the tilts with their cards. It is the wrong
+       trade. Visual order would then disagree with DOM order permanently, which
+       is precisely what WCAG 1.3.2 Meaningful Sequence is about; a low-vision
+       reader driving a screen reader with a mouse would hear the wall in an
+       order that no longer matches what is on screen. A DOM swap keeps the two
+       in step by construction. `order` would also be a new inline property on
+       eleven elements for this file to own, on a page that has paid four times
+       for exactly that.
+
+       A pairwise swap is also the MINIMAL reorder: exactly two `:nth-child`
+       indices change and the other nine are untouched. "Insert A where B was
+       and shift the rest" would re-tilt every stub between them. The owner
+       asked for a swap; a swap is also the only reorder that is nearly free.
+
+       ---- WHAT A REORDER COSTS, HONESTLY ----
+       DOM order is reading order, so after a trade a screen reader reads the
+       two swapped stubs in their new positions. That matches the screen, which
+       is the right direction, and it is the reason for the choice above. Tab
+       order is unaffected: nothing inside a `.pass` is focusable (no link, no
+       button, no tabindex — and §7b will not add one; a previous library put
+       eleven articles in the tab order and that is not being repeated).
+
+       NO LIVE REGION, and that is a decision, not an omission. A swap can only
+       be performed with a fine pointer on a device with no touch input at all,
+       by a reader who is looking at the card they just threw. The only person
+       an announcement could reach is the person who caused it and watched it
+       happen. The cost is a permanent ARIA live node whose sole consumer cannot
+       trigger it, plus a live region that must be proved never to fire during
+       the drag itself. WCAG 2.5.7 Dragging Movements is NOT satisfied here —
+       the swap inherits the drag's lack of any single-pointer or keyboard
+       equivalent, and the judgement in the section header applies unchanged: a
+       toy that rearranges eleven decorative stubs conveys nothing and gates
+       nothing.
+
+       ---- THE ORDER IS NOT PERSISTED ----
+       No localStorage, no sessionStorage, no URL state. Four reasons, and the
+       first is sufficient: `.pass-wall`'s authored order is the designed board,
+       and this file's rule everywhere else is that the resting state is the one
+       the CSS painted. A shuffled board surviving a reload would turn an
+       ornament into state — the exact opposite of "it must leave the board
+       exactly as it found it". Beyond that: the eleven `trips` entries are NOT
+       in chronological order in travel.astro (2025-09, 2025-09, 2026-04,
+       2026-05, 2025-10, ...) and the summary strip above the wall sorts its own
+       month axis independently, so there is no sequence for a reorder to
+       destroy and nothing derived from the wall's order to keep in sync; the
+       `.pass-idx` serial travels inside its own card, so each stub keeps its
+       own number wherever it lands. And `localStorage` THROWS outright in
+       Safari private mode, so persisting would mean wrapping every read and
+       every write to protect a feature nobody asked to be durable.
+
+       ---- REDUCED MOTION ----
+       Nothing extra to say: the swap lives entirely inside the drag, which
+       lives entirely inside this file, which returns before its first
+       `gsap.set()` when the preference is set. For a mid-session flip, the
+       unwind hook drops any pending trade WITHOUT committing it (no reorder, no
+       fly-home tweens — the reader has just asked for less motion) and then
+       lands every pass where it stands.
+       ============================================================
+
        ---- COARSE POINTERS: OFF, DELIBERATELY, AND NOT BY MEDIA QUERY ALONE
        Draggable with `type: "x,y"` writes `touch-action: none` as an inline
        style on its TRIGGERS in `enable()`, i.e. at create time. The timing is
@@ -1240,6 +1501,106 @@
         return [x, y];
     }
 
+    /* ---- SWAP-ON-FLING state. See the header for the rule and the maths. ----
+
+       ONE trade at a time, for the whole board. `stubSwapLock` is either null
+       or `{ a, b, aIn, bIn, dx, dy }`: `a` is the stub that was thrown, `b` the
+       one it landed on, the two `In` flags are the join — the commit runs when
+       both halves have stopped moving — and `dx`/`dy` is the answer swapSnap
+       gave, kept only so it can answer the same way twice. */
+    var stubSwapLock = null;
+
+    /* How much of a stub the landing box has to cover to count as "thrown onto
+       it". A third: aiming at a card gives ~100%, the gutter between two gives
+       ~46% each, the crossroads of four gives ~20%, empty board gives 0. */
+    var SWAP_COVER = 1 / 3;
+
+    function clampNum(v, lo, hi) {
+        if (typeof lo === "number" && v < lo) return lo;
+        if (typeof hi === "number" && v > hi) return hi;
+        return v;
+    }
+
+    /* Area shared by two identical w*h boxes centred on c1 and c2. Boxes, not
+       rects: the resting tilt inflates a rect, but it turns about the centre,
+       so a box rebuilt around the measured centre is the true slot footprint. */
+    function boxOverlap(c1, c2, w, h) {
+        var ox = w - Math.abs(c1.x - c2.x);
+        var oy = h - Math.abs(c1.y - c2.y);
+        return ox > 0 && oy > 0 ? ox * oy : 0;
+    }
+
+    function stubCentre(el) {
+        var r = el.getBoundingClientRect();
+        return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    }
+
+    /* Forget a pending trade without moving anything. Used by the commit (which
+       is about to do the reorder itself) and by the reduced-motion unwind. */
+    function stubSwapDrop() {
+        var lock = stubSwapLock;
+        stubSwapLock = null;
+        return lock;
+    }
+
+    /* Call the deal off. Everything except `keep` flies back to its OWN slot —
+       no reorder happened yet, so 0,0 is still each stub's own slot and the
+       existing home-and-land path is exactly right. `keep` is the pass the
+       reader has just put their hand on; its own gesture takes it from here. */
+    function stubSwapAbort(keep) {
+        var lock = stubSwapDrop();
+        if (!lock) return;
+        [lock.a, lock.b].forEach(function (el) {
+            if (el !== keep && el.__stubHome) el.__stubHome();
+        });
+    }
+
+    function stubSwapInvolves(el) {
+        return !!stubSwapLock && (stubSwapLock.a === el || stubSwapLock.b === el);
+    }
+
+    /* Half of a trade has stopped moving. Commit once both have. */
+    function stubSwapArrive(el) {
+        var lock = stubSwapLock;
+        if (!lock) return;
+        if (el === lock.a) lock.aIn = true;
+        if (el === lock.b) lock.bIn = true;
+        if (lock.aIn && lock.bIn) stubSwapCommit(lock);
+    }
+
+    /* THE COMMIT. One synchronous block, and a visual no-op — both stubs are
+       already painted on their destinations, so all this does is make the DOM
+       agree with the screen. See the header for the proof that no centre moves.
+
+       Swapping exactly two nodes changes exactly two `:nth-child` indices, so
+       nine of the eleven tilts are untouched. The three branches are the
+       adjacency cases: `insertBefore(a, bn)` with `bn === a` would be a no-op
+       and would silently leave the board unswapped. */
+    function stubSwapCommit(lock) {
+        stubSwapDrop();
+        var a = lock.a, b = lock.b;
+        var wall = a.parentNode;
+        if (wall && b.parentNode === wall) {
+            var an = a.nextSibling, bn = b.nextSibling;
+            if (an === b) {
+                wall.insertBefore(b, a);
+            } else if (bn === a) {
+                wall.insertBefore(a, b);
+            } else {
+                wall.insertBefore(a, bn);
+                wall.insertBefore(b, an);
+            }
+        }
+        /* land() first — it is what hands `translate` (and the folded `rotate`)
+           back to the stylesheet, i.e. what makes each stub take its NEW slot's
+           nudge and tilt. rebase() second, because it reads the value land()
+           just uncovered. */
+        if (a.__stubLand) a.__stubLand();
+        if (b.__stubLand) b.__stubLand();
+        if (a.__stubRebase) a.__stubRebase();
+        if (b.__stubRebase) b.__stubRebase();
+    }
+
     function stubProxy() {
         if (!stubProxyHost) {
             stubProxyHost = document.createElement("div");
@@ -1283,10 +1644,16 @@
            of it is the half the unwind could not undo. */
 
         var proxy = stubProxy();
+        var drag = null;         // the Draggable, once created (see below)
         var held = false;        // we own `translate` on this pass right now
         var moved = false;       // this pointer cycle produced a real drag
         var guard = null;        // backstop so `.gsap-busy` can never stick
         var base = armedBase;    // origin the mirrored offset is added to
+        /* Where this pass's centre sits when its offset is zero, measured once
+           per drag. The whole FLIP arithmetic is a difference of two of these —
+           see the header. Null between gestures so a stale one can never be
+           used: only a cycle that actually dragged sets it. */
+        var restCentre = null;
 
         function clearGuard() {
             if (guard) { clearTimeout(guard); guard = null; }
@@ -1298,19 +1665,92 @@
             el.style.translate = (base[0] + dx) + "px " + (base[1] + dy) + "px";
         }
 
+        /* Paint zero offset and report the resulting centre. Must be called
+           with the pass already seized: quiesce() has by then folded the
+           independent `translate` away and zeroed GSAP's x/y, so the element is
+           momentarily on its bare slot box and paint(0,0) puts the authored
+           nudge back in OUR lane. That makes the reading exactly
+           `centre(slotBox) + nudge` with no other contribution in it. */
+        function centreAtZero() {
+            paint(0, 0);
+            return stubCentre(el);
+        }
+
+        /* Mirror the proxy onto the pass — and back onto the Draggable's own
+           cached position. Draggable dispatches `onPressInit` BEFORE it re-reads
+           the target (verified in the vendored source), and onPressInit is where
+           the bounds below are computed off `this.x`, so any proxy movement this
+           file drives itself has to keep that number honest. */
+        function mirrorProxy() {
+            var px = +gsap.getProperty(proxy, "x") || 0;
+            var py = +gsap.getProperty(proxy, "y") || 0;
+            if (drag) { drag.x = drag.endX = px; drag.y = drag.endY = py; }
+            paint(px, py);
+        }
+
         /* Take `translate`, and take motion-ux's hands off it. */
         function seize() {
             clearGuard();
+            /* Read the origin ONLY on a fresh seize. Re-reading while we are
+               already holding the pass would read our OWN mirrored value —
+               `base + offset` — and fold the current offset into the origin,
+               which doubles it on the next paint. Reachable two ways: catching a
+               stub in mid-throw and dragging it on, and grabbing the passive
+               half of a swap while it is sliding.
+               If the sheet's value has already been folded into `transform` by a
+               hover spring, the armed-time reading is the only correct one left. */
+            if (!held) {
+                base = parseTranslate(window.getComputedStyle(el).translate) || armedBase;
+            }
             held = true;
             el.classList.add("gsap-busy", "is-stub-held");
-            /* Re-read the origin if the sheet's value is still on the element;
-               if a hover spring has already folded it into `transform`, the
-               armed-time reading is the only correct one left. */
-            base = parseTranslate(window.getComputedStyle(el).translate) || armedBase;
             // Belt for motion-shim's non-spring path, which IS a gsap tween.
             gsap.killTweensOf(el);
             quiesce(el);
         }
+
+        /* Take this pass over as the PASSIVE half of a trade: same seize, but it
+           wears `is-stub-swapping` rather than `is-stub-held` (motion.css §7
+           gives it a lower z-index and a lighter shadow — it is being moved, not
+           carried). Returns its rest centre, which is the other half of the FLIP
+           arithmetic, or null if it turns out not to be free after all. */
+        function seizeForSwap() {
+            if (held) return null;
+            seize();
+            el.classList.remove("is-stub-held");
+            el.classList.add("is-stub-swapping");
+            return centreAtZero();
+        }
+
+        /* Slide to a destination offset and hold there until the commit. One
+           tween, on the proxy, mirrored — so this pass still has exactly one
+           writer on `translate`. `onInterrupt` is the belt for Draggable killing
+           this tween out from under us when the reader presses this pass
+           (`onPressInit` has already aborted by then, so it is a no-op in the
+           expected case and the only cover in an unexpected one). */
+        function slideTo(dx, dy, dur) {
+            gsap.to(proxy, {
+                x: dx, y: dy,
+                duration: dur,
+                ease: "power3.inOut",
+                overwrite: "auto",
+                onUpdate: mirrorProxy,
+                onComplete: function () { arrive(); },
+                onInterrupt: function () { stubSwapAbort(el); }
+            });
+        }
+
+        /* Re-read the slot's authored nudge into the armed-time cache. A swap
+           moved this pass to a different `:nth-child`, so the cached value is
+           the old slot's — and it is only ever consulted once a hover spring has
+           folded the live one away, which is why a stale one would surface as a
+           jump on some unrelated later grab. Safe to read here: the commit calls
+           it one line after land() handed `translate` back to the stylesheet. */
+        function rebase() {
+            armedBase = parseTranslate(window.getComputedStyle(el).translate) || armedBase;
+            base = armedBase;
+        }
+        el.__stubRebase = rebase;
 
         /* Give it back, in the one order that cannot strand anything: resync
            motion-shim's store, drop our inline `translate` so the stylesheet's
@@ -1320,6 +1760,17 @@
         function land() {
             clearGuard();
             if (!held) return;
+            /* PUT THE PROXY BACK AT THE ORIGIN. Since the throw can now land on
+               a slot other than this stub's own, the proxy no longer ends every
+               gesture at 0,0 — and its x/y IS the coordinate origin the mirror
+               and the bounds are both measured from. Zero it, and zero
+               Draggable's own cached copy with it (onPressInit reads `this.x`
+               before Draggable re-reads the target), or the next press on a
+               swapped stub derives its limits from the last landing offset.
+               A no-op on every path that already ended at 0,0. */
+            gsap.killTweensOf(proxy);
+            gsap.set(proxy, { x: 0, y: 0 });
+            if (drag) { drag.x = drag.endX = 0; drag.y = drag.endY = 0; }
             quiesce(el);
             gsap.set(el, { clearProps: "all" });
             /* MEASURED NECESSARY, not belt and braces. Folding the independent
@@ -1337,9 +1788,10 @@
             el.style.removeProperty("translate");
             el.style.removeProperty("rotate");
             el.style.removeProperty("scale");
-            el.classList.remove("is-stub-held");
+            el.classList.remove("is-stub-held", "is-stub-swapping");
             held = false;
             moved = false;
+            restCentre = null;
             el.classList.remove("gsap-busy");
         }
         el.__stubLand = land;
@@ -1347,17 +1799,124 @@
         /* Catching a stub in mid-flight: a press kills the proxy's throw tween,
            so `onThrowComplete` never fires for it. Rather than snapping the
            stub home from wherever it froze, fly it the rest of the way — on the
-           proxy, so the mirror stays the only writer on the pass. */
+           proxy, so the mirror stays the only writer on the pass.
+           0,0 is still this stub's own slot on every path that reaches here: a
+           trade is only ever committed with both halves already parked, so
+           nothing that has been reordered can be in flight. */
         function homeAndLand() {
             gsap.to(proxy, {
                 x: 0, y: 0, duration: 0.42, ease: "power3.out",
                 overwrite: "auto",
-                onUpdate: function () {
-                    paint(+gsap.getProperty(proxy, "x"), +gsap.getProperty(proxy, "y"));
-                },
+                onUpdate: mirrorProxy,
                 onComplete: land
             });
         }
+        el.__stubHome = homeAndLand;
+
+        /* This pass has stopped moving and is sitting where it is meant to end
+           up. Half of a trade reports in and waits for the other half; anything
+           else lands immediately, which is what every path did before. */
+        function arrive() {
+            if (stubSwapInvolves(el)) { stubSwapArrive(el); return; }
+            land();
+        }
+
+        /* ---- THE SWAP DECISION ----
+           InertiaPlugin calls this exactly once per throw while it builds the
+           tween, with `point` = the UNCLAMPED natural landing offset the release
+           velocity projects to, and `this` = the Draggable. It returns the offset
+           the throw will actually land on, and it can only return two things:
+           {0,0} (this stub's own slot — byte-for-byte the old behaviour) or the
+           offset that parks this stub on the target's slot. Everything the trade
+           needs is set up here, synchronously, so the decision and its
+           consequences cannot come apart. See the header. */
+        function swapSnap(point) {
+            var home = { x: 0, y: 0 };
+            /* `moved` excludes the catch-and-release case: Draggable also rebuilds
+               a throw when a press interrupts one and is released without
+               dragging, and re-deciding a trade off a near-zero velocity there
+               would swap a stub the reader was only trying to stop. */
+            if (!held || !moved || !restCentre) return home;
+            if (stubSwapLock) {
+                /* One trade at a time — with one exception, which is a belt
+                   against InertiaPlugin evaluating this function twice for the
+                   same throw. It does not (3.13.0 caches the resolved point via
+                   `calculated` and writes the answer back over the `end` key, so
+                   the second axis cannot re-enter), but if a future version did,
+                   answering "home" the second time would send this stub back to
+                   its own slot while the trade it had just set up carried on.
+                   Re-answer identically instead. */
+                if (stubSwapLock.a === el) {
+                    return { x: stubSwapLock.dx, y: stubSwapLock.dy };
+                }
+                return home;
+            }
+
+            var w = el.offsetWidth, h = el.offsetHeight;
+            var wall = el.parentNode;
+            if (!w || !h || !wall) return home;
+
+            /* Where the fling is AIMED. Clamped to this gesture's own limits
+               because that is as far as the stub can physically travel. */
+            var landing = {
+                x: restCentre.x + clampNum(point.x, this.minX, this.maxX),
+                y: restCentre.y + clampNum(point.y, this.minY, this.maxY)
+            };
+
+            /* Most-covered wins, and it has to clear SWAP_COVER. Seeding `best`
+               with the threshold makes the two tests one comparison. */
+            var target = null;
+            var best = w * h * SWAP_COVER;
+            var kids = wall.children;
+            for (var i = 0; i < kids.length; i++) {
+                var c = kids[i];
+                if (c === el || !c.classList || !c.classList.contains("pass")) continue;
+                /* Armed AND idle. `__stubDrag` means its own entrance tween has
+                   finished (armStub is only reached from finishOne), `.gsap-busy`
+                   means somebody is writing to it right now. Either way it is not
+                   ours to move. */
+                if (!c.__stubDrag || c.classList.contains("gsap-busy")) continue;
+                var cover = boxOverlap(landing, stubCentre(c), w, h);
+                if (cover > best) { best = cover; target = c; }
+            }
+            if (!target) return home;
+            if (!target.__stubSeizeSwap) return home;
+
+            var tc = target.__stubSeizeSwap();
+            if (!tc) return home;
+            var dx = tc.x - restCentre.x;
+            var dy = tc.y - restCentre.y;
+
+            /* Reachability. InertiaPlugin clamps whatever comes back here to this
+               gesture's own max/min, so an offset outside them would stop the
+               card BETWEEN slots. That is the one thing this must never do, and
+               the case it catches is a target scrolled mostly off screen. Give
+               the stub straight back and throw normally. */
+            if (dx < this.minX || dx > this.maxX || dy < this.minY || dy > this.maxY) {
+                if (target.__stubHome) target.__stubHome();
+                return home;
+            }
+
+            stubSwapLock = { a: el, b: target, aIn: false, bIn: false,
+                             dx: dx, dy: dy };
+            /* The target vacates while the thrown stub is still in the air. Its
+               own tween, its own proxy, its own paint — the two halves never
+               share a writer, and the commit waits for whichever finishes last.
+
+               Duration from the DISTANCE, deliberately not from the throw's.
+               `this.tween` is NOT usable here: this function runs from inside
+               InertiaPlugin's init, i.e. during the `gsap.to()` call that creates
+               the throw, so Draggable has not assigned it yet (it does so on the
+               line after) and the property still holds null from the press. A
+               distance ramp also reads better than copying the throw: the target
+               is not being thrown, it is getting out of the way, and one slot
+               over should not take as long as the length of the board. */
+            var dist = Math.sqrt(dx * dx + dy * dy);
+            target.__stubSlide(-dx, -dy, clampNum(0.30 + dist / 1600, 0.42, 0.78));
+            return { x: dx, y: dy };
+        }
+        el.__stubSeizeSwap = seizeForSwap;
+        el.__stubSlide = slideTo;
 
         var d = window.Draggable.create(proxy, {
             /* The pass is what you press; the proxy is what moves. */
@@ -1366,14 +1925,22 @@
             inertia: true,
             /* THE THROW. `snap` is applied to the LANDING value, so
                InertiaPlugin still builds its tween from the real release
-               velocity and merely redirects the destination to 0 — the stub
-               flies out, decelerates and curves back into its slot as ONE
-               tween. One tween is also one owner: there is no second "and now
-               return home" stage for an interruption to strand half-done, and
-               0,0 is the only value it can land on, which is what makes "leaves
-               the board as it found it" a property of the physics rather than
-               of cleanup code. */
-            snap: { x: zeroSnap, y: zeroSnap },
+               velocity and merely redirects the destination — the stub flies
+               out, decelerates and curves into a slot as ONE tween. One tween is
+               also one owner: there is no second "and now go there" stage for an
+               interruption to strand half-done, and swapSnap can only return a
+               SLOT (its own, or the target's), which is what makes "a thrown
+               stub always ends up in a slot" a property of the physics rather
+               than of cleanup code.
+
+               `points`, not `x`/`y`: the swap decision is two-dimensional and
+               cannot be made one axis at a time. Draggable's function form of
+               `snap.points` sets InertiaPlugin's `linkedProps`, which hands the
+               function BOTH natural landing values in one point object and calls
+               it exactly once. Verified in the vendored 3.13.0 — see the header.
+               With no target found it returns {0,0}, which is the old
+               `zeroSnap` behaviour unchanged. */
+            snap: { points: swapSnap },
             minDuration: 0.45,
             maxDuration: 1.05,
             /* NO `bounds` HERE ON PURPOSE — see onPressInit. Anything static
@@ -1405,7 +1972,14 @@
                them. */
             onPressInit: function () {
                 moved = false;
+                restCentre = null;
                 clearGuard();
+                /* A hand on either half of a pending trade calls it off, and it
+                   has to happen BEFORE applyBounds: new bounds can re-clamp an
+                   in-flight throw, which makes Draggable rebuild it and run
+                   swapSnap again. With the lock already dropped that rebuild
+                   returns "home", which is what an abort wants anyway. */
+                if (stubSwapInvolves(el)) stubSwapAbort(el);
                 var w = wall.getBoundingClientRect();
                 var s = el.getBoundingClientRect();
                 var pad = 40;
@@ -1435,6 +2009,10 @@
             onDragStart: function () {
                 moved = true;
                 seize();
+                /* Measure the rest centre once, here, while this pass is
+                   provably at zero offset with no other writer on it. Every
+                   swap's arithmetic is a difference of two of these. */
+                restCentre = centreAtZero();
                 paint(this.x, this.y);
             },
             onDrag: function () { paint(this.x, this.y); },
@@ -1442,28 +2020,39 @@
 
             onRelease: function () {
                 if (!held) return;
-                if (!moved) { homeAndLand(); return; }   // caught it mid-flight
+                if (!moved) {
+                    // Caught it mid-flight: catching a card cancels its trade.
+                    stubSwapAbort(el);
+                    homeAndLand();
+                    return;
+                }
                 /* The throw tween is created around now. Check on the next
                    frame rather than trusting callback order: a drag that ends
-                   exactly on 0,0 has nothing to snap to and makes no tween, and
-                   waiting on an onThrowComplete that never comes would leave
-                   this pass hover-deaf for good. */
+                   exactly on the landing value has nothing to snap to and makes
+                   no tween, and waiting on an onThrowComplete that never comes
+                   would leave this pass hover-deaf for good.
+                   arrive(), not land(): if swapSnap set up a trade this pass has
+                   to report to the join instead of landing on its own. */
                 var self = this;
-                guard = setTimeout(land, 2200);          // hard backstop
+                /* Hard backstop. It also has to call the trade off — landing one
+                   half without the reorder would leave the other half holding an
+                   inline `translate` for the rest of the visit. */
+                guard = setTimeout(function () {
+                    stubSwapAbort(el);
+                    land();
+                }, 2200);
                 window.requestAnimationFrame(function () {
-                    if (!self.isThrowing) land();
+                    if (!self.isThrowing) arrive();
                 });
             },
 
-            onThrowComplete: land
+            onThrowComplete: function () { arrive(); }
         })[0];
 
+        drag = d;
         el.__stubDrag = d;
         stubDrags.push(d);
     }
-
-    /* Always 0: the landing value, not the natural one. */
-    function zeroSnap() { return 0; }
 
     /* Stop motion-shim's in-flight springs on the pass and put GSAP's own x/y
        at zero, in one synchronous call. `duration: 0` is the shim's documented
@@ -1520,6 +2109,13 @@
        shim store already reads zero and whose `translate` is the stylesheet's
        again. */
     unwindHooks.push(function () {
+        /* Drop any pending trade WITHOUT committing it and without flying
+           anything home. stubSwapAbort() would start two tweens, and the reader
+           has just asked for less motion; the land() sweep below puts both
+           halves back on their own slots in one frame instead. No reorder means
+           the board is left in its authored order, which is the correct resting
+           state for a preference flip. */
+        stubSwapDrop();
         toArray(".pass").forEach(function (el) {
             if (el.__stubLand) el.__stubLand();
         });

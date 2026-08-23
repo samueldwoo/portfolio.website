@@ -388,13 +388,19 @@ html.mx-exiting .content {
 /* ==========================================================================
    7. Throwable boarding-pass stubs  (gsap-motion.js §7b)
    --------------------------------------------------------------------------
-   You can lift a stub off the wall, move it around the board and throw it.
+   You can lift a stub off the wall, move it around the board and throw it —
+   and if you fling it onto another stub, the two TRADE SLOTS.
    §7b's header carries the ownership argument in full; the part that matters
    here is that the drag rides the INDEPENDENT `translate` property, not
    `transform`, precisely so it never contends with motion-ux.js. Which makes
    the division of labour:
 
-     JS  owns  translate               (gsap-motion.js §7b, one stub at a time)
+     JS  owns  translate               (gsap-motion.js §7b, two stubs at most)
+     JS  owns  DOM order               (a swap moves the two nodes, so the tilt
+                                        ladder below re-evaluates and each stub
+                                        wears its NEW slot's lean — intended;
+                                        see §7b's header for why the tilt
+                                        belongs to the slot and not to the card)
      CSS owns  box-shadow, z-index     (this block)
 
    `cursor` and `user-select` are Draggable's: it writes `grab` / `grabbing`
@@ -439,6 +445,30 @@ html.stub-throw .pass-wall > .pass.is-stub-held {
     box-shadow:
         0 14px 26px rgba(0, 0, 0, .30),
         0 50px 80px -34px rgba(0, 0, 0, .60);
+}
+
+/* A stub being TRADED — the passive half of a swap-on-fling (gsap-motion.js
+   §7b). The reader flung another stub onto this one, so this one is sliding
+   into the slot the thrown one came from. It is off the plate too, but it is
+   being moved rather than carried, so it reads one step quieter than a held
+   stub: the same `position: relative` (for the same reason — z-index has to be
+   reliable at every breakpoint, including a future non-grid wall), a z-index
+   BELOW the held stub so the card in flight always passes over the card
+   getting out of the way, and a shallower version of the same contact shadow.
+
+   NO SCALE, NO ROTATE, NO OFFSETS — for the same three reasons as the block
+   above. Size parity is a hard requirement of this layout, so a traded stub is
+   exactly the size of the nine it is moving between; `rotate` cannot be
+   written from a stylesheet on a stub GSAP has rendered a transform on (the
+   fold writes `rotate: none` inline and a sheet cannot beat that); and the
+   slide itself rides `translate`, which is gsap-motion.js's lane for the whole
+   gesture. This rule contributes nothing but depth. */
+html.stub-throw .pass-wall > .pass.is-stub-swapping {
+    position: relative;
+    z-index: 30;
+    box-shadow:
+        0 8px 16px rgba(0, 0, 0, .24),
+        0 32px 54px -30px rgba(0, 0, 0, .48);
 }
 
 /* NOT HERE, DELIBERATELY: `user-select` and `-webkit-user-drag`. A drag across
@@ -488,7 +518,8 @@ html.stub-throw .pass-wall > .pass.is-stub-held {
    cannot silently swallow it — scroll.css lost a whole reduced-motion block
    that way once and left 12 of 13 parallax planes transformed. */
 @media (prefers-reduced-motion: reduce) {
-    html.stub-throw .pass-wall > .pass.is-stub-held {
+    html.stub-throw .pass-wall > .pass.is-stub-held,
+    html.stub-throw .pass-wall > .pass.is-stub-swapping {
         z-index: auto;
         box-shadow: none;
         transform: none !important;
