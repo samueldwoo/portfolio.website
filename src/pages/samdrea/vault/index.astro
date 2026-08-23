@@ -1260,23 +1260,25 @@ const rooms = [
             that appears only in the broken state is a line nobody recognises when
             it appears. For her it reads "you are Andrea", which is true and
             unremarkable — which is exactly the point. */}
-        {/* NOW A SWITCH, not just a label.
-            The gate is the only credential in the wing, so identity cannot be
-            proved — it is declared. This is where. A POST from a real button,
-            never a GET: iOS long-press previews and prefetchers activate GETs on
-            their own, which is the bug out.ts had.
-
-            It stays visible in both states, because a control that only appears
-            when something is wrong is a control nobody recognises when it does.
-            And a mis-tap here would file his photograph as hers, so the current
-            answer is printed next to it on every single page load. */}
+        {/* THE LABEL ONLY. THE SWITCH IS GONE, AND ITS REMOVAL IS THE POINT.
+        
+            There used to be a "not Sam?" / "not Andrea?" button here, because
+            identity is declared rather than proved and this was where you declared
+            it. But a one-tap button that reassigns who you are, sitting on the page
+            she uses every day, is the wrong shape for that: it lets anyone through
+            the gate become Sam with a tap, and it lets HER become him by accident.
+            A mis-tap files her photograph as his.
+        
+            Declaring identity now happens at the DOOR instead — /samdrea?me plus the
+            admin passcode, which mints the identity in the same pass as the session.
+            That is a real credential rather than a button, and it is invisible on her
+            gate. /api/us/whoami still exists and still works; nothing links to it.
+        
+            THE LABEL STAYS. It is the thing that made the overnight identity bug
+            visible in one glance instead of found in the data weeks later, and it
+            reads "you are Andrea" for her, which is true and unremarkable. */}
         <span class="studio-who" data-who={viewer}>
             you are {viewer === 'her' ? (her || 'her') : 'Sam'}
-            <form class="who-switch" method="post" action="/api/us/whoami">
-                <button class="who-switch-btn" type="submit">
-                    not {viewer === 'her' ? (her || 'her') : 'Sam'}?
-                </button>
-            </form>
         </span>
         <form class="studio-out" method="post" action="/api/us/out"><button class="studio-out-btn" type="submit">sign out</button></form>
     </div>

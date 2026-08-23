@@ -248,8 +248,40 @@ export function writeCookie(
 }
 
 export function clearCookie(cookies: CookieJar, purpose: Purpose): void {
-  // Both names, because dev and production cookies can coexist in one browser
-  // profile and a logout that leaves one behind is not a logout.
-  cookies.delete(NAMES[purpose].secure, { path: '/' });
-  cookies.delete(NAMES[purpose].dev, { path: '/' });
+  /* THE `__Host-` DELETION MUST CARRY `Secure`, OR THE BROWSER THROWS IT AWAY.
+  
+     This used to delete with `{ path: '/' }` alone, and sign-out silently did
+     nothing in production. The `__Host-` prefix is not decoration: a browser
+     accepts a cookie with that prefix ONLY if the Set-Cookie also has `Secure`,
+     `Path=/` and no `Domain`. A deletion is just a Set-Cookie with an expiry in
+     the past, so a deletion missing `Secure` is REJECTED WHOLESALE — the header is
+     ignored and the cookie stays exactly where it was.
+  
+     Which is why this survived every local test. Over http the wing uses the
+     unprefixed dev names (`us_session`), where the rule does not apply, so
+     sign-out worked perfectly on localhost and did nothing at all on HTTPS. It
+     took someone tapping it on the real site to find.
+  
+     `secure: true` is hardcoded rather than derived from the request URL because
+     the prefixed name is only ever WRITTEN over https (see writeCookie), so a
+     non-secure deletion of it could never be correct. The attributes are matched
+     to the write for the same reason: a browser matches a deletion on name, path
+     and domain, and mismatched attributes are how a "logout" leaves the cookie
+     behind. */
+  cookies.delete(NAMES[purpose].secure, {
+    path: '/',
+    secure: true,
+    httpOnly: true,
+    sameSite: 'lax',
+  });
+
+  /* The dev name, deliberately WITHOUT `secure` — it is served over http, and a
+     Secure deletion would be the mirror image of the bug above. Both names are
+     cleared because one browser profile can hold both, and a logout that leaves
+     one behind is not a logout. */
+  cookies.delete(NAMES[purpose].dev, {
+    path: '/',
+    httpOnly: true,
+    sameSite: 'lax',
+  });
 }

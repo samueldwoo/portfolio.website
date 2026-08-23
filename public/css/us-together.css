@@ -871,27 +871,8 @@
     color: var(--concrete-3);
 }
 
-/* The identity switch, next to the line that states it. Deliberately
-   quiet — it is the least-used control in the wing — but a real 44px
-   target, because the one time it is needed is the one time a mis-tap
-   would file one person's photograph under the other's name. */
-.who-switch { display: inline; margin: 0 0 0 8px; }
-.who-switch-btn {
-    appearance: none;
-    background: none;
-    border: 0;
-    padding: 0 2px;
-    min-height: 44px;
-    font: inherit;
-    letter-spacing: inherit;
-    text-transform: inherit;
-    color: var(--concrete-3);
-    text-decoration: underline;
-    text-underline-offset: 3px;
-    cursor: pointer;
-}
-.who-switch-btn:hover { color: var(--chalk-dim); }
-.who-switch-btn:focus-visible {
-    outline: 2px solid var(--blue-light);
-    outline-offset: 2px;
-}
+/* The identity switch that used to sit here is gone — see the comment in
+   index.astro's footer. Declaring identity moved to the gate (/samdrea?me),
+   because a one-tap button that reassigns who you are does not belong on the
+   page she reads every day. The `.studio-who` LABEL stays and is styled in
+   us.css. */
