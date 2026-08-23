@@ -1,0 +1,696 @@
+---
+/**
+ * /samdrea/vault/board — `line 02 · the board`.
+ *
+ * A corkboard with fairy lights strung across it and every photograph pinned to
+ * it as a Polaroid. Tap one and it opens big enough to read what is written on
+ * the back.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THIS ROOM EXISTS, AND WHAT IT REPLACES
+ *
+ * `line 02` used to be the 3D studio (src/components/StudioRoom.tsx, still
+ * routing at /samdrea/vault/room, still untouched). It was benched off her hub
+ * because it asked her to learn a scroll-and-hold gesture before it showed her
+ * anything, and a room that needs explaining is the wrong first impression for a
+ * present. See the long comment in vault/index.astro where that entry used to be.
+ *
+ * So the brief for this page is the opposite of that one: she opens it and
+ * instantly knows what it is, because it is a bulletin board with photos on it,
+ * and there is no gesture. Tap a photograph, it gets bigger. That is the whole
+ * interaction model, and it is the same one a physical board has.
+ *
+ * ---------------------------------------------------------------------------
+ * THE THING THAT IS NOT JAVASCRIPT
+ *
+ * Every Polaroid is `<a href="#m-<id>">` and every enlarged view is a real
+ * element carrying that id, opened by `:target`. That is not a fallback that
+ * happens to work — it is the implementation, and there is no JavaScript
+ * lightbox layered on top of it. Consequences worth having:
+ *
+ *   * with the script blocked, thrown, or absent, all thirteen photographs, all
+ *     thirteen captions and all thirteen notes are reachable in one tap each;
+ *   * the browser BACK button closes an open photograph, for free, because
+ *     opening it was a real navigation;
+ *   * /api/us/mark's no-JavaScript 303 already lands on `#m-<id>`, so keeping a
+ *     photograph or saving a note puts her back inside the same enlarged view
+ *     she pressed the button in — with no state to rebuild and no scroll
+ *     restoration to get wrong.
+ *
+ * The only script on the page binds Escape. It is 30 lines and nothing depends
+ * on it.
+ *
+ * ---------------------------------------------------------------------------
+ * THE ROTATIONS ARE DERIVED FROM THE ID, NEVER FROM Math.random()
+ *
+ * A hand-arranged board needs the angles to vary, and it needs them to be the
+ * SAME angles every time — a photograph that jumps to a new tilt on every render
+ * (or worse, a different one on the server than in the browser, which is what
+ * Math.random() in an SSR'd page actually produces) reads as a rendering bug
+ * rather than as a hand. tiltOf() below hashes the id with FNV-1a and indexes
+ * fixed tables. Same input, same board, forever.
+ *
+ * ---------------------------------------------------------------------------
+ * THE ONE RULE
+ *
+ * us.css: "the photos are the only warm thing in here." A literal cork-coloured
+ * board would put ~70% of the viewport in warm saturated tan and invert that
+ * rule outright. The full argument, and the case for the fairy lights being the
+ * one earned exception, is written at the top of public/css/us-board.css — it is
+ * a decision about colour, so it lives with the colour.
+ */
+
+import { HER_NAME, SESSION_SECRET, hasR2 } from '../../../lib/us/config';
+import { readCookie, verify } from '../../../lib/us/session';
+import { touch } from '../../../lib/us/presence';
+import { identify } from '../../../lib/us/together';
+import { CHAPTERS, clientManifest } from '../../../lib/us/photos';
+import { MARK_NOTE_MAX, getMarksSafe } from '../../../lib/us/marks';
+
+export const prerender = false;
+
+/**
+ * Defence in depth, copied from day.astro and room.astro rather than reinvented.
+ *
+ * src/middleware.ts has already verified this cookie or the render never
+ * happened. Re-checking is what makes a future routing mistake there degrade to
+ * "this page refuses" instead of "the album is public".
+ */
+const secret = SESSION_SECRET();
+const session = secret ? verify(secret, 'session', readCookie(Astro.cookies, 'session', Astro.url)) : null;
+if (!session) return Astro.redirect('/samdrea', 302);
+
+/* PRESENCE, WRITE ONLY — the same call room.astro makes, for the same reason.
+   This page shows no presence line (a note about somebody else arriving would
+   pull her out of the thing she came here to look at), but time spent here is
+   still time spent in the wing. Without this, twenty minutes on this page would
+   look like twenty minutes away and the hub would tell him she had left.
+   presence.ts resolves to undefined on every failure path, so this cannot
+   throw and its value is never read. */
+const viewer = identify(Astro.cookies, Astro.url) ?? 'her';
+await touch(viewer);
+
+const her = HER_NAME();
+
+/* ---- the photographs ------------------------------------------------------
+   clientManifest() is the same shape room.astro hands its island: id, caption,
+   note, chapter, line, when, aspect, hidden, and two same-origin srcs. Nothing
+   here knows an R2 object key, and neither does the browser — `src` is
+   /api/us/photo/<id>, which re-verifies the cookie and only then hands over a
+   short-lived presigned redirect (or, with no bucket configured, a generated
+   placeholder card).
+
+   ALL THIRTEEN ARE ON THE BOARD, `hidden` included. That flag means "past the
+   apparent end of the rail" and it was the 3D room's reward for scrolling to the
+   very end. A corkboard has no rail and no end, so on this page it is not a
+   gate — it is just the last one pinned up, and it says so on its band. */
+const memories = clientManifest();
+
+/** Chapter blurb by id — 'everywhere we went', 'the sideways ones'. Used in alt. */
+const blurbOf: Record<string, string> = Object.fromEntries(
+  CHAPTERS.map((c) => [c.id, c.blurb]),
+);
+
+/* ---- her marks ------------------------------------------------------------
+   getMarksSafe(), which logs and degrades to `{}` rather than throwing: a mark
+   WRITE fails loud (a note she typed that silently vanished is unforgivable) but
+   a mark READ is decoration on a board that must render regardless. An
+   unreachable store costs the keep tags. It must never cost the photographs.
+
+   countVisitSafe() is deliberately NOT called. room.astro counts a visit because
+   it is the room; counting the same visit twice because she also opened the
+   board would corrupt the "7th time you've been in here" line the hub reads. */
+const marks = await getMarksSafe();
+
+/* ---- the hand -------------------------------------------------------------
+   FNV-1a over the id, then a lookup into fixed tables. Deterministic, stable
+   across a server render and a client render, and stable across deploys.
+
+   The tables are prime-ish lengths that share no factor with each other (10, 8,
+   7, 3), so two photographs that collide on tilt almost certainly differ on
+   nudge and on what is holding them up. */
+function hash(id: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i += 1) {
+    h ^= id.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return Math.abs(h | 0);
+}
+
+/** A few degrees, both ways, never zero-heavy. */
+const TILTS = [-3.1, 2.2, -1.4, 2.9, -2.4, 1.1, -3.4, 1.8, -0.9, 2.6];
+/** Sideways drift, so a column is not a plumb line. Halved on one column. */
+const NUDGES = [-9, 5, 0, 7, -5, 2, -3, 8];
+/** The tape's own angle, counter to the card so it looks stuck on afterwards. */
+const TAPE_TILTS = [-5, 3, -2, 6, -4, 2, -7];
+
+interface Pinned {
+  m: (typeof memories)[number];
+  i: number;
+  tilt: number;
+  nudge: number;
+  tape: number;
+  /** A pin on two out of three, tape on the rest. */
+  fix: 'pin' | 'tape';
+  alt: string;
+  kept: boolean;
+  hersNote: string;
+}
+
+const pinned: Pinned[] = memories.map((m, i) => {
+  const h = hash(m.id);
+  const mark = marks[m.id];
+  return {
+    m,
+    i,
+    tilt: TILTS[h % TILTS.length],
+    nudge: NUDGES[(h >> 5) % NUDGES.length],
+    tape: TAPE_TILTS[(h >> 9) % TAPE_TILTS.length],
+    fix: (h >> 13) % 3 === 0 ? 'tape' : 'pin',
+    /* ALT TEXT, and it deliberately does not repeat the caption.
+       The caption is visible immediately below every photograph and is the only
+       description of the image that exists, so restating it in `alt` would make a
+       screen reader read the same sentence twice per photograph, thirteen times.
+       What is useful and NOT otherwise announced is which one of the thirteen
+       this is and which stretch of the story it belongs to, so that is what the
+       alt carries. `when` is appended when the manifest has one. */
+    alt: `photograph ${i + 1} of ${memories.length}, pinned up — ${blurbOf[m.chapter] ?? 'us'}${m.when ? `, ${m.when}` : ''}`,
+    kept: Boolean(mark?.kept),
+    hersNote: mark?.note ?? '',
+  };
+});
+
+/* ===========================================================================
+   THE FAIRY LIGHTS
+
+   ONE function, used for both the wire and the bulbs, so they cannot disagree.
+   Two sets of numbers that have to line up is exactly how a string of lights
+   ends up floating a few pixels off its own cable.
+
+   A CATENARY, not a straight line and not a parabola. A straight wire across the
+   top of a panel reads as a border; a hanging one reads as a string. cosh is the
+   real shape a cable takes under its own weight, and it differs from a parabola
+   in the way that matters visually — it is flatter through the middle and turns
+   up harder at the mounts.
+
+   Normalised so the shape is independent of the sag: sag(t) is 0 at both mounts
+   (t = -1, +1) and exactly 1 at the bottom (t = 0), whatever K is. K is the
+   tautness; 1.9 is a string of lights hung by someone who was not being careful.
+   =========================================================================== */
+const LIGHT_W = 1200;
+const LIGHT_H = 120;
+const MOUNT_Y = 7;    // where the wire leaves each end
+const SAG = 78;       // how far the middle drops, in viewBox units
+const K = 1.9;
+
+const cosh = (x: number): number => (Math.exp(x) + Math.exp(-x)) / 2;
+const coshK = cosh(K);
+
+/** Height of the wire at t in [-1, 1], in viewBox units. */
+function wireY(t: number): number {
+  return MOUNT_Y + SAG * ((coshK - cosh(K * t)) / (coshK - 1));
+}
+
+/** The wire, as a polyline. 60 segments over 1200 units is smooth to the eye. */
+const WIRE_STEPS = 60;
+const wirePath = Array.from({ length: WIRE_STEPS + 1 }, (_, s) => {
+  const t = -1 + (2 * s) / WIRE_STEPS;
+  const x = (LIGHT_W / 2) * (1 + t);
+  return `${s === 0 ? 'M' : 'L'}${x.toFixed(1)},${wireY(t).toFixed(1)}`;
+}).join(' ');
+
+/**
+ * THIRTEEN BULBS. One per photograph, which is not a coincidence and is the kind
+ * of thing she will either never notice or notice once and like.
+ *
+ * Spaced evenly in x rather than along the arc, offset by half a step so no bulb
+ * sits on top of a mount. `drop` is how far below the wire the glass hangs.
+ */
+const BULB_DROP = 6;
+const bulbs = memories.map((_, i) => {
+  const t = -1 + (2 * (i + 0.5)) / memories.length;
+  const x = (LIGHT_W / 2) * (1 + t);
+  const y = wireY(t);
+  return {
+    /* Percentages on BOTH axes, because that is exactly how
+       preserveAspectRatio="none" maps viewBox coordinates onto the rendered box.
+       Which in turn is why the bulbs are HTML and not SVG: a circle under a
+       non-uniform transform is an ellipse. */
+    left: `${((x / LIGHT_W) * 100).toFixed(3)}%`,
+    top: `${(((y + BULB_DROP) / LIGHT_H) * 100).toFixed(3)}%`,
+    hangerX: x.toFixed(1),
+    hangerY1: y.toFixed(1),
+    hangerY2: (y + BULB_DROP).toFixed(1),
+    /* FOUR of the thirteen breathe, at four periods with no common multiple, so
+       the string never pulses in unison. See the motion block in us-board.css
+       for why the amplitude is as small as it is. */
+    flicker: [1, 4, 8, 11].includes(i),
+    dur: `${[8.3, 10.7, 7.1, 9.4][i % 4]}s`,
+    delay: `${(i * 1.37) % 5}s`,
+  };
+});
+
+/* ===========================================================================
+   OUTCOMES FROM THE NO-JAVASCRIPT PATH
+
+   /api/us/mark answers a plain form submission with a 303 carrying `?e=<code>`
+   on failure and nothing on success. Translated into sentences here, because the
+   person reading them is not debugging an API. Anything unrecognised falls
+   through to the generic line: the codes are ours but the query string is not,
+   and echoing an unknown value straight back into the page is how a reflected
+   content bug starts. Astro escapes by default, so this is belt-and-braces.
+
+   `unauthorized` is deliberately absent, exactly as in room.astro: the endpoint
+   does answer it, but on this path the 303 lands back here and src/middleware.ts
+   then bounces an unauthenticated caller to the gate, so she would never read
+   the sentence. A string that cannot be shown is worse than the honest fallback.
+   =========================================================================== */
+const MARK_ERRORS: Record<string, string> = {
+  store: "that didn't save, and it's not your fault. Try it again?",
+  rate: 'okay, easy. Give it a minute.',
+  'note-too-long': `that one ran past ${MARK_NOTE_MAX} characters, so it wasn't saved. Trim it a little?`,
+  'note-missing': 'that came through with nothing in the box, so nothing changed.',
+  'no-such-memory': "I can't find that one. It may not be on the board any more.",
+  'bad-action': "the server couldn't read that. Try again?",
+  'cross-site': 'that request came from somewhere I do not recognise.',
+  unconfigured: 'something is unplugged on my end. Not your fault.',
+};
+const errCode = Astro.url.searchParams.get('e') ?? '';
+const markError = errCode ? (MARK_ERRORS[errCode] ?? "that didn't save. Try it again?") : '';
+
+/** Dev only. In production an empty bucket shows her labelled cards and says nothing. */
+const showPlaceholderNotice = import.meta.env.DEV && !hasR2();
+---
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <!-- viewport-fit=cover is REQUIRED for env(safe-area-inset-*) to be
+         anything but 0. The pages set apple-mobile-web-app-status-bar-style
+         to black-translucent, so iOS draws content UNDER the notch and the
+         home indicator; without this attribute there is no opt-out AND no
+         way to pad around it. The insets are applied in us.css, and in
+         us-board.css on the enlarged view — which is position: fixed and
+         therefore the one thing on this page that can land under the notch. -->
+    <meta name="color-scheme" content="dark">
+    <meta name="robots" content="noindex, nofollow, noarchive">
+    <meta name="referrer" content="no-referrer">
+    <title>[us] — the board</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- Caveat joins the wing's two faces IN THE SAME REQUEST, so the caption
+         band costs one extra font file and no extra round trip. It is used in
+         exactly one place — the handwritten line on a Polaroid — which is the
+         "sparingly, for accents" guidance that face comes with. -->
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=Caveat:wght@500;600&display=swap" rel="stylesheet">
+    <!-- Installable-app metadata. `scope` is "/" and that is a CORRECTION, not
+         laziness. It was "/samdrea/", which looks tighter and quietly broke the
+         installed app in three places: an installed PWA opens any out-of-scope
+         URL in the BROWSER instead of the app, and "/samdrea" (the gate, where
+         every expired session lands), "/api/us/out" (sign out) and all eleven
+         "/api/us/*" form actions are every one of them outside "/samdrea/".
+         So her session expiring would eject her to Safari to log back in, and
+         with JavaScript off every form post would leave the app too. Nothing in
+         the wing links to the public site, so a wide scope traps nothing.
+
+         DELIBERATELY NO SERVICE WORKER. Every page here is behind a session;
+         a worker that cached the wrong response could hand an authorised page to
+         whoever opened the app next. -->
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="apple-touch-icon" href="/assets/us/icons/apple-touch-icon.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="[us]">
+    <meta name="theme-color" content="#000000">
+    <!-- ABSOLUTE paths: this page is at /samdrea/vault/board, so "css/us.css"
+         would resolve to /samdrea/vault/css/us.css and 404.
+
+         us.css FIRST — it owns every token the others use. us-song.css is here
+         for exactly two shared primitives, `.notice` and `.sr-only`, which its
+         own header asks to be treated as the wing's shared vocabulary; day.astro
+         borrows them the same way. It is a warm-cache hit for anyone who has
+         opened another room, which is cheaper than a divergent private copy of
+         two rules that then drift. -->
+    <link rel="stylesheet" href="/css/us.css">
+    <link rel="stylesheet" href="/css/us-song.css">
+    <link rel="stylesheet" href="/css/us-board.css">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2032%2032%27%3E%3Crect%20width%3D%2732%27%20height%3D%2732%27%20fill%3D%27%23000%27%2F%3E%3Ctext%20x%3D%2716%27%20y%3D%2722.5%27%20font-family%3D%27Helvetica%2CArial%2Csans-serif%27%20font-size%3D%2716%27%20font-weight%3D%27700%27%20text-anchor%3D%27middle%27%3E%3Ctspan%20fill%3D%27%233e7bff%27%3E%5B%3C%2Ftspan%3E%3Ctspan%20fill%3D%27%23fff%27%3Eus%3C%2Ftspan%3E%3Ctspan%20fill%3D%27%233e7bff%27%3E%5D%3C%2Ftspan%3E%3C%2Ftext%3E%3C%2Fsvg%3E">
+</head>
+<body class="studio board">
+<div class="studio-wrap">
+
+    <p class="studio-kicker">line 02 &middot; the board</p>
+
+    <h1 class="us-mark">
+        <span class="us-mark-bracket" aria-hidden="true">[</span>board<span
+              class="us-mark-bracket" aria-hidden="true">]</span>
+    </h1>
+
+    <p class="studio-lede">
+        Everything, pinned up at once, {her}. Tap any one of them and it gets big
+        enough to read what I wrote on the back.
+    </p>
+
+    {/* The failed-save banner, at the top AND inside every enlarged view. The
+        303 carries only a fragment and the server cannot read a fragment, so
+        there is no way to know which view she was in — see .bo-oops in the
+        stylesheet. role="alert" is on this copy only, so it is announced once. */}
+    {markError && <p class="notice" data-kind="bad" role="alert">hm &mdash; {markError}</p>}
+
+    {showPlaceholderNotice && (
+        <p class="notice" data-kind="warn" role="status">
+            dev &mdash; R2 is not configured, so every Polaroid is a generated
+            stand-in card. The board is complete either way.
+        </p>
+    )}
+
+    <hr class="studio-rule">
+
+    <section class="bo-board" id="board" aria-labelledby="board-head">
+
+        {/* Short enough to stay on ONE line at 320px. The longer version
+            ("13 of them · every caption, every note") wrapped there and the
+            second line ran into the wire's left mount. */}
+        <p class="bo-eyebrow" id="board-head">
+            all {memories.length}, pinned up
+        </p>
+
+        {/* ============================================================
+            THE LIGHTS. Decorative in full: aria-hidden, no text, no
+            focusable child, and the SVG is not in the tab order. A
+            screen reader is told nothing about them because there is
+            nothing about them to tell — they are the reason the room
+            has a temperature, not a piece of content.
+
+            z-index 0 against the wall's 1, so the glow's outer
+            falloff always passes BEHIND the paper. That is what makes
+            "no warm pixel is ever composited over a photograph"
+            structural rather than merely intended.
+            ============================================================ */}
+        <div class="bo-lights" aria-hidden="true">
+            <svg
+                class="bo-wire"
+                viewBox={`0 0 ${LIGHT_W} ${LIGHT_H}`}
+                preserveAspectRatio="none"
+                focusable="false"
+                role="presentation"
+            >
+                {/* vector-effect keeps these 1.5px and 1px wide in DEVICE
+                    pixels under the deliberately non-uniform scale above.
+                    Without it the wire smears thick at one width and
+                    disappears at another. */}
+                <path
+                    d={wirePath}
+                    fill="none"
+                    stroke="#4a4c52"
+                    stroke-width="1.5"
+                    stroke-linecap="round"
+                    vector-effect="non-scaling-stroke"
+                />
+                {bulbs.map((b) => (
+                    <line
+                        x1={b.hangerX} y1={b.hangerY1}
+                        x2={b.hangerX} y2={b.hangerY2}
+                        stroke="#4a4c52"
+                        stroke-width="1"
+                        vector-effect="non-scaling-stroke"
+                    />
+                ))}
+                {/* The two mounts. Concrete, like everything structural. */}
+                <circle cx="0" cy={MOUNT_Y} r="3.5" fill="#6a6c72" />
+                <circle cx={LIGHT_W} cy={MOUNT_Y} r="3.5" fill="#6a6c72" />
+            </svg>
+
+            {bulbs.map((b) => (
+                <span
+                    class="bo-bulb"
+                    data-flicker={b.flicker ? '' : undefined}
+                    style={`--bx:${b.left};--by:${b.top};--flicker-dur:${b.dur};--flicker-delay:${b.delay}`}
+                ></span>
+            ))}
+        </div>
+
+        {/* ============================================================
+            THE WALL.
+
+            An <ol> because it is a list of thirteen things in a fixed
+            order, and because that gives her screen reader a count
+            before it starts reading them out.
+
+            Each item carries `id="t-<id>"`, which is what the CLOSE
+            links in the enlarged views point at — so shutting a
+            photograph puts her back at that photograph rather than at
+            the top of the board.
+
+            The link's accessible name is the caption plus a visually
+            hidden "open it larger", so thirteen Polaroids do not
+            announce as thirteen identical links. The visible label is
+            inside the name, which is what 2.5.3 asks for.
+            ============================================================ */}
+        <ol class="bo-wall">
+            {pinned.map((p) => (
+                <li class="bo-slot" id={`t-${p.m.id}`} style={`--nudge:${p.nudge}px`}>
+                    <a
+                        class="bo-card"
+                        href={`#m-${p.m.id}`}
+                        style={`--tilt:${p.tilt}deg;--tape-tilt:${p.tape}deg;--i:${p.i}`}
+                    >
+                        <span class="bo-fix" data-fix={p.fix} aria-hidden="true"></span>
+
+                        <span class="bo-shot">
+                            {/* srcSmall, so the board costs thirteen downscaled
+                                images and not thirteen full-size ones. The
+                                endpoint falls back to the full object when no
+                                `@sm` sibling exists yet, so this is safe
+                                unconditionally. The full-size one is only ever
+                                fetched when she actually opens a photograph.
+
+                                loading is lazy below the first row and the box
+                                is reserved by aspect-ratio in CSS, so nothing
+                                on this page reflows as the bytes land. */}
+                            <img
+                                src={p.m.srcSmall}
+                                alt={p.alt}
+                                loading={p.i < 3 ? 'eager' : 'lazy'}
+                                decoding="async"
+                            >
+                        </span>
+
+                        <span class="bo-band">
+                            <span class="bo-cap">{p.m.caption}</span>
+                            {/* State as a WORD. The blue dot in the stylesheet
+                                is decoration on top of it and is drawn with
+                                ::before, so it is not in the accessible name. */}
+                            {p.kept && <span class="bo-kept">kept</span>}
+                        </span>
+
+                        <span class="sr-only">&mdash; open it larger</span>
+                    </a>
+                </li>
+            ))}
+        </ol>
+
+        <p class="bo-tail">
+            {/* Said in words, because "tap the photo" is not discoverable from a
+                photo. One sentence beats a row of thirteen little "expand"
+                affordances glued to the corner of every Polaroid. */}
+            Keep the ones you want to keep, and there's a box under each for
+            writing back. It all works with the page just sitting there &mdash;
+            nothing to hold down.
+        </p>
+    </section>
+
+    {/* ============================================================
+        THE ENLARGED VIEWS.
+
+        Thirteen of them, siblings of the board rather than children
+        of it: .bo-slot carries a transform, and a transformed
+        ancestor becomes the containing block for a position: fixed
+        descendant, which would pin each view to its own Polaroid
+        instead of to the viewport.
+
+        `display: none` until :target, so with CSS on and JavaScript
+        off a note is one tap away — and with CSS off, `display` does
+        nothing and every note is simply in the document. Both
+        directions reach every note.
+        ============================================================ */}
+    <div class="bo-views">
+        {pinned.map((p) => (
+            <section class="bo-view" id={`m-${p.m.id}`} aria-labelledby={`cap-${p.m.id}`} tabindex="-1">
+
+                {/* A full-bleed link, so tapping outside the sheet closes the
+                    view with no script at all.
+
+                    LABELLED AND OUT OF THE TAB ORDER, rather than aria-hidden.
+                    It was aria-hidden, which is the usual dodge for a decorative
+                    backdrop and is wrong here: this one is a real control with a
+                    real destination, and hiding a focusable element from
+                    assistive technology is the shape of bug that aria-hidden-focus
+                    exists to catch. tabindex="-1" keeps it from being a giant
+                    empty tab stop in front of the sheet, and the label means a
+                    screen reader finds an honest second way out. */}
+                <a class="bo-scrim" href={`#t-${p.m.id}`} tabindex="-1" aria-label="close this photograph"></a>
+
+                <div class="bo-sheet">
+                    <span class="bo-sheet-shot">
+                        {/* The FULL-SIZE src here, and `contain` in CSS: the
+                            board crops to a square window the way a Polaroid
+                            does, but the view that exists for looking properly
+                            crops nothing. lazy, so thirteen hidden full-size
+                            images are not thirteen requests on first paint. */}
+                        <img
+                            src={p.m.src}
+                            alt={p.alt}
+                            loading="lazy"
+                            decoding="async"
+                        >
+                    </span>
+
+                    <div class="bo-sheet-band">
+                        {markError && (
+                            <p class="bo-oops"><b>Not saved.</b> {markError}</p>
+                        )}
+
+                        <p class="bo-sheet-cap" id={`cap-${p.m.id}`}>{p.m.caption}</p>
+
+                        {/* `when` is optional free text, never a derived date, so
+                            the line is omitted rather than rendered empty. The
+                            thirteenth is the one that used to sit past the end of
+                            the rail; on a board there is no end, so it just says
+                            what it is. */}
+                        {(p.m.hidden || p.m.when) && (
+                            <p class="bo-sheet-when">{p.m.hidden ? 'still one more' : p.m.when}</p>
+                        )}
+
+                        <p class="bo-sheet-note">{p.m.note}</p>
+
+                        <hr class="bo-sheet-rule">
+
+                        {/* Her words, OUTSIDE and above the controls, and
+                            labelled — the board carries two voices and they must
+                            not read as one. */}
+                        {p.hersNote && (
+                            <div class="bo-hers">
+                                <p class="bo-hers-label">yours</p>
+                                <p class="bo-hers-text">{p.hersNote}</p>
+                            </div>
+                        )}
+
+                        {/* ============================================
+                            WHAT SHE CAN DO, WITH ZERO JAVASCRIPT.
+
+                            Two real forms, posting to /api/us/mark,
+                            which answers a form submission with a 303.
+
+                            `?m=<id>` is the fragment hint: the endpoint
+                            answers authorization and rate limiting
+                            BEFORE it parses a body, and those are
+                            exactly the failures where losing her place
+                            is most annoying — so the id has to be
+                            readable with no body at all. It is
+                            validated against the manifest there and
+                            used for nothing but the fragment.
+
+                            `from=board` picks the return PATH out of an
+                            allowlist of two literal constants in the
+                            endpoint. Without it the 303 would land her
+                            on /samdrea/vault/room, which is the benched
+                            3D studio.
+                            ============================================ */}
+                        <div class="bo-acts">
+                            <form class="bo-keep" method="post" action={`/api/us/mark?from=board&m=${p.m.id}`}>
+                                <input type="hidden" name="action" value="keep">
+                                <input type="hidden" name="id" value={p.m.id}>
+                                {/* The DESIRED END STATE, not a toggle, so a
+                                    double-submit on a laggy phone converges
+                                    instead of flipping twice. `on` is sent only
+                                    when un-keeping: readOn() in the endpoint
+                                    treats an ABSENT field as true, and that
+                                    default is what lets the keep form carry
+                                    nothing but the id. */}
+                                {p.kept && <input type="hidden" name="on" value="0">}
+                                <button
+                                    class="bo-btn"
+                                    type="submit"
+                                    aria-pressed={p.kept ? 'true' : 'false'}
+                                    aria-label={`${p.kept ? 'kept' : 'keep this'}: ${p.m.caption}`}
+                                >{p.kept ? 'kept' : 'keep this'}</button>
+                                {/* aria-label CONTAINS the visible label, so
+                                    2.5.3 Label in Name holds — and thirteen keep
+                                    buttons on one page no longer announce as
+                                    thirteen identical "keep this". */}
+                            </form>
+
+                            <a class="bo-shut" href={`#t-${p.m.id}`}>close</a>
+                        </div>
+
+                        <details class="bo-reply">
+                            <summary>{p.hersNote ? 'edit what you wrote' : 'write back'}</summary>
+                            <form method="post" action={`/api/us/mark?from=board&m=${p.m.id}`}>
+                                <input type="hidden" name="action" value="note">
+                                <input type="hidden" name="id" value={p.m.id}>
+                                {/* A real <label>, tied by id. Thirteen views on
+                                    one page means thirteen textareas, so the id
+                                    has to carry the memory id or every label
+                                    points at the first one. */}
+                                <label class="sr-only" for={`note-${p.m.id}`}>
+                                    what you want to say about: {p.m.caption}
+                                </label>
+                                <textarea
+                                    class="bo-field"
+                                    id={`note-${p.m.id}`}
+                                    name="note"
+                                    rows="3"
+                                    maxlength={MARK_NOTE_MAX}
+                                    aria-describedby={`note-hint-${p.m.id}`}
+                                >{p.hersNote}</textarea>
+                                <p class="bo-hint" id={`note-hint-${p.m.id}`}>
+                                    up to {MARK_NOTE_MAX} characters. only the two of us see it.
+                                </p>
+                                <button class="bo-btn" type="submit">save it</button>
+                            </form>
+                        </details>
+                    </div>
+                </div>
+            </section>
+        ))}
+    </div>
+
+    <hr class="studio-rule">
+
+    <div class="studio-foot">
+        <span class="studio-tag">Stronger for it.</span>
+        <a href="/samdrea/vault">&larr; back to the room</a>
+    </div>
+</div>
+
+<script is:inline>
+/**
+ * ESCAPE CLOSES AN OPEN PHOTOGRAPH. That is the entire script.
+ *
+ * Everything else on this page is `:target` and real forms, so this file is
+ * allowed to be absent, blocked, or thrown: without it, the close link, the
+ * scrim and the browser's own back button all still shut a photograph. The only
+ * thing lost is the key, which is why there is no feature detection ceremony
+ * here and no error handling — there is nothing to degrade to.
+ *
+ * location.replace() rather than assigning location.hash, because Escape is a
+ * DISMISSAL and should not leave a history entry that Back walks her into again.
+ * It is a same-document hash change, so it re-evaluates :target without
+ * reloading, and it drops any `?e=` from a failed save on the way out.
+ */
+document.addEventListener('keydown', function (ev) {
+    if (ev.key !== 'Escape' && ev.key !== 'Esc') return;
+    var hash = window.location.hash;
+    if (hash.indexOf('#m-') !== 0) return;
+    ev.preventDefault();
+    /* '#m-m01' -> '#t-m01': the Polaroid she opened, so closing lands her back
+       on it rather than at the top of the board. */
+    window.location.replace(window.location.pathname + '#t-' + hash.slice(3));
+});
+</script>
+</body>
+</html>

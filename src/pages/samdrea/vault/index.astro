@@ -411,8 +411,34 @@ const rooms = [
      as a visible disabled card, which would put "coming soon" on the front door
      of a present. Absent is better than pending.
 
-     TO BRING IT BACK, restore this one object. Nothing else is needed —
-     `fresh.studio` is still computed in status.ts and still correct. */
+     TO BRING IT BACK, it needs a `n` that is not `line 02` any more — the board
+     below has that number now. Nothing else about it changed; `fresh.studio` is
+     still computed in status.ts and still correct.
+
+     WHAT TOOK ITS PLACE, and why it kept the number:
+
+     /samdrea/vault/board is the same thirteen photographs, pinned to a corkboard
+     under a string of fairy lights as Polaroids. Tap one, it gets bigger and the
+     note is readable. No gesture, nothing to hold, nothing to learn — which was
+     the entire complaint against the studio and is the entire brief for this.
+
+     It inherits `line 02` rather than becoming `line 05` because the numbers are
+     positions in the wing, not a changelog: the photographs have always been the
+     second thing in here, and renumbering them to the end would make the order
+     she reads the hub in depend on the order I happened to build the rooms in.
+
+     No `fresh` signal, for the same reason as line 03 and line 04. status.ts
+     reads the song store and the marks store, and while the marks store IS what
+     this room writes to, a marker keyed on it would light up when SHE keeps
+     something — i.e. it would tell her about her own tap. A signal that fires on
+     your own action is decoration. */
+  {
+    n: 'line 02',
+    title: 'the board',
+    note: 'every photograph, pinned up under the lights. tap one.',
+    href: '/samdrea/vault/board',
+    ready: true,
+  },
   {
     n: 'line 03',
     title: 'letters',
@@ -496,7 +522,7 @@ const rooms = [
          song-of-the-day work, and a hub that borrowed its rules would break when it
          moved. us-together.css carries its own `tg-` copies and says so. -->
     <link rel="stylesheet" href="/css/us-together.css">
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23000'/%3E%3Ctext x='16' y='23' font-family='monospace' font-size='20' font-weight='700' text-anchor='middle' fill='%233e7bff'%3E%5B%5D%3C/text%3E%3C/svg%3E">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2032%2032%27%3E%3Crect%20width%3D%2732%27%20height%3D%2732%27%20fill%3D%27%23000%27%2F%3E%3Ctext%20x%3D%2716%27%20y%3D%2722.5%27%20font-family%3D%27Helvetica%2CArial%2Csans-serif%27%20font-size%3D%2716%27%20font-weight%3D%27700%27%20text-anchor%3D%27middle%27%3E%3Ctspan%20fill%3D%27%233e7bff%27%3E%5B%3C%2Ftspan%3E%3Ctspan%20fill%3D%27%23fff%27%3Eus%3C%2Ftspan%3E%3Ctspan%20fill%3D%27%233e7bff%27%3E%5D%3C%2Ftspan%3E%3C%2Ftext%3E%3C%2Fsvg%3E">
 </head>
 <body class="studio">
 <div class="studio-wrap">

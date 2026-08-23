@@ -177,8 +177,31 @@ function crossSite(request: Request, url: URL): boolean {
   }
 }
 
-/** Where a no-JavaScript form submission lands afterwards. */
+/**
+ * Where a no-JavaScript form submission lands afterwards.
+ *
+ * TWO PAGES NOW CARRY THESE FORMS, and they are different rooms: the 3D studio's
+ * static fallback grid (/samdrea/vault/room) and the corkboard that replaced it
+ * on her hub (/samdrea/vault/board). A single hardcoded destination meant a
+ * keep-tap from the board redirected her into the benched studio, which is the
+ * one page in the wing she is not supposed to be sent to.
+ *
+ * So the caller may name its return page with `?from=`, and it is an ALLOWLIST
+ * of two literal constants rather than a path taken off the wire. That is the
+ * whole security property: `from` selects an entry, it never builds one, so
+ * `?from=//evil.example` and every other shape resolve to "not in the map" and
+ * fall through to the default. This is deliberately the same discipline
+ * photos.ts applies to a memory id — select, never construct.
+ *
+ * The DEFAULT is unchanged, so room.astro, which sends no `from` at all, behaves
+ * exactly as it did.
+ */
 const ROOM_PAGE = '/samdrea/vault/room';
+const BOARD_PAGE = '/samdrea/vault/board';
+const RETURN_TO: Record<string, string> = {
+  room: ROOM_PAGE,
+  board: BOARD_PAGE,
+};
 
 /**
  * Applied to EVERY exit from this endpoint, the 303 included.
@@ -254,6 +277,13 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
   const fromQuery = url.searchParams.get('m');
   let landOn = isMarkId(fromQuery) ? fromQuery : '';
 
+  /* WHICH PAGE to land her back on. Read here, next to the fragment, and for the
+     same reason: it must be known before the body is parsed, because the
+     authorization and rate-limit exits happen first and those are exactly the
+     failures where being dumped in the wrong room is worst. An allowlist lookup,
+     so this can only ever be one of two literal strings — see RETURN_TO. */
+  const backTo = RETURN_TO[url.searchParams.get('from') ?? ''] ?? ROOM_PAGE;
+
   /** One exit point, so the fetch and no-JS paths cannot drift apart. */
   const answer = (
     ok: boolean,
@@ -271,7 +301,7 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
        indexable or leak a referrer" claim was only half true. Response.redirect
        produces immutable headers in some runtimes, hence build-a-new-one rather
        than mutate; Astro's redirect() is a plain Response, so this is cheap. */
-    const res = redirect(`${ROOM_PAGE}${query}${frag}`, 303);
+    const res = redirect(`${backTo}${query}${frag}`, 303);
     const headers = new Headers(res.headers);
     for (const [k, v] of Object.entries(PRIVACY)) headers.set(k, v);
     return new Response(res.body, { status: res.status, statusText: res.statusText, headers });

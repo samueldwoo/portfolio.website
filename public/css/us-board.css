@@ -1,0 +1,896 @@
+/* ============================================================
+   us-board.css — /samdrea/vault/board, `line 02 · the board`
+
+   A corkboard with fairy lights strung across it and thirteen
+   photographs pinned to it as Polaroids.
+
+   Loaded AFTER /css/us.css (which owns every token this file
+   consumes) and AFTER /css/us-song.css (which owns .notice and
+   .sr-only — see the page's <head> comment for why those two
+   shared primitives are borrowed rather than re-declared).
+
+   Paths inside this file are absolute for the same reason every
+   other file in the wing says so: the page lives at
+   /samdrea/vault/board, so a relative url() would resolve one
+   directory too deep.
+
+   ------------------------------------------------------------
+   THE ONE RULE, AND THE CORKBOARD PROBLEM
+
+   us.css: "the photos are the only warm thing in here.
+   Everything architectural is black, concrete and blue."
+
+   A cork board is a large, warm, saturated tan plane. Painted
+   literally, it is roughly 70% of the viewport in #b8895a, and
+   thirteen small photographs sitting on it would no longer be
+   the warm thing in the room — they would be the cool thing.
+   That is not a small violation; it inverts the rule.
+
+   So THE BOARD IS NOT CORK-COLOURED. What was diagnosed instead
+   is why cork reads as cork, and the answer is not its hue: it
+   is its GRAIN. Cork is identifiable because it is fibrous and
+   speckled and obviously pinnable. All three of those survive
+   translation into neutral grey. So the board is --machine with
+   three offset radial-gradient dot fields over it at 3-9%
+   alpha in --concrete-4 and black, at co-prime periods so the
+   speckle never visibly tiles. It reads as a pinboard, it is
+   tactile, and it contains no chroma at all. The dot fields
+   measure 1.07-1.14:1 against the surface, which is exactly
+   what a texture should measure: perceptible as material,
+   invisible as content.
+
+   The board's EDGE, which is the part that has to be
+   perceivable, is a --concrete-2 hairline: 3.44:1 on --machine
+   and 4.00:1 on --void, over the 3:1 that WCAG 1.4.11 wants
+   from a UI boundary.
+
+   ------------------------------------------------------------
+   THE FAIRY LIGHTS ARE THE ONE WARM THING, AND HERE IS THE CASE
+
+   The rule is about SURFACES. Everything architectural is
+   unlit and neutral so that nothing in the room competes with a
+   photograph. A bulb is not a surface — it is a light source,
+   and a warm point light does not compete with a warm
+   photograph, it explains it. It is the reason the photographs
+   in this room look the temperature they look.
+
+   Three constraints keep that argument honest rather than
+   convenient:
+
+     1. AREA. Thirteen bulbs at ~9px is about 830px^2 of warm
+        pixels. One Polaroid's image window on a phone is about
+        76,000. The photographs outweigh the lights by ~90x.
+     2. NO WASH. There is deliberately no warm gradient over
+        the board. A warm bloom across the surface would tint
+        the space immediately around every photograph, which is
+        colour-grading the photographs by another route.
+     3. NOTHING WARM IS EVER COMPOSITED OVER A PHOTOGRAPH.
+        .bo-lights sits at z-index 0 and .bo-wall at z-index 1,
+        so the glow's outer falloff passes BEHIND the paper. Not
+        a filter, not an overlay, not a tint. us.css says "Do
+        not add a filter to a photo. Ever." — this is the rule
+        that makes that structurally impossible here rather
+        than merely intended.
+
+   If any of those three ever stops being true, the lights
+   should go grey rather than the rule bend.
+
+   The one electric blue is spent on the PUSH PINS. That is the
+   right place for it: the pins are the only thing on the board
+   that is ours rather than photographic, and blue pinheads read
+   as this wing instead of as generic stationery.
+   ============================================================ */
+
+.board {
+    /* Nothing to add to .studio's own padding and safe-area
+       insets — this exists so the page has a hook and so a
+       future board-only override has somewhere to live. */
+    --bo-paper:      #f2f0ea;  /* Polaroid stock. See below. */
+    --bo-paper-band: #eceae3;  /* the thick bottom border, a half-step down */
+    --bo-ink:        #1c1d21;  /* 14.78:1 on paper, 13.99:1 on the band */
+    --bo-ink-2:      #55575f;  /* 6.32:1 on paper, 5.98:1 on the band */
+
+    /* THE PAPER IS NOT PURE WHITE, and that is not a rule
+       violation. #ffffff reads as a UI card; real integral film
+       stock is cream. The chroma here is tiny (a 8-point spread
+       across the channels at L*94) and, more to the point, the
+       paper is part of the PHOTOGRAPHIC OBJECT rather than part
+       of the room — the same category as the photograph it is
+       holding, not the same category as a wall. */
+
+    /* The bulbs. Only ever used on .bo-bulb's own gradient and
+       shadow, never on a surface. */
+    --bo-filament: #fff8ea;
+    --bo-glass:    #ffd79a;
+    --bo-glass-2:  #f5a63f;
+
+    /* Caveat, requested in the same Google Fonts call as Space
+       Grotesk and DM Mono, so it costs one extra font file and
+       no extra request. Used in exactly one place — the caption
+       band — which is the "use it sparingly for accents"
+       guidance the type database gives for this face. The
+       fallbacks are the two script faces that actually ship on
+       macOS/iOS and Windows, so a blocked webfont still lands
+       on a hand. */
+    --bo-hand: "Caveat", "Bradley Hand", "Segoe Script", cursive;
+}
+
+/* ============================================================
+   THE BOARD ITSELF
+   ============================================================ */
+
+.bo-board {
+    position: relative;
+    margin: 0;
+    padding: clamp(14px, 3.4vw, 26px) clamp(12px, 3vw, 24px) clamp(20px, 4vw, 34px);
+    border: 1px solid var(--concrete-2);
+    border-radius: 3px;
+
+    /* THE GRAIN. Three dot fields at co-prime periods (13x11,
+       21x17, 9x9) so the pattern's true repeat is far larger
+       than any viewport and never reads as tiling, over a
+       neutral top-lit gradient. No hue anywhere in here. */
+    background-color: var(--machine);
+    background-image:
+        radial-gradient(rgba(154, 156, 161, 0.085) 0.7px, transparent 0.9px),
+        radial-gradient(rgba(154, 156, 161, 0.055) 0.6px, transparent 0.8px),
+        radial-gradient(rgba(0, 0, 0, 0.34) 0.9px, transparent 1.1px),
+        linear-gradient(180deg, #1e2025 0%, #15161a 58%, #121317 100%);
+    background-size: 13px 11px, 21px 17px, 9px 9px, 100% 100%;
+    background-position: 0 0, 7px 5px, 3px 2px, 0 0;
+
+    /* A hung panel: a light top edge, a dark drop under it. */
+    box-shadow:
+        inset 0 1px 0 rgba(185, 188, 194, 0.10),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.55),
+        0 18px 40px -18px rgba(0, 0, 0, 0.9);
+
+    /* THE HORIZONTAL-OVERFLOW GUARANTEE.
+
+       Every Polaroid is rotated a few degrees, and a rotate()
+       paints outside the element's layout box without changing
+       it — which is precisely the shape of bug that ships a
+       320px page with a scrollbar. `clip` rather than `hidden`
+       so the block axis stays visible (clip is the only
+       overflow value that may be mixed with visible), and on
+       the BOARD rather than on the body so the lightbox, which
+       is position: fixed, is nowhere near it. */
+    overflow-x: clip;
+}
+
+.bo-eyebrow {
+    font-family: var(--us-mono);
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--concrete-4);        /* 6.58:1 on --machine */
+    margin: 0 0 4px;
+}
+
+/* ============================================================
+   THE FAIRY LIGHTS
+
+   A SAGGING wire, not a straight one. A straight line across
+   the top of a panel reads as a border; a catenary reads as a
+   string that something is hanging from. The curve and the bulb
+   positions are generated from ONE function in the page's
+   frontmatter, so the bulbs sit exactly on the wire by
+   construction rather than by two sets of numbers agreeing.
+
+   HOW THE WIRE STAYS 1.5px AT EVERY WIDTH
+
+   The <svg> is `preserveAspectRatio="none"` with a fixed CSS
+   height, so the 1200x120 viewBox is stretched by a different
+   factor on each axis — which is what lets the sag stay a real
+   sag at 320px instead of collapsing to a 35px-tall sliver.
+   Non-uniform scaling would normally smear the stroke, so the
+   wire carries vector-effect="non-scaling-stroke" and is
+   rendered in device pixels regardless.
+
+   The BULBS are therefore not in the SVG at all: an ellipse
+   under a non-uniform transform is not a circle. They are
+   absolutely-positioned HTML, placed at a percentage on both
+   axes (which is exactly how preserveAspectRatio="none" maps
+   viewBox coordinates), so they are real round CSS circles at a
+   real px size with a real box-shadow glow.
+   ============================================================ */
+
+.bo-lights {
+    position: relative;
+    z-index: 0;                       /* BEHIND the wall. See the header. */
+    height: clamp(56px, 8.5vw, 104px);
+    /* Clearance at the TOP so the wire's left mount does not sit
+       on the eyebrow when it wraps to two lines at 320px, and at
+       the BOTTOM so the glow's outer ring lands on the board
+       rather than on a Polaroid's frame. */
+    margin: 10px 0 clamp(16px, 3vw, 30px);
+    pointer-events: none;
+}
+
+.bo-wire {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.bo-bulb {
+    position: absolute;
+    /* --bx / --by are written per bulb by the page. */
+    left: var(--bx);
+    top: var(--by);
+    width: var(--bo-bulb-size, 9px);
+    height: var(--bo-bulb-size, 9px);
+    margin-left: calc(var(--bo-bulb-size, 9px) / -2);
+    margin-top: calc(var(--bo-bulb-size, 9px) / -2);
+    border-radius: 50%;
+    background: radial-gradient(circle at 38% 32%,
+        var(--bo-filament) 0%, var(--bo-glass) 44%, var(--bo-glass-2) 100%);
+    /* FOUR rings, tight to wide. A single shadow reads as a ring
+       drawn around a dot; a falloff reads as light. The widest
+       one is at 8% alpha, which is where the "no warm wash"
+       constraint in the header is actually spent — it is a 30px
+       bloom around a 9px bulb and it lands on the board, behind
+       the paper, never on a photograph. */
+    box-shadow:
+        0 0 3px 0 rgba(255, 224, 178, 0.85),
+        0 0 7px 1px rgba(255, 196, 120, 0.55),
+        0 0 16px 4px rgba(255, 166, 70, 0.30),
+        0 0 30px 9px rgba(255, 150, 50, 0.11);
+}
+
+.bo-lights { --bo-bulb-size: clamp(6px, 1.2vw, 10px); }
+
+/* ============================================================
+   THE WALL
+
+   CSS multicolumn rather than a grid, because the Polaroids
+   have different caption lengths and therefore different
+   heights, and multicolumn packs them without a single
+   measurement in JavaScript. DOM order is preserved as column
+   order, so the reading order a screen reader gets is the
+   visual order.
+
+   ONE COLUMN ON A PHONE, deliberately. Two 165px-wide
+   Polaroids at 390px is a board you cannot see anybody's face
+   in, and this page exists to be looked at. The board still
+   reads as a board at one column — the frame, the lights, the
+   pins and the tilts are all still there.
+   ============================================================ */
+
+.bo-wall {
+    position: relative;
+    z-index: 1;                       /* IN FRONT of the lights. */
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    columns: 1;
+    column-gap: clamp(14px, 3vw, 26px);
+}
+
+@media (min-width: 560px) { .bo-wall { columns: 2; } }
+@media (min-width: 900px) { .bo-wall { columns: 3; } }
+
+/* Geometry knobs, kept next to the wall they govern. */
+.bo-board {
+    --bo-frame: clamp(9px, 2.4vw, 13px);   /* the white margin */
+    --bo-nudge: 0.5;                       /* nudge multiplier */
+}
+@media (min-width: 560px) { .bo-board { --bo-nudge: 1; } }
+
+.bo-slot {
+    /* A Polaroid must never be split across a column break. */
+    break-inside: avoid;
+    -webkit-column-break-inside: avoid;
+    /* Room for the rotated corners, and this is arithmetic
+       rather than taste. A w x h box rotated by theta occupies
+       w*cos(theta) + h*sin(theta). At 320px the card is ~220
+       wide and ~292 tall, so 3.4deg pushes each side out by
+       about 8.4px — and the sideways nudge stacks on top of
+       that. The padding here is what keeps the whole excursion
+       inside the board instead of relying on the clip. */
+    margin: 0 0 clamp(20px, 4vw, 30px);
+    padding: 0 clamp(12px, 4vw, 16px);
+    /* The hand-pinned look: a small deterministic sideways
+       nudge per photograph, so a column is not a plumb line.
+       Halved on one column, where there is no room for it. */
+    transform: translateX(calc(var(--nudge, 0px) * var(--bo-nudge, 1)));
+}
+
+.bo-slot:last-child { margin-bottom: 0; }
+
+/* ---- one Polaroid ---------------------------------------- */
+
+.bo-card {
+    display: block;
+    position: relative;
+    /* max-width so a single column on a big phone does not
+       produce a 500px-wide Polaroid; auto margins centre it. */
+    max-width: 320px;
+    margin: 0 auto;
+    padding: var(--bo-frame, 12px) var(--bo-frame, 12px) 0;
+    box-sizing: border-box;
+    background: var(--bo-paper);
+    border-radius: 2px;
+    text-decoration: none;
+    color: var(--bo-ink);
+    /* THE TILT. Deterministic per photograph — derived from a
+       hash of the id in the page's frontmatter, never from
+       Math.random(), because a card that picks a new angle on
+       every render looks like a bug rather than like a hand. */
+    transform: rotate(var(--tilt, 0deg));
+    transform-origin: 50% 12%;        /* it hangs from the pin */
+    box-shadow:
+        0 1px 1px rgba(0, 0, 0, 0.5),
+        0 10px 20px -8px rgba(0, 0, 0, 0.75);
+    transition: transform 220ms cubic-bezier(0.22, 0.61, 0.36, 1),
+                box-shadow 220ms ease;
+}
+
+.bo-card:hover,
+.bo-card:focus-visible {
+    /* Lifted off the board and straightened very slightly, the
+       way you tilt a photo up to look at it. */
+    transform: rotate(calc(var(--tilt, 0deg) * 0.55)) translateY(-5px) scale(1.015);
+    box-shadow:
+        0 1px 1px rgba(0, 0, 0, 0.5),
+        0 22px 34px -12px rgba(0, 0, 0, 0.85);
+}
+
+.bo-card:focus-visible {
+    /* --blue-light measures 4.72:1 against the board it sits
+       on, well over the 3:1 a focus indicator needs. */
+    outline: 2px solid var(--blue-light);
+    outline-offset: 3px;
+}
+
+/* ---- the image window ------------------------------------
+   SLIGHTLY OFF-SQUARE and identical on all thirteen, which is
+   the single detail that makes a white rectangle read as a
+   Polaroid. The film's image area is square; 1:1.04 is a hair
+   taller, which is what the real thing measures once you
+   account for the frame being wider at the bottom.
+
+   object-fit: cover, so a 0.8 portrait and a 1.5 landscape both
+   fill the same window. That is a CROP, and it is the correct
+   one — a Polaroid crops too. It does mean the generated
+   placeholder cards lose their corner labels while the bucket
+   is empty; the photographs are what this window is for.
+   -------------------------------------------------------- */
+
+.bo-shot {
+    display: block;
+    position: relative;
+    aspect-ratio: 1 / 1.04;
+    overflow: hidden;
+    /* Under the photograph, so a slow decode is a dark window
+       rather than a flash of paper. */
+    background: #0b0b0d;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+
+.bo-shot img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+/* ---- the caption band ------------------------------------
+   The thick bottom border is the whole silhouette of a
+   Polaroid: on the real thing the bottom is about five times
+   the side margin. That ratio is preserved here rather than
+   approximated, because at 2x it just looks like a card with
+   generous padding.
+   -------------------------------------------------------- */
+
+.bo-band {
+    display: block;
+    box-sizing: border-box;
+    /* ~5x the side margin, which is the real ratio. At 2x it
+       just looks like a card with generous padding. */
+    min-height: clamp(58px, 13vw, 72px);
+    /* Flush against the image, and out to the card's own edge.
+       There is no gap here on the real thing: the frame is one
+       continuous sheet and this is simply its wide bottom. */
+    margin: 0 calc(var(--bo-frame, 12px) * -1) 0;
+    padding: 10px clamp(11px, 3vw, 15px) clamp(13px, 3vw, 17px);
+    /* A half-step down from the frame rather than identical —
+       the real backing paper at the bottom of a pack is very
+       slightly duller than the border, and the step gives the
+       band an edge without needing a rule drawn on it. */
+    background: var(--bo-paper-band);
+}
+
+.bo-cap {
+    display: block;
+    font-family: var(--bo-hand);
+    /* 1.16rem = ~18.5px. Script faces have thinner strokes and
+       smaller x-heights than a sans at the same nominal size,
+       so this is deliberately well above the 16px floor. */
+    font-size: 1.16rem;
+    font-weight: 500;
+    line-height: 1.24;
+    letter-spacing: 0.004em;
+    color: var(--bo-ink);             /* 13.99:1 on the band */
+}
+
+.bo-kept {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 6px;
+    font-family: var(--us-mono);
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--bo-ink-2);           /* 5.98:1 on the band */
+}
+
+/* Decoration on top of a WORD, never instead of one — us.css's
+   room-card rules make the same call for the same reason. */
+.bo-kept::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--blue-brand);    /* 6.73:1 on paper */
+}
+
+/* ---- what holds it up -----------------------------------
+   A push pin on most of them and a strip of tape on the rest,
+   chosen deterministically from the same id hash as the tilt.
+   Mixing the two is what keeps thirteen identical pinheads
+   from reading as a CSS loop.
+   -------------------------------------------------------- */
+
+.bo-fix {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    pointer-events: none;
+}
+
+/* THE PIN. Blue head, a small specular highlight, and a shadow
+   cast down onto the paper so it sits on top of the photograph
+   rather than inside it. */
+.bo-fix[data-fix="pin"] {
+    width: 15px;
+    height: 15px;
+    transform: translate(-50%, -46%);
+    border-radius: 50%;
+    background:
+        radial-gradient(circle at 34% 30%,
+            rgba(255, 255, 255, 0.85) 0%, rgba(255, 255, 255, 0) 42%),
+        radial-gradient(circle at 50% 50%,
+            var(--blue-light) 0%, var(--blue-brand) 72%, #142a9e 100%);
+    box-shadow:
+        0 2px 3px rgba(0, 0, 0, 0.55),
+        0 0 0 1px rgba(0, 0, 0, 0.25);
+}
+
+/* THE TAPE. Neutral, translucent, and slightly counter-rotated
+   so it looks stuck on afterwards rather than printed.
+
+   GREY translucent, not white translucent. The first version was
+   a white wash, which is invisible over white paper — half the
+   strip sits on the frame and simply disappeared, so five of the
+   thirteen looked like they were held up by nothing. A grey wash
+   reads as dull matte tape over the paper and as a light film
+   over the photograph, which is what tape actually does. */
+.bo-fix[data-fix="tape"] {
+    width: 46px;
+    height: 19px;
+    transform: translate(-50%, -52%) rotate(var(--tape-tilt, -4deg));
+    background: linear-gradient(
+        104deg,
+        rgba(146, 149, 156, 0.22) 0%,
+        rgba(146, 149, 156, 0.42) 34%,
+        rgba(146, 149, 156, 0.26) 66%,
+        rgba(146, 149, 156, 0.40) 100%);
+    /* The torn ends, one light and one dark, so it has a side
+       that the light is coming from. */
+    border-left: 1px solid rgba(255, 255, 255, 0.28);
+    border-right: 1px solid rgba(0, 0, 0, 0.16);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
+}
+
+/* ============================================================
+   THE ENLARGED VIEW
+
+   :target, NOT a JavaScript lightbox. Each Polaroid is a real
+   <a href="#m-id"> and each enlarged view is a real element
+   with that id, so:
+
+     * with JavaScript off it works, completely;
+     * the browser BACK button closes it, for free, because
+       opening one was a real navigation;
+     * /api/us/mark's no-JavaScript 303 already redirects to
+       `#m-<id>` — so keeping a photograph or saving a note
+       lands her back inside the same enlarged view she pressed
+       the button in, with no state to reconstruct.
+
+   With CSS off (and therefore with `display: none` inoperative)
+   every note is simply visible in the document, so the notes
+   are reachable in that direction too.
+
+   The CLOSE links point at `#t-<id>`, the id on the Polaroid
+   she opened, so closing puts her back at the photograph rather
+   than at the top of the board.
+   ============================================================ */
+
+.bo-view {
+    display: none;
+}
+
+.bo-view:target {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    /* Vertically scrollable when a long note plus her reply
+       exceeds the viewport. `overscroll-behavior` so reaching
+       the end does not start scrolling the board underneath. */
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding:
+        max(16px, calc(env(safe-area-inset-top) + 10px))
+        max(14px, env(safe-area-inset-right))
+        max(20px, calc(env(safe-area-inset-bottom) + 14px))
+        max(14px, env(safe-area-inset-left));
+    background: rgba(0, 0, 0, 0.90);
+    /* Progressive: everything above already works without it. */
+    -webkit-backdrop-filter: blur(3px);
+    backdrop-filter: blur(3px);
+}
+
+/* THE SCRIM IS A LINK, so tapping outside the sheet closes the
+   view with no JavaScript at all. It is a duplicate of the
+   visible "close" control below, so it is taken out of the tab
+   order and hidden from assistive technology rather than
+   announced twice. */
+.bo-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    cursor: default;
+}
+
+.bo-sheet {
+    position: relative;
+    z-index: 1;
+    max-width: 520px;
+    margin: 0 auto;
+    box-sizing: border-box;
+    padding: clamp(12px, 3vw, 16px);
+    background: var(--bo-paper);
+    border-radius: 3px;
+    box-shadow: 0 30px 60px -20px rgba(0, 0, 0, 0.95);
+}
+
+/* The same window as on the board, but tall rather than square:
+   in here there is room to show the whole photograph, so it is
+   `contain` and not `cover`. Nothing is cropped in the view
+   that exists for looking properly. */
+.bo-sheet-shot {
+    display: block;
+    background: #0b0b0d;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+
+.bo-sheet-shot img {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-height: 62vh;
+    object-fit: contain;
+    margin: 0 auto;
+}
+
+.bo-sheet-band {
+    padding: 14px 2px 0;
+}
+
+.bo-sheet-cap {
+    font-family: var(--bo-hand);
+    font-size: clamp(1.3rem, 4.6vw, 1.6rem);
+    font-weight: 600;
+    line-height: 1.2;
+    color: var(--bo-ink);
+    margin: 0;
+}
+
+.bo-sheet-when {
+    font-family: var(--us-mono);
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--bo-ink-2);           /* 6.32:1 on paper */
+    margin: 8px 0 0;
+}
+
+.bo-sheet-note {
+    font-family: var(--us-display);
+    font-size: 1rem;
+    line-height: 1.62;
+    color: var(--bo-ink);
+    margin: 14px 0 0;
+    /* A comfortable measure. Below the 45-75ch band the eye
+       loses its place at the line return. */
+    max-width: 42ch;
+}
+
+.bo-sheet-rule {
+    border: 0;
+    border-top: 1px solid rgba(28, 29, 33, 0.14);
+    margin: 18px 0;
+}
+
+/* ---- her half ------------------------------------------- */
+
+.bo-hers {
+    margin: 0 0 16px;
+    padding: 12px 14px;
+    background: rgba(28, 29, 33, 0.045);
+    border-left: 3px solid var(--blue-brand);
+    border-radius: 2px;
+}
+
+.bo-hers-label {
+    font-family: var(--us-mono);
+    font-size: 0.62rem;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--bo-ink-2);
+    margin: 0 0 5px;
+}
+
+.bo-hers-text {
+    font-family: var(--us-display);
+    font-size: 0.98rem;
+    line-height: 1.55;
+    color: var(--bo-ink);
+    margin: 0;
+    /* Her words, so it must survive a wall of one long token
+       without pushing the sheet sideways. */
+    overflow-wrap: anywhere;
+}
+
+/* ---- the controls --------------------------------------- */
+
+.bo-acts {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 12px;
+    margin: 0;
+}
+
+.bo-btn {
+    appearance: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    /* 44px FLOOR. Everything tappable in the wing clears it. */
+    min-height: 44px;
+    /* 16px FLOOR on anything a phone might focus. Below 16 iOS
+       Safari zooms the viewport and never zooms back out. */
+    font-family: var(--us-mono);
+    font-size: 16px;
+    letter-spacing: 0.04em;
+    padding: 0 16px;
+    box-sizing: border-box;
+    color: var(--bo-ink);
+    background: transparent;
+    border: 1px solid rgba(28, 29, 33, 0.42);
+    border-radius: 2px;
+    cursor: pointer;
+    transition: background 160ms ease, border-color 160ms ease;
+}
+
+.bo-btn:hover { background: rgba(28, 29, 33, 0.06); }
+
+.bo-btn:focus-visible {
+    /* --blue-brand on paper is 6.73:1; --blue-light is 3.36:1
+       there, which passes but only just, so the darker of the
+       two carries every focus ring that lands on paper. */
+    outline: 2px solid var(--blue-brand);
+    outline-offset: 2px;
+}
+
+/* Kept: filled rather than outlined, and the LABEL changes too
+   ("keep this" -> "kept"). State is never carried by fill
+   alone. */
+.bo-btn[aria-pressed="true"] {
+    background: rgba(30, 58, 224, 0.10);
+    border-color: var(--blue-brand);
+}
+
+.bo-keep { display: inline; margin: 0; }
+
+/* The close control. A link, because that is what it is. */
+.bo-shut {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    min-width: 44px;
+    padding: 0 14px;
+    box-sizing: border-box;
+    font-family: var(--us-mono);
+    font-size: 0.82rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--bo-ink-2);
+    text-decoration: underline;
+    text-underline-offset: 4px;
+    border-radius: 2px;
+}
+
+.bo-shut:hover { color: var(--bo-ink); }
+
+.bo-shut:focus-visible {
+    outline: 2px solid var(--blue-brand);
+    outline-offset: 2px;
+}
+
+/* ---- write back ----------------------------------------- */
+
+.bo-reply {
+    margin: 14px 0 0;
+}
+
+.bo-reply > summary {
+    /* NOT `display: flex`, and that is a bug fix rather than a
+       preference: flex on a <summary> suppresses its ::marker in
+       Chromium and WebKit, so the disclosure triangle vanishes
+       and "write back" reads as a heading rather than as
+       something you can press. Padding and a border-box
+       min-height buy the 44px target without touching display. */
+    display: list-item;
+    list-style-position: inside;
+    box-sizing: border-box;
+    min-height: 44px;
+    padding: 12px 2px;
+    font-family: var(--us-mono);
+    font-size: 0.82rem;
+    letter-spacing: 0.06em;
+    color: var(--bo-ink-2);
+    cursor: pointer;
+    list-style-position: inside;
+}
+
+.bo-reply > summary:hover { color: var(--bo-ink); }
+
+.bo-reply > summary:focus-visible {
+    outline: 2px solid var(--blue-brand);
+    outline-offset: 2px;
+    border-radius: 2px;
+}
+
+.bo-field {
+    display: block;
+    /* box-sizing IS THE BUG FIX. A `width: 100%` control with
+       default content-box sizing is 100% PLUS its padding and
+       borders, which is how a page ships a horizontal
+       scrollbar at 320px. Stated on every full-width control in
+       this file for that reason. */
+    box-sizing: border-box;
+    width: 100%;
+    margin: 8px 0 12px;
+    padding: 10px 12px;
+    font-family: var(--us-display);
+    /* 16px, NOT 0.95rem. See .bo-btn. */
+    font-size: 16px;
+    line-height: 1.5;
+    color: var(--bo-ink);
+    background: #fdfcf9;
+    border: 1px solid rgba(28, 29, 33, 0.42);
+    border-radius: 2px;
+    resize: vertical;
+}
+
+.bo-field:focus-visible {
+    outline: 2px solid var(--blue-brand);
+    outline-offset: 1px;
+}
+
+.bo-hint {
+    font-family: var(--us-mono);
+    font-size: 0.68rem;
+    line-height: 1.5;
+    color: var(--bo-ink-2);
+    margin: 0 0 10px;
+}
+
+/* A failed save, restated INSIDE the view she was in. The 303
+   carries only a fragment, which the server cannot read, so
+   there is no way to know which view to put this in — it is
+   rendered in all of them and only the open one is visible.
+   role="alert" is on the page-level copy ONLY, so this is not
+   announced fourteen times. */
+.bo-oops {
+    font-family: var(--us-mono);
+    font-size: 0.76rem;
+    line-height: 1.5;
+    color: #7a1d1d;                   /* 9.12:1 on paper */
+    background: rgba(122, 29, 29, 0.07);
+    border-left: 3px solid #7a1d1d;
+    padding: 9px 11px;
+    margin: 0 0 14px;
+    border-radius: 2px;
+}
+
+/* ============================================================
+   THE FOOT OF THE BOARD
+   ============================================================ */
+
+.bo-tail {
+    font-family: var(--us-mono);
+    font-size: 0.72rem;
+    line-height: 1.6;
+    letter-spacing: 0.04em;
+    color: var(--concrete-4);         /* 7.64:1 on --void */
+    margin: clamp(18px, 3.5vw, 26px) 0 0;
+    max-width: 56ch;
+}
+
+/* ============================================================
+   MOTION
+
+   Two animations on this page, and both are inside a
+   no-preference query rather than being undone inside a reduce
+   one. That direction matters: an entrance that starts at
+   opacity 0 and is cancelled by `animation: none` leaves the
+   photographs invisible. Declared only where they are wanted,
+   the default state is "already there".
+   ============================================================ */
+
+@media (prefers-reduced-motion: no-preference) {
+    /* THE ARRIVAL. One shot, 300ms, 26ms apart, ~6px of travel.
+       A staggered grid entrance is the sanctioned use of a
+       stagger and it is over in under 650ms for all thirteen.
+
+       `backwards`, NOT `both`, and that is load-bearing. A
+       filled-forwards animation holds its final transform at
+       animation origin, which outranks every normal declaration
+       in the cascade — so `both` here would silently disable
+       the :hover and :focus-visible lift below for the rest of
+       the page's life. `backwards` covers the delay (which is
+       the only part that needs covering, since the card starts
+       invisible) and then hands the property back. */
+    .bo-card {
+        animation: bo-arrive 300ms cubic-bezier(0.22, 0.61, 0.36, 1) backwards;
+        animation-delay: calc(var(--i, 0) * 26ms);
+    }
+
+    @keyframes bo-arrive {
+        from { opacity: 0; transform: rotate(var(--tilt, 0deg)) translateY(6px); }
+        to   { opacity: 1; transform: rotate(var(--tilt, 0deg)) translateY(0); }
+    }
+
+    /* THE FLICKER, and it is deliberately almost nothing.
+
+       The UX database is explicit that infinite decorative
+       animation is a distraction, and it is right about the
+       usual case. The judgement made here is that a fairy
+       light which is perfectly steady reads as a graphic of a
+       fairy light, and that the fix is amplitude rather than
+       absence: 4 of the 13 bulbs breathe between 0.84 and 1.0
+       opacity over 7-11 seconds, at periods that share no
+       common multiple so the string never pulses in unison.
+       That is under the threshold at which the eye tracks it —
+       you notice it if you stare at the lights and never if
+       you are looking at a photograph.
+
+       If this ever reads as a pulse rather than as a filament,
+       delete this block. The bulbs are complete without it. */
+    .bo-bulb[data-flicker] {
+        animation: bo-breathe var(--flicker-dur, 9s) ease-in-out infinite;
+        animation-delay: var(--flicker-delay, 0s);
+    }
+
+    @keyframes bo-breathe {
+        0%, 100% { opacity: 1; }
+        50%      { opacity: 0.84; }
+    }
+}
