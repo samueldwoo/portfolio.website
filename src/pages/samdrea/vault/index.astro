@@ -477,21 +477,37 @@ const rooms = [
     href: '/samdrea/vault/board',
     ready: true,
   },
+  /* LETTERS IS BENCHED, exactly the way the studio is — off her hub, all of its
+     code intact.
+
+     The room works. What is in it does not: four PLACEHOLDER letters, and the first
+     one she would open says so in its own body. A room whose entire content is a
+     note explaining that the content is not written yet is worse than a room that
+     is not there. It comes back the moment US_LETTERS holds something real.
+
+     Nothing else changes:
+
+       src/lib/us/letters.ts                   untouched, ~1700 lines
+       src/pages/samdrea/vault/letters.astro   untouched, still routes
+       public/css/us-letters.css               untouched
+       /samdrea/vault/letters                  STILL REACHABLE by direct URL
+       /api/us/letter                          untouched; her replies still save
+
+     Removed rather than flagged `ready: false`, for the same reason as the studio:
+     the grid renders a not-ready room as a visible disabled card, and "coming soon"
+     on the front door of a present is worse than the room simply not being there.
+
+     TO BRING IT BACK, restore this one object and put the entry back in
+     NEXT_ALLOWED in samdrea/index.astro. Nothing else is required. */
   {
+    /* 03, NOT 04 — the numbers are POSITIONS in the wing, not permanent ids.
+       With letters benched, leaving this at 04 left her hub reading 01, 02, 04,
+       and a gap in a numbered list reads as something missing. Which is exactly
+       the impression benching the room was meant to avoid.
+       So they resequence when a room comes or goes. Restoring letters means
+       deciding where it sits and renumbering whatever follows it — cheap, and
+       the alternative is a permanent hole. */
     n: '03',
-    title: 'letters',
-    note: 'the longer things. one at a time, and some of them are sealed.',
-    href: '/samdrea/vault/letters',
-    ready: true,
-    /* No `fresh` signal yet. status.ts derives freshness from the song store and
-       the marks store; letters keep their read receipts in their OWN document
-       (data/letters.json / us:letter:*), which status.ts does not read. Wiring
-       it would mean a third store read on every hub render, so it is deliberately
-       left off rather than faked — an always-absent marker is honest, an
-       always-present one would train her to ignore all three. */
-  },
-  {
-    n: '04',
     title: 'today, seen',
     note: 'one picture each. whatever we were looking at.',
     href: '/samdrea/vault/day',

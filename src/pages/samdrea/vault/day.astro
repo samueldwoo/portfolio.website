@@ -179,7 +179,9 @@ const whoWord = (w: Who): string => (w === viewer ? 'you' : w === 'her' ? (her |
 <body class="studio">
 <div class="studio-wrap">
 
-    <p class="studio-kicker">04 &middot; today, seen</p>
+    {/* 03 while letters is benched — the numbers are positions, not ids. See the
+        comment on the rooms array in vault/index.astro. */}
+    <p class="studio-kicker">03 &middot; today, seen</p>
 
     <h1 class="us-mark">
         <span class="us-mark-bracket" aria-hidden="true">[</span>day<span

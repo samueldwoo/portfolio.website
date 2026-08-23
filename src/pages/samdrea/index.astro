@@ -71,7 +71,10 @@ const NEXT_ALLOWED = new Set([
      Any stale bookmark or installed-app tile did it. Removing the entry makes
      `next` fall through to the hub, which is where she should land anyway.
      The route itself still works by direct URL, so it can still be finished. */
-  '/samdrea/vault/letters',
+  /* '/samdrea/vault/letters' is absent while the letters room is BENCHED — same
+     reason the studio's entry is. Leaving it here would let a stale bookmark or
+     app tile carry her THROUGH the gate and straight into a room holding four
+     placeholder letters. Restore it when US_LETTERS is real. */
   '/samdrea/vault/day',
   '/samdrea/dj',
 ]);
