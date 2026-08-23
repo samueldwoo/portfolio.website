@@ -185,133 +185,176 @@ export interface Memory {
  * WebP because these are photographs going over a phone connection; a 1600px
  * WebP is ~120KB where the JPEG is ~400KB.
  */
+/**
+ * The photographs, OLDEST FIRST — the order they appear down the board.
+ *
+ * ---------------------------------------------------------------------------
+ * THE ORDER IS AN INFERENCE, NOT A FACT, AND IT IS ONE LINE TO FIX
+ *
+ * These files carry NO date. Checked every source before ordering them: EXIF
+ * DateTimeOriginal and DateTime are both absent (stripped by whatever exported
+ * them), and every file's mtime and birthtime is identical — the minute they were
+ * copied into photos/in. There is no capture date anywhere in the bytes.
+ *
+ * So the sequence below is read off the FILENAME COUNTERS, which is real
+ * information but only within one device:
+ *
+ *   img-0510 .. img-9458   an iPhone camera roll counter. Monotonic on one phone,
+ *                          so this run is genuinely oldest-to-newest.
+ *   dsc04939 .. dsc05232   a separate camera's counter. Also monotonic, also
+ *                          genuinely ordered — but it CANNOT be interleaved with
+ *                          the iPhone run, because the two counters share no
+ *                          reference point.
+ *   the three UUID names   carry no order information at all. Placed last because
+ *                          somewhere had to be chosen, not because they are newest.
+ *
+ * So: correct WITHIN each group, guessed BETWEEN them. Reordering is editing this
+ * one list — the `id` values are positional (`p01`..`p16`) and nothing else
+ * references them, so moving a line moves the photo.
+ *
+ * ---------------------------------------------------------------------------
+ * NO CAPTIONS, NO NOTES, ON PURPOSE
+ *
+ * `caption` and `note` are deliberately empty strings rather than removed fields:
+ * the board, the alt text and the fallback grid all read them, and empty is a state
+ * they already handle (it is what an unwritten note has always looked like). Making
+ * them optional would mean touching every reader for a change that is meant to be
+ * temporary.
+ *
+ * They were 27 bracketed developer notes, three of which described her in the third
+ * person. Empty is better than fake. Fill them in and they appear.
+ *
+ * `chapter` is 'core' for everything because the board no longer groups by chapter.
+ * The field stays because the type requires it and the studio still reads it.
+ */
 export const MEMORIES: readonly Memory[] = [
-  /* ---- 01 - THE EARLY ONES - how we started ------------------------------
-     One panel, dead centre, low light, before the room widens into chapters.
-     This is the first thing she sees, so it is the one caption worth writing
-     first — and the one placeholder it would be most embarrassing to ship. */
   {
-    id: 'm01',
-    key: 'photos/m01.webp',
-    caption: '[the earliest one of us you still have]',
-    note: '[replace this note. two sentences, in your voice, about why this is the one that opens the room.]',
+    id: 'p01',
+    key: 'photos/img-0510.webp',
+    caption: '',
+    note: '',
     chapter: 'core',
-    when: '[when it started]',
-    aspect: 0.8,
+    aspect: 0.75,
   },
   {
-    id: 'm02',
-    key: 'photos/m02.webp',
-    caption: '[the one she would delete and you never will]',
-    note: '[replace this note. tell her why you kept it.]',
+    id: 'p02',
+    key: 'photos/img-1355.webp',
+    caption: '',
+    note: '',
     chapter: 'core',
-    when: '[roughly when]',
-    aspect: 1.5,
+    aspect: 0.75,
   },
   {
-    id: 'm03',
-    key: 'photos/m03.webp',
-    /* `when` deliberately omitted on this one and several below. It is optional
-       free text, and leaving some blank is how the room demonstrates that a
-       memory is allowed to carry no date at all — which is the whole reason the
-       monthly calendar was torn out. */
-    caption: '[one where neither of you is looking at the camera]',
-    note: '[replace this note.]',
+    id: 'p03',
+    key: 'photos/img-2404.webp',
+    caption: '',
+    note: '',
     chapter: 'core',
-    aspect: 0.8,
-  },
-  /* ---- 02 - THE PLACES - everywhere we went ------------------------------ */
-  {
-    id: 'm04',
-    key: 'photos/m04.webp',
-    caption: '[somewhere the two of you went together]',
-    note: '[replace this note.]',
-    chapter: 'lower',
-    when: '[a trip]',
-    aspect: 1.0,
+    aspect: 0.5625,
   },
   {
-    id: 'm05',
-    key: 'photos/m05.webp',
-    caption: '[an ordinary evening that turned out to matter]',
-    note: '[replace this note.]',
-    chapter: 'lower',
+    id: 'p04',
+    key: 'photos/img-3533.webp',
+    caption: '',
+    note: '',
+    chapter: 'core',
+    aspect: 0.7503,
+  },
+  {
+    id: 'p05',
+    key: 'photos/img-6312.webp',
+    caption: '',
+    note: '',
+    chapter: 'core',
+    aspect: 0.6637,
+  },
+  {
+    id: 'p06',
+    key: 'photos/img-6761.webp',
+    caption: '',
+    note: '',
+    chapter: 'core',
+    aspect: 1.3333,
+  },
+  {
+    id: 'p07',
+    key: 'photos/img-6934.webp',
+    caption: '',
+    note: '',
+    chapter: 'core',
     aspect: 1.5,
   },
   {
-    id: 'm06',
-    key: 'photos/m06.webp',
-    caption: '[her, mid-laugh, at something off-frame]',
-    note: '[replace this note. you are the only person who knows what was off-frame.]',
-    chapter: 'lower',
-    aspect: 0.8,
-  },
-  /* ---- 03 - THE ACCIDENTS - the sideways ones ---------------------------- */
-  {
-    id: 'm07',
-    key: 'photos/m07.webp',
-    caption: '[the one where something went wrong and it was fine]',
-    note: '[replace this note.]',
-    chapter: 'obliques',
-    aspect: 0.8,
+    id: 'p08',
+    key: 'photos/img-7179.webp',
+    caption: '',
+    note: '',
+    chapter: 'core',
+    aspect: 0.75,
   },
   {
-    id: 'm08',
-    key: 'photos/m08.webp',
-    caption: '[not a photograph of either of you]',
-    note: '[replace this note. a room of faces needs one thing in it that is not a face.]',
-    chapter: 'obliques',
-    aspect: 1.5,
+    id: 'p09',
+    key: 'photos/img-8034.webp',
+    caption: '',
+    note: '',
+    chapter: 'core',
+    aspect: 1.3337,
   },
   {
-    id: 'm09',
-    key: 'photos/m09.webp',
-    caption: '[the least remarkable day you would both go back to]',
-    note: '[replace this note.]',
-    chapter: 'obliques',
-    when: '[a weekday]',
-    aspect: 1.0,
-  },
-  /* ---- 04 - THE MILES - the long-distance one ---------------------------- */
-  {
-    id: 'm10',
-    key: 'photos/m10.webp',
-    caption: '[a goodbye, or the hour before one]',
-    note: '[replace this note.]',
-    chapter: 'upper',
-    aspect: 0.8,
+    id: 'p10',
+    key: 'photos/img-9458.webp',
+    caption: '',
+    note: '',
+    chapter: 'core',
+    aspect: 1.3333,
   },
   {
-    id: 'm11',
-    key: 'photos/m11.webp',
-    caption: '[a screen, a distance, a bad connection]',
-    note: '[replace this note. the year of long distance gets at least one honest picture.]',
-    chapter: 'upper',
-    when: '[this year, somewhere]',
-    aspect: 1.5,
+    id: 'p11',
+    key: 'photos/dsc04939.webp',
+    caption: '',
+    note: '',
+    chapter: 'core',
+    aspect: 1.4963,
   },
   {
-    id: 'm12',
-    key: 'photos/m12.webp',
-    caption: '[the most recent one of the two of you]',
-    note: '[replace this note. this is the last one before the board gives her one more.]',
-    chapter: 'upper',
-    when: '[recently]',
-    aspect: 0.8,
+    id: 'p12',
+    key: 'photos/dsc05097.webp',
+    caption: '',
+    note: '',
+    chapter: 'core',
+    aspect: 1.4963,
   },
-  /* ---- "still one more." -------------------------------------------------
-     Past the apparent end of the rail, and it comes to HER rather than asking
-     for travel the machine has already said it will not give. Whatever goes here
-     is the last thing she sees, so it should be the one you would have put
-     first. */
   {
-    id: 'still-one-more',
-    key: 'photos/still-one-more.webp',
-    caption: '[still one more - put the best one here]',
-    note: '[replace this note. this is the last thing she gets to, so make it worth getting to.]',
-    chapter: 'upper',
-    aspect: 1.0,
-    hidden: true,
+    id: 'p13',
+    key: 'photos/dsc05232.webp',
+    caption: '',
+    note: '',
+    chapter: 'core',
+    aspect: 1.4963,
+  },
+  {
+    id: 'p14',
+    key: 'photos/0f9b4f11-e263-4892-a3b7-b876b5c03887.webp',
+    caption: '',
+    note: '',
+    chapter: 'core',
+    aspect: 0.5625,
+  },
+  {
+    id: 'p15',
+    key: 'photos/e5804ef8-1311-4d2c-99ce-399e7daa0d44.webp',
+    caption: '',
+    note: '',
+    chapter: 'core',
+    aspect: 0.5625,
+  },
+  {
+    id: 'p16',
+    key: 'photos/fb456948-a486-423f-bcbb-a55e5fe24a95.webp',
+    caption: '',
+    note: '',
+    chapter: 'core',
+    aspect: 0.5625,
   },
 ] as const;
 

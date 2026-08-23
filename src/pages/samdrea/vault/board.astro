@@ -480,7 +480,14 @@ const showPlaceholderNotice = import.meta.env.DEV && !hasR2();
                         </span>
 
                         <span class="bo-band">
-                            <span class="bo-cap">{p.m.caption}</span>
+                            {/* THE CAPTION BAND IS EMPTY FOR NOW, and it is
+                                still rendered rather than removed: it is the white
+                                strip that makes a Polaroid a Polaroid, and dropping
+                                the element would change the shape of every card.
+                                `:empty` in the stylesheet keeps it from claiming
+                                text height while there is nothing in it. Fill in a
+                                caption in photos.ts and it appears here. */}
+                            {p.m.caption && <span class="bo-cap">{p.m.caption}</span>}
                             {/* State as a WORD. The blue dot in the stylesheet
                                 is decoration on top of it and is drawn with
                                 ::before, so it is not in the accessible name. */}
@@ -553,7 +560,12 @@ const showPlaceholderNotice = import.meta.env.DEV && !hasR2();
                             <p class="bo-oops"><b>Not saved.</b> {markError}</p>
                         )}
 
-                        <p class="bo-sheet-cap" id={`cap-${p.m.id}`}>{p.m.caption}</p>
+                        {/* Absent while captions are empty. The id stays on the
+                            element only when it exists, and the view's
+                            aria-labelledby falls back to the photo's alt. */}
+                        {p.m.caption && (
+                            <p class="bo-sheet-cap" id={`cap-${p.m.id}`}>{p.m.caption}</p>
+                        )}
 
                         {/* `when` is optional free text, never a derived date, so
                             the line is omitted rather than rendered empty. The
@@ -564,7 +576,9 @@ const showPlaceholderNotice = import.meta.env.DEV && !hasR2();
                             <p class="bo-sheet-when">{p.m.hidden ? 'still one more' : p.m.when}</p>
                         )}
 
-                        <p class="bo-sheet-note">{p.m.note}</p>
+                        {/* Same: an empty note renders nothing at all rather than
+                            an empty paragraph claiming a grid row. */}
+                        {p.m.note && <p class="bo-sheet-note">{p.m.note}</p>}
 
                         <hr class="bo-sheet-rule">
 
@@ -615,7 +629,10 @@ const showPlaceholderNotice = import.meta.env.DEV && !hasR2();
                                     class="bo-btn"
                                     type="submit"
                                     aria-pressed={p.kept ? 'true' : 'false'}
-                                    aria-label={`${p.kept ? 'kept' : 'keep this'}: ${p.m.caption}`}
+                                    {/* With captions empty the only stable
+                                        per-photo name is its position, and 16
+                                        buttons must not all announce "keep this". */}
+                                    aria-label={`${p.kept ? 'kept' : 'keep this'}: ${p.m.caption || `photograph ${p.i + 1}`}`}
                                 >{p.kept ? 'kept' : 'keep this'}</button>
                                 {/* aria-label CONTAINS the visible label, so
                                     2.5.3 Label in Name holds — and thirteen keep
@@ -636,7 +653,7 @@ const showPlaceholderNotice = import.meta.env.DEV && !hasR2();
                                     has to carry the memory id or every label
                                     points at the first one. */}
                                 <label class="sr-only" for={`note-${p.m.id}`}>
-                                    what you want to say about: {p.m.caption}
+                                    what you want to say about: {p.m.caption || `photograph ${p.i + 1}`}
                                 </label>
                                 <textarea
                                     class="bo-field"
