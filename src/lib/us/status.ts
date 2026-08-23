@@ -11,7 +11,7 @@
  *      copy that describes them.
  *
  * They share a file because they share a job: both exist so that landing on
- * /stronger/vault tells her something she did not already know. Nothing else in
+ * /samdrea/vault tells her something she did not already know. Nothing else in
  * the wing does that — every other page waits to be opened before it says
  * anything, which meant the only way to find out I had posted was to go and look.
  *
@@ -159,7 +159,7 @@ function daysUntil(from: string, to: string): number {
  *
  * Two things fix it, and both are needed:
  *
- *   1. THIS RENDERS ON THE SERVER. /stronger/vault is `prerender = false`, so the
+ *   1. THIS RENDERS ON THE SERVER. /samdrea/vault is `prerender = false`, so the
  *      number is computed once per request in one process and no device clock is
  *      consulted. Neither of their laptops can be wrong about it, and neither can
  *      be "off by a timezone" — there is nothing client-side to be off.

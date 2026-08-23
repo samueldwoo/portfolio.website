@@ -1,15 +1,15 @@
 /* ============================================================
    us-studio.css — Act II, the three.js room.
 
-   Loaded ONLY by /stronger/vault/room, on top of /css/us.css,
+   Loaded ONLY by /samdrea/vault/room, on top of /css/us.css,
    which is where every token used below is defined (--void,
    --machine, --concrete-*, --chalk, --blue-*, --us-display,
    --us-mono). This file adds no tokens and overrides none: the
    wing has one palette and it lives in us.css.
 
    Paths are ABSOLUTE (/css/us-studio.css) because this page is
-   at /stronger/vault/room — a relative href would resolve to
-   /stronger/vault/css/... and 404. Same reason as us.css.
+   at /samdrea/vault/room — a relative href would resolve to
+   /samdrea/vault/css/... and 404. Same reason as us.css.
 
    ----------------------------------------------------------
    THE ONE RULE, RESTATED FOR CSS
@@ -1006,13 +1006,21 @@
 
 /* A NOTE ON box-sizing, because it decided two things above.
 
-   This repo has NO global `box-sizing: border-box`. So `min-height: 44px` on
-   the buttons in this file is the CONTENT height, and with 10px of padding
-   and a 1px border they come out 66px tall. That is deliberately LEFT ALONE:
-   `.room-reveal` has always been 66px, it passed a design review at that
-   size, and making the new keep and reply buttons 44px would leave three
-   buttons of two different heights sitting in one row. Over the 44px floor
-   is not a problem; inconsistent is.
+   CORRECTED, AND THE ORIGINAL CLAIM WAS WRONG. This block used to say that
+   because the repo has no global `box-sizing: border-box`, `min-height: 44px`
+   on the buttons here is a CONTENT height and they therefore "come out 66px
+   tall". Measured in a headless browser: they are exactly 44px.
+
+   The reason is that the UA default is not uniform. `<button>` is
+   border-box in every browser; `<input>` and `<textarea>` are content-box.
+   So the buttons in this file were always at the floor, and it is the text
+   inputs that needed watching — which is precisely where a real overflow bug
+   turned up (see the box-sizing note in us-frames.css, where a content-box
+   input 14px of padding wider than its column made the day page scroll
+   sideways on every load).
+
+   `.room-reveal` is intentionally taller than the floor for design reasons and
+   that part still stands: over 44px is not a problem, inconsistent is.
 
    Where it DID matter is the kept states: widening a border on toggle grows
    the box, so both of those use an inset box-shadow for their extra weight

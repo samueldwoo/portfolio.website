@@ -34,7 +34,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
  *
  * THE BUG, RECORDED BECAUSE THE FIX LOOKS ARBITRARY WITHOUT IT.
  * identify() resolved `admin` -> him and `session` -> her, admin first. Sam holds
- * BOTH: he passes the gate like she does, and then logs in at /stronger/dj. But
+ * BOTH: he passes the gate like she does, and then logs in at /samdrea/dj. But
  * TTL.admin is 12 hours and TTL.session is 30 days. So twelve hours after
  * installing the app his admin token expired, identify() fell through to the
  * session token, and the site decided he was Andrea — with nothing on screen

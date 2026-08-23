@@ -1051,7 +1051,7 @@ export interface DayPair {
 /**
  * Assemble one day from parts already in hand.
  *
- * Exported because /stronger/dj fetches a single day BY KEY rather than from the
+ * Exported because /samdrea/dj fetches a single day BY KEY rather than from the
  * windowed list (so that backfilling a morning older than the window still shows a
  * confirmation), and it must produce a pair identical to the ones buildPairs()
  * emits. Two constructors for one shape is how the preview ends up disagreeing

@@ -131,7 +131,7 @@ export const prerender = false;
 const RATE_LIMIT = 40;
 const RATE_WINDOW_SEC = 600;
 
-const HUB_PAGE = '/stronger/vault';
+const HUB_PAGE = '/samdrea/vault';
 
 /** Which block on the hub a 303 should land on, per action. */
 const FRAGMENTS: Record<Action, string> = {

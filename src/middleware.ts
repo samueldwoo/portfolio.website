@@ -31,8 +31,8 @@ import { defineMiddleware } from 'astro:middleware';
 import { readCookie, verify } from './lib/us/session';
 import { SESSION_SECRET } from './lib/us/config';
 
-/** The wing's base path. Renaming this also means renaming src/pages/stronger/. */
-const WING = '/stronger';
+/** The wing's base path. Renaming this also means renaming src/pages/samdrea/. */
+const WING = '/samdrea';
 
 /** Pages that require a valid `session` token (she is through the gate). */
 const NEEDS_SESSION = [`${WING}/vault`];
@@ -40,7 +40,7 @@ const NEEDS_SESSION = [`${WING}/vault`];
 /**
  * Pages that require a valid `admin` token (me, posting).
  *
- * `/stronger/dj` is deliberately NOT here. It is the admin LOGIN page, and a
+ * `/samdrea/dj` is deliberately NOT here. It is the admin LOGIN page, and a
  * login page guarded by the credential it exists to collect is a locked door
  * with the key inside. So dj.astro self-guards instead: no admin token renders
  * a bare passcode form and nothing else, a valid one renders the posting UI.
@@ -69,12 +69,12 @@ const NEEDS_ADMIN: string[] = [];
 const PUBLIC_API = ['/api/us/gate', '/api/us/out', '/api/us/admin'];
 
 function startsWithSegment(path: string, base: string): boolean {
-  // Segment-aware so `/stronger/vaultsomething` does not match `/stronger/vault`.
+  // Segment-aware so `/samdrea/vaultsomething` does not match `/samdrea/vault`.
   return path === base || path.startsWith(`${base}/`);
 }
 
 export const onRequest = defineMiddleware(async (ctx, next) => {
-  // Normalize a trailing slash so `/stronger/vault/` and `/stronger/vault` are
+  // Normalize a trailing slash so `/samdrea/vault/` and `/samdrea/vault` are
   // one path for every comparison below.
   const path = ctx.url.pathname.length > 1
     ? ctx.url.pathname.replace(/\/+$/, '')

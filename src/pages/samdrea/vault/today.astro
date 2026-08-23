@@ -1,6 +1,6 @@
 ---
 /**
- * /stronger/vault/today — line 01. One day, two songs.
+ * /samdrea/vault/today — line 01. One day, two songs.
  *
  * ---------------------------------------------------------------------------
  * WHAT THIS PAGE IS NOW, AND WHAT IT USED TO BE
@@ -26,7 +26,7 @@
  * THE SESSION IS RE-VERIFIED HERE, AND THAT IS NOT THEATRE
  *
  * src/middleware.ts has already checked a signed, unexpired token for anything
- * under /stronger/vault, or this render never happened. The check below is what
+ * under /samdrea/vault, or this render never happened. The check below is what
  * makes a routing mistake up there degrade to "she gets sent to the gate" instead
  * of "the internet gets her songs". If NEEDS_SESSION ever stops matching this
  * path, this page still refuses to render. Copied verbatim from the vault hub so
@@ -35,7 +35,7 @@
  * `session` specifically, NOT `session ?? admin`. My admin token cannot open this
  * page, which is a deliberate and slightly inconvenient choice: the vault is hers,
  * that is one rule, and one rule is worth more than the convenience of previewing
- * her page without answering the questions. /stronger/dj renders its own preview
+ * her page without answering the questions. /samdrea/dj renders its own preview
  * of the same pair for exactly this reason.
  *
  * ---------------------------------------------------------------------------
@@ -92,7 +92,7 @@ export const prerender = false;
 const secret = SESSION_SECRET();
 const session = secret ? verify(secret, 'session', readCookie(Astro.cookies, 'session', Astro.url)) : null;
 
-if (!session) return Astro.redirect('/stronger', 302);
+if (!session) return Astro.redirect('/samdrea', 302);
 
 /* PRESENCE, WRITE ONLY. This page shows no presence line — a note about
    somebody else arriving would pull her out of the thing she came here to
@@ -157,7 +157,7 @@ const currentReactions = new Set(todayPair.reactions);
 /**
  * The numbers, derived in kv.ts rather than here.
  *
- * Same reason the calendar lives there: /stronger/dj states the streak too, and
+ * Same reason the calendar lives there: /samdrea/dj states the streak too, and
  * two implementations of "how many days in a row" would eventually disagree by one
  * with no way to tell which page was lying.
  */
@@ -256,7 +256,7 @@ function reactionGlyphs(keys: readonly string[]): { glyphs: string; words: strin
 
    The words are second person because this page is written to her: `me` is mine,
    `you` is hers. kv.ts's Side type stays 'his'/'hers' precisely so that the fixed
-   identity and the page's voice are two different things, and /stronger/dj can say
+   identity and the page's voice are two different things, and /samdrea/dj can say
    "me" and "her" from the same records.
    ========================================================================= */
 
@@ -456,20 +456,20 @@ function minisFor(pair: DayPair): Mini[] {
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <!-- Absolute paths: this page is at /stronger/vault/today, so a relative
-         href would resolve to /stronger/vault/css/... and 404. us.css first —
+    <!-- Absolute paths: this page is at /samdrea/vault/today, so a relative
+         href would resolve to /samdrea/vault/css/... and 404. us.css first —
          it owns every token us-song.css uses. -->
     <!-- Installable-app metadata. `scope` is "/" and that is a CORRECTION, not
-         laziness. It was "/stronger/", which looks tighter and quietly broke the
+         laziness. It was "/samdrea/", which looks tighter and quietly broke the
          installed app in three places: an installed PWA opens any out-of-scope
-         URL in the BROWSER instead of the app, and "/stronger" (the gate, where
+         URL in the BROWSER instead of the app, and "/samdrea" (the gate, where
          every expired session lands), "/api/us/out" (sign out) and all eleven
-         "/api/us/*" form actions are every one of them outside "/stronger/".
+         "/api/us/*" form actions are every one of them outside "/samdrea/".
          So her session expiring would eject her to Safari to log back in, and
          with JavaScript off every form post would leave the app too. Nothing in
          the wing links to the public site, so a wide scope traps nothing.
 
-         `start_url: /stronger/vault` opens at the hub rather than the gate —
+         `start_url: /samdrea/vault` opens at the hub rather than the gate —
          she already holds a session cookie, so she skips the quiz on launch.
          `id` is pinned so the identity survives future manifest edits.
 
@@ -517,7 +517,7 @@ function minisFor(pair: DayPair): Mini[] {
     )}
 
     {/* Dev only. She should never be shown a sentence about serverless
-        instances; on my own page (/stronger/dj) the same warning is permanent,
+        instances; on my own page (/samdrea/dj) the same warning is permanent,
         because there it is actionable. */}
     {import.meta.env.DEV && storeTier() === 'memory' && (
         <p class="notice" data-kind="warn">
@@ -610,7 +610,7 @@ function minisFor(pair: DayPair): Mini[] {
                             <div class="song-body">
                                 {/* The day is on BOTH cards, and yes that repeats
                                     it. Deliberate: each card is self-contained,
-                                    the same template renders it on /stronger/dj
+                                    the same template renders it on /samdrea/dj
                                     where there is no [today] heading above it,
                                     and someone arriving at the second <article>
                                     by keyboard or screen reader should not have to
@@ -1008,7 +1008,7 @@ function minisFor(pair: DayPair): Mini[] {
 
     <div class="studio-foot">
         <span class="studio-tag">Stronger for it.</span>
-        <a href="/stronger/vault">&larr; back to the room</a>
+        <a href="/samdrea/vault">&larr; back to the room</a>
     </div>
 </div>
 
@@ -1207,7 +1207,7 @@ function minisFor(pair: DayPair): Mini[] {
                card that disagrees with the store is worse than a reload. The short
                pause is so the line above is readable first. */
             setTimeout(function () {
-                window.location.assign('/stronger/vault/today?sent=' + encodeURIComponent(data.date));
+                window.location.assign('/samdrea/vault/today?sent=' + encodeURIComponent(data.date));
             }, 700);
         });
     })();

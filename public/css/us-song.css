@@ -1,7 +1,7 @@
 /* ============================================================
    us-song.css — Act II, line 01: song of the day.
 
-   Loaded ONLY by /stronger/vault/today and /stronger/dj, and
+   Loaded ONLY by /samdrea/vault/today and /samdrea/dj, and
    always AFTER /css/us.css, which owns every token used here
    (--void, --machine, --concrete-*, --chalk, --blue-*,
    --us-display, --us-mono). This file defines no tokens of its
@@ -9,9 +9,9 @@
    private wing ends up with two slightly different blues.
 
    Paths are ABSOLUTE (/css/us-song.css) wherever it is linked,
-   because these pages live at /stronger/... rather than at the
+   because these pages live at /samdrea/... rather than at the
    root, so a relative href would resolve to
-   /stronger/vault/css/us-song.css and 404. That has already
+   /samdrea/vault/css/us-song.css and 404. That has already
    bitten this repo once; see the note at the top of us.css.
 
    ------------------------------------------------------------
@@ -89,7 +89,7 @@
    depends on position.
 
    WHY 940 AND NOT 861. At 861 the columns are at their narrowest
-   exactly when they first appear: /stronger/dj's wrap is 860px, so
+   exactly when they first appear: /samdrea/dj's wrap is 860px, so
    two columns there are ~310px, and after the card padding and the
    art the text column lands around 176px — narrow enough that a
    32px title wrapped every five characters. 940 is the width at
@@ -1005,7 +1005,7 @@ a.mini:focus-visible {
 /* ============================================================
    WHAT SHE SAID — the read-only view of her reactions
 
-   Rendered on /stronger/dj, INSIDE his card, on the song the
+   Rendered on /samdrea/dj, INSIDE his card, on the song the
    reactions were given to. It used to be a separate "what came
    back" block hanging under both cards, which made it ambiguous
    which song it referred to the moment there were two songs on
@@ -1102,8 +1102,8 @@ a.mini:focus-visible {
 /* ============================================================
    FORMS — BOTH SIDES
 
-   Written for /stronger/dj first and now shared by her reply
-   form on /stronger/vault/today. The `.dj-` prefix is kept
+   Written for /samdrea/dj first and now shared by her reply
+   form on /samdrea/vault/today. The `.dj-` prefix is kept
    deliberately: renaming these to something neutral would touch
    every field on both pages for the sake of a nicer word, and
    the comment you are reading is cheaper than that diff. Treat
@@ -1118,7 +1118,7 @@ a.mini:focus-visible {
    placeholders.
    ============================================================ */
 
-/* Widened from 640px when /stronger/dj started rendering the day as a
+/* Widened from 640px when /samdrea/dj started rendering the day as a
    PAIR: at 640 the two slots were ~300px each and the cards were
    cramped for no reason. The form keeps its own narrow measure below,
    so nothing about the one-handed typing case changed. */
@@ -1133,7 +1133,7 @@ a.mini:focus-visible {
     margin: 0;
     /* A text input eight hundred pixels wide is a text input nobody can
        see the start of. Applies to both forms in the wing — mine on
-       /stronger/dj and hers inside her slot — because they are the same
+       /samdrea/dj and hers inside her slot — because they are the same
        form primitives filled in by two people with the same thumbs. */
     max-width: 560px;
 }

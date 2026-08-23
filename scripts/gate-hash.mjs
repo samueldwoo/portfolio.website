@@ -120,7 +120,7 @@ ${c.dim('Plaintext answers stay in this terminal. Only keyed digests leave it.')
   }
 
   // ---- my admin passcode (Phase 2: posting a song) ----------------------
-  console.log(c.blue('Admin') + c.bold(' passcode for /stronger/dj (yours, for posting songs).'));
+  console.log(c.blue('Admin') + c.bold(' passcode for /samdrea/dj (yours, for posting songs).'));
   console.log(c.dim('     Compared exactly as typed — case and punctuation count. Blank to skip.'));
   const passcode = (await rl.question('     > ')).trim();
   // Digested RAW, not normalized — matching checkAdminPasscode() in config.ts,
@@ -180,7 +180,7 @@ ${c.dim('-'.repeat(72))}
     { mode: 0o600 },
   );
   console.log(c.green(`Wrote ${ENV_PATH} (mode 600, gitignored).`));
-  console.log(c.dim('Local: npm run dev  →  http://localhost:4321/stronger\n'));
+  console.log(c.dim('Local: npm run dev  →  http://localhost:4321/samdrea\n'));
 }
 
 main().catch((err) => {

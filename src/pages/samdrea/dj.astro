@@ -1,6 +1,6 @@
 ---
 /**
- * /stronger/dj — my side. Paste a link, write a note, post it.
+ * /samdrea/dj — my side. Paste a link, write a note, post it.
  *
  * ---------------------------------------------------------------------------
  * THIS PAGE GUARDS ITSELF, AND THAT IS THE WHOLE DESIGN
@@ -274,20 +274,20 @@ const habit = rhythmLine(rhythm);
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <!-- Absolute paths: this page is at /stronger/dj, so "css/us.css" would
-         resolve to /stronger/css/us.css and 404. us.css first — it owns every
+    <!-- Absolute paths: this page is at /samdrea/dj, so "css/us.css" would
+         resolve to /samdrea/css/us.css and 404. us.css first — it owns every
          token us-song.css then uses. -->
     <!-- Installable-app metadata. `scope` is "/" and that is a CORRECTION, not
-         laziness. It was "/stronger/", which looks tighter and quietly broke the
+         laziness. It was "/samdrea/", which looks tighter and quietly broke the
          installed app in three places: an installed PWA opens any out-of-scope
-         URL in the BROWSER instead of the app, and "/stronger" (the gate, where
+         URL in the BROWSER instead of the app, and "/samdrea" (the gate, where
          every expired session lands), "/api/us/out" (sign out) and all eleven
-         "/api/us/*" form actions are every one of them outside "/stronger/".
+         "/api/us/*" form actions are every one of them outside "/samdrea/".
          So her session expiring would eject her to Safari to log back in, and
          with JavaScript off every form post would leave the app too. Nothing in
          the wing links to the public site, so a wide scope traps nothing.
 
-         `start_url: /stronger/vault` opens at the hub rather than the gate —
+         `start_url: /samdrea/vault` opens at the hub rather than the gate —
          she already holds a session cookie, so she skips the quiz on launch.
          `id` is pinned so the identity survives future manifest edits.
 
@@ -298,16 +298,16 @@ const habit = rhythmLine(rhythm);
          bar all work without one. The only thing given up is offline, which for
          a room whose whole content is fetched per visit is not a real loss. -->
     <!-- Installable-app metadata. `scope` is "/" and that is a CORRECTION, not
-         laziness. It was "/stronger/", which looks tighter and quietly broke the
+         laziness. It was "/samdrea/", which looks tighter and quietly broke the
          installed app in three places: an installed PWA opens any out-of-scope
-         URL in the BROWSER instead of the app, and "/stronger" (the gate, where
+         URL in the BROWSER instead of the app, and "/samdrea" (the gate, where
          every expired session lands), "/api/us/out" (sign out) and all eleven
-         "/api/us/*" form actions are every one of them outside "/stronger/".
+         "/api/us/*" form actions are every one of them outside "/samdrea/".
          So her session expiring would eject her to Safari to log back in, and
          with JavaScript off every form post would leave the app too. Nothing in
          the wing links to the public site, so a wide scope traps nothing.
 
-         `start_url: /stronger/vault` opens at the hub rather than the gate —
+         `start_url: /samdrea/vault` opens at the hub rather than the gate —
          she already holds a session cookie, so she skips the quiz on launch.
          `id` is pinned so the identity survives future manifest edits.
 
@@ -689,7 +689,7 @@ const habit = rhythmLine(rhythm);
                     the vault hub does. So this link only works once I have also
                     been through the gate. That is the correct trade: it keeps one
                     rule ("the vault is hers") instead of two. */}
-                <a href="/stronger/vault/today">her page &rarr; (needs the gate too)</a>
+                <a href="/samdrea/vault/today">her page &rarr; (needs the gate too)</a>
                 <form class="studio-out" method="post" action="/api/us/out"><button class="studio-out-btn" type="submit">sign out of everything</button></form>
             </div>
     <script is:inline>
@@ -799,7 +799,7 @@ const habit = rhythmLine(rhythm);
             // Let the server re-render the preview from the store. The short pause
             // is so the status line above is actually readable first.
             setTimeout(function () {
-                window.location.assign('/stronger/dj?posted=' + encodeURIComponent(data.date));
+                window.location.assign('/samdrea/dj?posted=' + encodeURIComponent(data.date));
             }, 650);
         });
     })();

@@ -1,14 +1,14 @@
 /* ============================================================
    us-hub.css — the two things the hub says out loud.
 
-   Loaded ONLY by /stronger/vault, and only ever AFTER us.css:
+   Loaded ONLY by /samdrea/vault, and only ever AFTER us.css:
    every token used below is declared there, and one rule here
    (.room.is-fresh) deliberately overrides a resting border that
    us.css sets. Load it first and the border rule silently loses.
 
    Path is ABSOLUTE (/css/us-hub.css) for the reason us.css
-   states: this page lives at /stronger/vault, so a relative
-   href would resolve to /stronger/vault/css/... and 404.
+   states: this page lives at /samdrea/vault, so a relative
+   href would resolve to /samdrea/vault/css/... and 404.
 
    THE ONE RULE STILL HOLDS. Nothing in here is warm. Blue is
    light in the room — it is the wash on a card that has

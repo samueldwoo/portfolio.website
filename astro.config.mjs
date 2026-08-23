@@ -7,7 +7,7 @@ export default defineConfig({
   // Still 'static': every page prerenders BY DEFAULT and the public site
   // (index / projects / travel) emits exactly the same flat .html it always
   // has. The adapter below is not a switch to SSR — it exists so that the
-  // handful of private routes under src/pages/stronger/** can individually
+  // handful of private routes under src/pages/samdrea/** can individually
   // opt out with `export const prerender = false`.
   //
   // Astro's own config docs are explicit that this is supported:

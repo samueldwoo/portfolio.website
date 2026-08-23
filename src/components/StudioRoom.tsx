@@ -4725,7 +4725,7 @@ export default function StudioRoom({ memories, lines, marks, visitLine }: Props)
             <button className="room-tone" type="button" data-us="tone" aria-pressed="false">
               room tone
             </button>
-            <a className="room-exit" href="/stronger/vault">exit</a>
+            <a className="room-exit" href="/samdrea/vault">exit</a>
           </div>
 
           {/* Carriage lines 1-4. A real list, because it is one. */}

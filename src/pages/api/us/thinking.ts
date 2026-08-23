@@ -106,7 +106,7 @@ const RATE_LIMIT = 20;
 const RATE_WINDOW_SEC = 600;
 
 /** Where a no-JavaScript form submission lands afterwards. */
-const HUB_PAGE = '/stronger/vault';
+const HUB_PAGE = '/samdrea/vault';
 
 /** The block on the hub this belongs to, so a 303 lands on it and not at the top. */
 const FRAGMENT = '#thinking';

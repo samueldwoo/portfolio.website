@@ -1,6 +1,6 @@
 ---
 /**
- * /stronger — the front door. Act I.
+ * /samdrea — the front door. Act I.
  *
  * ---------------------------------------------------------------------------
  * WHAT THIS PAGE IS
@@ -45,8 +45,8 @@ const already = secret ? verify(secret, 'session', readCookie(Astro.cookies, 'se
  * for an open redirect and the wrong one for a destination, because a path can be
  * inside the wing and not exist:
  *
- *   1. middleware.ts guards everything under /stronger/vault, finds no route for
- *      /stronger/vault/nope, and 302s to the gate with ?next=/stronger/vault/nope
+ *   1. middleware.ts guards everything under /samdrea/vault, finds no route for
+ *      /samdrea/vault/nope, and 302s to the gate with ?next=/samdrea/vault/nope
  *   2. the gate, holding a valid session, 302s straight back to that `next`
  *   3. go to 1
  *
@@ -58,20 +58,20 @@ const already = secret ? verify(secret, 'session', readCookie(Astro.cookies, 'se
  *
  * An allowlist cannot loop, because every entry is a route that renders. It is
  * also a strictly tighter answer to the open-redirect question the prefix test
- * existed for, so nothing is given up. `/stronger` is deliberately ABSENT:
+ * existed for, so nothing is given up. `/samdrea` is deliberately ABSENT:
  * sending the gate back to the gate is the same loop with one fewer hop.
  */
 const NEXT_ALLOWED = new Set([
-  '/stronger/vault',
-  '/stronger/vault/today',
-  '/stronger/vault/room',
-  '/stronger/vault/letters',
-  '/stronger/vault/day',
-  '/stronger/dj',
+  '/samdrea/vault',
+  '/samdrea/vault/today',
+  '/samdrea/vault/room',
+  '/samdrea/vault/letters',
+  '/samdrea/vault/day',
+  '/samdrea/dj',
 ]);
 
 const rawNext = (Astro.url.searchParams.get('next') ?? '').replace(/\/+$/, '');
-const safeNext = NEXT_ALLOWED.has(rawNext) ? rawNext : '/stronger/vault';
+const safeNext = NEXT_ALLOWED.has(rawNext) ? rawNext : '/samdrea/vault';
 
 if (already) return Astro.redirect(safeNext, 302);
 
@@ -110,19 +110,19 @@ const showPlaceholderWarning = import.meta.env.DEV && gateNeedsReview();
     <meta name="robots" content="noindex, nofollow, noarchive">
     <meta name="referrer" content="no-referrer">
     <title>Samuel Woo&apos;s Home Page</title>
-    <!-- Absolute path: this page is at /stronger, so "css/us.css" would
-         resolve to /stronger/css/us.css and 404. -->
+    <!-- Absolute path: this page is at /samdrea, so "css/us.css" would
+         resolve to /samdrea/css/us.css and 404. -->
     <!-- Installable-app metadata. `scope` is "/" and that is a CORRECTION, not
-         laziness. It was "/stronger/", which looks tighter and quietly broke the
+         laziness. It was "/samdrea/", which looks tighter and quietly broke the
          installed app in three places: an installed PWA opens any out-of-scope
-         URL in the BROWSER instead of the app, and "/stronger" (the gate, where
+         URL in the BROWSER instead of the app, and "/samdrea" (the gate, where
          every expired session lands), "/api/us/out" (sign out) and all eleven
-         "/api/us/*" form actions are every one of them outside "/stronger/".
+         "/api/us/*" form actions are every one of them outside "/samdrea/".
          So her session expiring would eject her to Safari to log back in, and
          with JavaScript off every form post would leave the app too. Nothing in
          the wing links to the public site, so a wide scope traps nothing.
 
-         `start_url: /stronger/vault` opens at the hub rather than the gate —
+         `start_url: /samdrea/vault` opens at the hub rather than the gate —
          she already holds a session cookie, so she skips the quiz on launch.
          `id` is pinned so the identity survives future manifest edits.
 
@@ -133,16 +133,16 @@ const showPlaceholderWarning = import.meta.env.DEV && gateNeedsReview();
          bar all work without one. The only thing given up is offline, which for
          a room whose whole content is fetched per visit is not a real loss. -->
     <!-- Installable-app metadata. `scope` is "/" and that is a CORRECTION, not
-         laziness. It was "/stronger/", which looks tighter and quietly broke the
+         laziness. It was "/samdrea/", which looks tighter and quietly broke the
          installed app in three places: an installed PWA opens any out-of-scope
-         URL in the BROWSER instead of the app, and "/stronger" (the gate, where
+         URL in the BROWSER instead of the app, and "/samdrea" (the gate, where
          every expired session lands), "/api/us/out" (sign out) and all eleven
-         "/api/us/*" form actions are every one of them outside "/stronger/".
+         "/api/us/*" form actions are every one of them outside "/samdrea/".
          So her session expiring would eject her to Safari to log back in, and
          with JavaScript off every form post would leave the app too. Nothing in
          the wing links to the public site, so a wide scope traps nothing.
 
-         `start_url: /stronger/vault` opens at the hub rather than the gate —
+         `start_url: /samdrea/vault` opens at the hub rather than the gate —
          she already holds a session cookie, so she skips the quiz on launch.
          `id` is pinned so the identity survives future manifest edits.
 
@@ -407,7 +407,7 @@ const showPlaceholderWarning = import.meta.env.DEV && gateNeedsReview();
             input.disabled = true;
             submit.disabled = true;
             document.getElementById('crude').classList.add('is-opening');
-            var to = data.redirect || '/stronger/vault';
+            var to = data.redirect || '/samdrea/vault';
             // Long enough to read the line and see the lights go out.
             setTimeout(function () { window.location.assign(to); }, 700);
             return;

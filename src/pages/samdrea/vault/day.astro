@@ -1,6 +1,6 @@
 ---
 /**
- * /stronger/vault/day — `line 04`. One photograph each, every day.
+ * /samdrea/vault/day — `line 04`. One photograph each, every day.
  *
  * ---------------------------------------------------------------------------
  * THE SHAPE OF THE PAGE, AND WHY IT IS TWO COLUMNS AND NOT A FEED
@@ -58,7 +58,7 @@ export const prerender = false;
 
 const secret = SESSION_SECRET();
 const session = secret ? verify(secret, 'session', readCookie(Astro.cookies, 'session', Astro.url)) : null;
-if (!session) return Astro.redirect('/stronger', 302);
+if (!session) return Astro.redirect('/samdrea', 302);
 
 const viewer: Who = identify(Astro.cookies, Astro.url) ?? 'her';
 const them: Who = viewer === 'her' ? 'him' : 'her';
@@ -138,16 +138,16 @@ const whoWord = (w: Who): string => (w === viewer ? 'you' : w === 'her' ? (her |
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
     <!-- Installable-app metadata. `scope` is "/" and that is a CORRECTION, not
-         laziness. It was "/stronger/", which looks tighter and quietly broke the
+         laziness. It was "/samdrea/", which looks tighter and quietly broke the
          installed app in three places: an installed PWA opens any out-of-scope
-         URL in the BROWSER instead of the app, and "/stronger" (the gate, where
+         URL in the BROWSER instead of the app, and "/samdrea" (the gate, where
          every expired session lands), "/api/us/out" (sign out) and all eleven
-         "/api/us/*" form actions are every one of them outside "/stronger/".
+         "/api/us/*" form actions are every one of them outside "/samdrea/".
          So her session expiring would eject her to Safari to log back in, and
          with JavaScript off every form post would leave the app too. Nothing in
          the wing links to the public site, so a wide scope traps nothing.
 
-         `start_url: /stronger/vault` opens at the hub rather than the gate —
+         `start_url: /samdrea/vault` opens at the hub rather than the gate —
          she already holds a session cookie, so she skips the quiz on launch.
          `id` is pinned so the identity survives future manifest edits.
 
@@ -431,7 +431,7 @@ const whoWord = (w: Who): string => (w === viewer ? 'you' : w === 'her' ? (her |
 
     <div class="studio-foot">
         <span class="studio-tag">Stronger for it.</span>
-        <a href="/stronger/vault">&larr; back to the room</a>
+        <a href="/samdrea/vault">&larr; back to the room</a>
     </div>
 </div>
 
@@ -570,7 +570,7 @@ const whoWord = (w: Who): string => (w === viewer ? 'you' : w === 'her' ? (her |
             if (data && data.ok) {
                 /* Reload rather than patch the DOM: the new frame needs a freshly
                    signed URL, and the server is the only thing that can mint one. */
-                window.location.assign('/stronger/vault/day?ok=posted#post');
+                window.location.assign('/samdrea/vault/day?ok=posted#post');
                 return;
             }
             say('');

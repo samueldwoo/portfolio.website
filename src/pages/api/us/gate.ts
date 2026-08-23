@@ -171,7 +171,7 @@ export const POST: APIRoute = async ({ request, cookies, url, clientAddress }) =
   writeCookie(cookies, url, 'session', session, TTL.session);
   clearCookie(cookies, 'progress');
 
-  return json({ ok: true, done: true, redirect: '/stronger/vault' });
+  return json({ ok: true, done: true, redirect: '/samdrea/vault' });
 };
 
 /** Anything other than POST. Kept explicit so a stray GET is a 405, not a crash. */

@@ -116,7 +116,7 @@ const RATE_LIMIT = 20;
 const RATE_WINDOW_SEC = 600;
 
 /** Where a no-JavaScript form submission lands afterwards. */
-const TODAY_PAGE = '/stronger/vault/today';
+const TODAY_PAGE = '/samdrea/vault/today';
 
 function json(body: unknown, status = 200, headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), {

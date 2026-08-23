@@ -1,6 +1,6 @@
 ---
 /**
- * /stronger/vault/letters — line 03. The long-form room.
+ * /samdrea/vault/letters — line 03. The long-form room.
  *
  * ---------------------------------------------------------------------------
  * WHY THIS ROOM EXISTS
@@ -20,7 +20,7 @@
  * THE SESSION IS RE-VERIFIED HERE, AND THAT IS NOT THEATRE
  *
  * src/middleware.ts has already checked a signed, unexpired token for anything
- * under /stronger/vault, or this render never happened. The check below is what
+ * under /samdrea/vault, or this render never happened. The check below is what
  * makes a routing mistake up there degrade to "she gets sent to the gate" instead
  * of "the internet gets my letters". Copied verbatim from the vault hub and from
  * today.astro so there is one pattern to audit rather than three.
@@ -110,7 +110,7 @@ export const prerender = false;
 const secret = SESSION_SECRET();
 const session = secret ? verify(secret, 'session', readCookie(Astro.cookies, 'session', Astro.url)) : null;
 
-if (!session) return Astro.redirect('/stronger', 302);
+if (!session) return Astro.redirect('/samdrea', 302);
 
 /* PRESENCE, WRITE ONLY. This page shows no presence line — a note about
    somebody else arriving would pull her out of the thing she came here to
@@ -311,8 +311,8 @@ function replyParagraphs(text: string): string[] {
          whose product is uninterrupted reading is the worst place to introduce a
          font swap. Do not add a webfont here without reading that comment. -->
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <!-- Absolute paths: this page is at /stronger/vault/letters, so a relative href
-         would resolve to /stronger/vault/css/... and 404.
+    <!-- Absolute paths: this page is at /samdrea/vault/letters, so a relative href
+         would resolve to /samdrea/vault/css/... and 404.
 
          us.css first — it owns every token the other two use. us-song.css second,
          and NOT because this page shows songs: it owns the wing's shared form and
@@ -321,16 +321,16 @@ function replyParagraphs(text: string): string[] {
          about, and every rule in that file is class-scoped (there is not one bare
          element selector in it), so loading it has no side effects on this page. -->
     <!-- Installable-app metadata. `scope` is "/" and that is a CORRECTION, not
-         laziness. It was "/stronger/", which looks tighter and quietly broke the
+         laziness. It was "/samdrea/", which looks tighter and quietly broke the
          installed app in three places: an installed PWA opens any out-of-scope
-         URL in the BROWSER instead of the app, and "/stronger" (the gate, where
+         URL in the BROWSER instead of the app, and "/samdrea" (the gate, where
          every expired session lands), "/api/us/out" (sign out) and all eleven
-         "/api/us/*" form actions are every one of them outside "/stronger/".
+         "/api/us/*" form actions are every one of them outside "/samdrea/".
          So her session expiring would eject her to Safari to log back in, and
          with JavaScript off every form post would leave the app too. Nothing in
          the wing links to the public site, so a wide scope traps nothing.
 
-         `start_url: /stronger/vault` opens at the hub rather than the gate —
+         `start_url: /samdrea/vault` opens at the hub rather than the gate —
          she already holds a session cookie, so she skips the quiz on launch.
          `id` is pinned so the identity survives future manifest edits.
 
@@ -365,7 +365,7 @@ function replyParagraphs(text: string): string[] {
            ============================================================== */
         <>
             <div class="lt-topbar">
-                <a class="lt-topbar-mark" href="/stronger/vault/letters">
+                <a class="lt-topbar-mark" href="/samdrea/vault/letters">
                     <span class="us-mark-bracket" aria-hidden="true">[</span>letters<span
                           class="us-mark-bracket" aria-hidden="true">]</span>
                 </a>
@@ -501,7 +501,7 @@ function replyParagraphs(text: string): string[] {
 
             <nav class="lt-column lt-nav" aria-label="other letters">
                 {older ? (
-                    <a href={`/stronger/vault/letters?read=${encodeURIComponent(older.id)}`}>
+                    <a href={`/samdrea/vault/letters?read=${encodeURIComponent(older.id)}`}>
                         <span class="lt-nav-label" aria-hidden="true">&larr;</span>
                         the one before
                     </a>
@@ -509,7 +509,7 @@ function replyParagraphs(text: string): string[] {
                     <span>this is the first one</span>
                 )}
                 {newer ? (
-                    <a href={`/stronger/vault/letters?read=${encodeURIComponent(newer.id)}`}>
+                    <a href={`/samdrea/vault/letters?read=${encodeURIComponent(newer.id)}`}>
                         the one after
                         <span class="lt-nav-label lt-nav-label--after" aria-hidden="true">&rarr;</span>
                     </a>
@@ -522,7 +522,7 @@ function replyParagraphs(text: string): string[] {
 
             <div class="studio-foot">
                 <span class="studio-tag">Stronger for it.</span>
-                <a href="/stronger/vault/letters">&larr; all the letters</a>
+                <a href="/samdrea/vault/letters">&larr; all the letters</a>
             </div>
         </>
     ) : (
@@ -573,7 +573,7 @@ function replyParagraphs(text: string): string[] {
                             This one is yours to open whenever you decide that is today.
                             Once it is open it stays open &mdash; there is no putting it back.
                         </p>
-                        <a class="lt-choose-go" href={`/stronger/vault/letters?read=${sealedRequest.id}&open=1`}>
+                        <a class="lt-choose-go" href={`/samdrea/vault/letters?read=${sealedRequest.id}&open=1`}>
                             open it now
                         </a>
                     </div>
@@ -594,7 +594,7 @@ function replyParagraphs(text: string): string[] {
             )}
 
             {/* Dev only, both of them. She should never be shown a sentence about
-                environment variables or serverless instances; on /stronger/dj the
+                environment variables or serverless instances; on /samdrea/dj the
                 equivalent warnings are permanent, because there they are
                 actionable. */}
             {import.meta.env.DEV && usingPlaceholders() && (
@@ -634,7 +634,7 @@ function replyParagraphs(text: string): string[] {
                                     <li>
                                         <a
                                             class={i === 0 ? 'lt-card lt-card--hero' : 'lt-card'}
-                                            href={`/stronger/vault/letters?read=${encodeURIComponent(letter.id)}`}
+                                            href={`/samdrea/vault/letters?read=${encodeURIComponent(letter.id)}`}
                                         >
                                             <span class="lt-new">new</span>
                                             <h3 class={letter.title ? 'lt-card-title' : 'lt-card-title lt-card-title--untitled'}>
@@ -661,7 +661,7 @@ function replyParagraphs(text: string): string[] {
                                     <li>
                                         <a
                                             class="lt-card"
-                                            href={`/stronger/vault/letters?read=${encodeURIComponent(letter.id)}`}
+                                            href={`/samdrea/vault/letters?read=${encodeURIComponent(letter.id)}`}
                                         >
                                             <p class="lt-card-meta">
                                                 {[
@@ -715,7 +715,7 @@ function replyParagraphs(text: string): string[] {
                                        tear is a second, deliberate tap. No title
                                        and no body exist in this object. */
                                     <li>
-                                        <a class="lt-card lt-card--whenever" href={`/stronger/vault/letters?read=${letter.id}`}>
+                                        <a class="lt-card lt-card--whenever" href={`/samdrea/vault/letters?read=${letter.id}`}>
                                             <span class="lt-seal lt-seal--whenever">yours to open</span>
                                             <p class="lt-when">open when <strong>{letter.openWhen}</strong></p>
                                             {letter.teaser && <p class="lt-teaser">{letter.teaser}</p>}
@@ -763,7 +763,7 @@ function replyParagraphs(text: string): string[] {
 
             <div class="studio-foot">
                 <span class="studio-tag">Stronger for it.</span>
-                <a href="/stronger/vault">&larr; back to the room</a>
+                <a href="/samdrea/vault">&larr; back to the room</a>
             </div>
         </>
     )}
@@ -893,7 +893,7 @@ function replyParagraphs(text: string): string[] {
            the line above is readable first. */
         setTimeout(function () {
             window.location.assign(
-                '/stronger/vault/letters?read=' + encodeURIComponent(data.id) + '&sent=1'
+                '/samdrea/vault/letters?read=' + encodeURIComponent(data.id) + '&sent=1'
             );
         }, 700);
     });

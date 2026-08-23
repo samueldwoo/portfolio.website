@@ -41,7 +41,7 @@ export const POST: APIRoute = ({ cookies, redirect }) => {
   clearCookie(cookies, 'whoami');
   // Back to the front door, which will now render the gate rather than
   // redirecting onward — proving the cookies really are gone.
-  return redirect('/stronger', 303);
+  return redirect('/samdrea', 303);
 };
 
 /* Anything but POST. Without this, Astro's HEAD->GET fallback made a HEAD probe a

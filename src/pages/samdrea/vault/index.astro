@@ -1,6 +1,6 @@
 ---
 /**
- * /stronger/vault — Act II, the hub.
+ * /samdrea/vault — Act II, the hub.
  *
  * ---------------------------------------------------------------------------
  * THE SESSION IS RE-VERIFIED HERE, AND THAT IS NOT THEATRE
@@ -95,7 +95,7 @@ export const prerender = false;
 
 const secret = SESSION_SECRET();
 const session = secret ? verify(secret, 'session', readCookie(Astro.cookies, 'session', Astro.url)) : null;
-if (!session) return Astro.redirect('/stronger', 302);
+if (!session) return Astro.redirect('/samdrea', 302);
 
 /**
  * WHICH OF THEM IS READING THIS PAGE.
@@ -372,7 +372,7 @@ const rooms = [
     n: 'line 01',
     title: 'one day, two songs',
     note: 'one from each of us, every day. and why.',
-    href: '/stronger/vault/today',
+    href: '/samdrea/vault/today',
     ready: true,
     /* The marker is WORDS, not a colour and not a dot on its own. Two reasons, and
        both are requirements rather than taste: a state carried only by a blue border
@@ -385,7 +385,7 @@ const rooms = [
     n: 'line 02',
     title: 'the studio',
     note: 'a dark room, a carriage on a rail, and every photo I have of us on it.',
-    href: '/stronger/vault/room',
+    href: '/samdrea/vault/room',
     ready: true,
     fresh: fresh.studio,
   },
@@ -393,7 +393,7 @@ const rooms = [
     n: 'line 03',
     title: 'letters',
     note: 'the longer things. one at a time, and some of them are sealed.',
-    href: '/stronger/vault/letters',
+    href: '/samdrea/vault/letters',
     ready: true,
     /* No `fresh` signal yet. status.ts derives freshness from the song store and
        the marks store; letters keep their read receipts in their OWN document
@@ -406,7 +406,7 @@ const rooms = [
     n: 'line 04',
     title: 'today, seen',
     note: 'one picture each. whatever we were looking at.',
-    href: '/stronger/vault/day',
+    href: '/samdrea/vault/day',
     ready: true,
     /* No `fresh` signal, for the same reason as line 03 and one more. status.ts
        does not read the frames store, so wiring one would be a fourth store read
@@ -436,16 +436,16 @@ const rooms = [
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
     <!-- Installable-app metadata. `scope` is "/" and that is a CORRECTION, not
-         laziness. It was "/stronger/", which looks tighter and quietly broke the
+         laziness. It was "/samdrea/", which looks tighter and quietly broke the
          installed app in three places: an installed PWA opens any out-of-scope
-         URL in the BROWSER instead of the app, and "/stronger" (the gate, where
+         URL in the BROWSER instead of the app, and "/samdrea" (the gate, where
          every expired session lands), "/api/us/out" (sign out) and all eleven
-         "/api/us/*" form actions are every one of them outside "/stronger/".
+         "/api/us/*" form actions are every one of them outside "/samdrea/".
          So her session expiring would eject her to Safari to log back in, and
          with JavaScript off every form post would leave the app too. Nothing in
          the wing links to the public site, so a wide scope traps nothing.
 
-         `start_url: /stronger/vault` opens at the hub rather than the gate —
+         `start_url: /samdrea/vault` opens at the hub rather than the gate —
          she already holds a session cookie, so she skips the quiz on launch.
          `id` is pinned so the identity survives future manifest edits.
 
@@ -1077,7 +1077,7 @@ const rooms = [
         )}
 
         {/* Dev only. She should never be shown a sentence about serverless
-            instances; on /stronger/dj the equivalent warnings are permanent
+            instances; on /samdrea/dj the equivalent warnings are permanent
             because there they are actionable. */}
         {import.meta.env.DEV && togetherTier() === 'memory' && (
             <p class="tg-notice" data-kind="warn">
@@ -1396,7 +1396,7 @@ const rooms = [
             /* Straight back to the server. The pause is so the line above is
                readable first. */
             setTimeout(function () {
-                window.location.assign('/stronger/vault?ok=' + (data.revealed ? 'revealed' : 'answered') + '#question');
+                window.location.assign('/samdrea/vault?ok=' + (data.revealed ? 'revealed' : 'answered') + '#question');
             }, 700);
         });
     }

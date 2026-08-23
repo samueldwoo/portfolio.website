@@ -178,7 +178,7 @@ function crossSite(request: Request, url: URL): boolean {
 }
 
 /** Where a no-JavaScript form submission lands afterwards. */
-const ROOM_PAGE = '/stronger/vault/room';
+const ROOM_PAGE = '/samdrea/vault/room';
 
 /**
  * Applied to EVERY exit from this endpoint, the 303 included.

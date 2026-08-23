@@ -1,11 +1,11 @@
 /* ============================================================
    us-letters.css — the only room in the wing that is PROSE.
 
-   Loaded by /stronger/vault/letters after us.css (which owns
+   Loaded by /samdrea/vault/letters after us.css (which owns
    every token used here) and us-song.css (which owns the wing's
    shared primitives: .notice, .sr-only, .dj-*). Paths are
-   ABSOLUTE because this page lives at /stronger/vault/letters
-   and a relative href would resolve to /stronger/vault/css/.
+   ABSOLUTE because this page lives at /samdrea/vault/letters
+   and a relative href would resolve to /samdrea/vault/css/.
 
    ------------------------------------------------------------
    WHY THIS FILE IS NOT JUST "us-song.css WITH WIDER TEXT"

@@ -1,9 +1,9 @@
 {
-  "id": "/stronger/vault",
+  "id": "/samdrea/vault",
   "name": "[us]",
   "short_name": "[us]",
   "description": "A room with the door closed.",
-  "start_url": "/stronger/vault",
+  "start_url": "/samdrea/vault",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",

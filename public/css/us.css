@@ -4,15 +4,15 @@
    ACT I  (.crude)  a page that looks abandoned in 1999
    ACT II (.studio) a black industrial room under blue light
 
-   Loaded ONLY by /stronger/**. It deliberately does not touch
+   Loaded ONLY by /samdrea/**. It deliberately does not touch
    styles.css, css/layout.css, css/nav.css, css/scroll.css or
    css/motion.css, and none of those are loaded here — the wing
    is a different world and shares no cascade with the portfolio.
 
    Paths are ABSOLUTE (/css/us.css) everywhere they appear,
-   because these pages live at /stronger/... rather than at the
+   because these pages live at /samdrea/... rather than at the
    root like index.html, so a relative href would resolve to
-   /stronger/css/us.css and 404.
+   /samdrea/css/us.css and 404.
    ============================================================ */
 
 /* ---------- ACT II tokens ----------------------------------

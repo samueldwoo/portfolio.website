@@ -64,7 +64,7 @@ export const prerender = false;
 const RATE_LIMIT = 6;
 const RATE_WINDOW_SEC = 600;
 
-const PAGE = '/stronger/vault/day';
+const PAGE = '/samdrea/vault/day';
 const FRAGMENT = '#post';
 
 const PRIVACY: Record<string, string> = {

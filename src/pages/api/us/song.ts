@@ -142,7 +142,7 @@ export const MAX_NOTE = 600;
 export const MAX_ARTIST = 120;
 
 /** Where a browser form is sent afterwards, either way. */
-const DJ = '/stronger/dj';
+const DJ = '/samdrea/dj';
 
 function json(body: unknown, status = 200, headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), {

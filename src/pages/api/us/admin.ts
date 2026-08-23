@@ -43,7 +43,7 @@
  * TWO REQUEST SHAPES, ON PURPOSE
  *
  * A plain `<form method="post">` (urlencoded, answered with a 303) and a `fetch`
- * (JSON in, JSON out). The form path is not a nicety: /stronger/dj is a page I
+ * (JSON in, JSON out). The form path is not a nicety: /samdrea/dj is a page I
  * will open one-handed on a phone with bad signal, and a login that works with
  * zero JavaScript is a login that works. The response shape follows the request
  * shape, so neither caller has to ask for anything special.
@@ -75,7 +75,7 @@ const RATE_WINDOW_SEC = 600;
 const REJECT_DELAY_MS = 350;
 
 /** Where a browser form is sent afterwards, either way. */
-const DJ = '/stronger/dj';
+const DJ = '/samdrea/dj';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
