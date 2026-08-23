@@ -66,6 +66,8 @@
  */
 import { HER_NAME, SESSION_SECRET } from '../../../lib/us/config';
 import { readCookie, verify } from '../../../lib/us/session';
+import { touch } from '../../../lib/us/presence';
+import { identify } from '../../../lib/us/together';
 import {
   REACTIONS,
   WING_TZ,
@@ -89,7 +91,19 @@ export const prerender = false;
 
 const secret = SESSION_SECRET();
 const session = secret ? verify(secret, 'session', readCookie(Astro.cookies, 'session', Astro.url)) : null;
+
 if (!session) return Astro.redirect('/stronger', 302);
+
+/* PRESENCE, WRITE ONLY. This page shows no presence line — a note about
+   somebody else arriving would pull her out of the thing she came here to
+   read. But time spent here is still time spent in the wing, so it stamps
+   without reading. Without this, twenty minutes on this page would look
+   like twenty minutes away, and the hub would tell him she had left.
+
+   Never awaited for its value and never able to throw: presence.ts
+   resolves to undefined on every failure path, including no Upstash. */
+const _seenBy = identify(Astro.cookies, Astro.url) ?? 'her';
+await touch(_seenBy);
 
 const her = HER_NAME();
 const today = wingDate();

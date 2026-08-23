@@ -324,6 +324,56 @@
     color: var(--concrete-3);
 }
 
+/* ------------------------------------------------------------
+   1b. THE TWO LINES UNDER THE CLOCKS
+
+   Both continue the clock strip's sentence, so both inherit its
+   mono face and its small size rather than starting a new visual
+   idea. Neither is allowed to look like a heading.
+
+   THE ONLY COLOUR RULE THAT MATTERS HERE: blue means "now".
+   `[data-together=yes]` and `[data-both=yes]` are the two states
+   where something is true at this second, and they are the only
+   two that light. Everything else is concrete grey, so the blue
+   never has to compete with itself to mean anything.
+
+   Both states are also carried by the WORDS ("right now", "you
+   are both awake"), so the colour is a second encoding and never
+   the only one — same discipline as the status cells in the
+   day table.
+   ------------------------------------------------------------ */
+
+.tg-seen,
+.tg-shared {
+    margin: 8px 0 0;
+    font-family: var(--us-mono);
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--concrete-3);
+}
+
+/* Sits tighter to the clocks than to each other: the clocks and
+   presence are one thought, the awake window is the next. */
+.tg-seen {
+    margin-top: 10px;
+}
+
+.tg-shared {
+    margin-top: 4px;
+}
+
+/* The one line on the hub that can interrupt her reading. It gets
+   the accent and slightly more weight, and nothing else does. */
+.tg-seen[data-together='yes'] {
+    color: var(--blue-glow);
+    font-weight: 600;
+}
+
+.tg-shared[data-both='yes'] {
+    color: var(--chalk-dim);
+}
+
 /* ============================================================
    2. THINKING OF YOU
 

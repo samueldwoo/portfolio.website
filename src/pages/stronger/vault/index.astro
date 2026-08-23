@@ -64,6 +64,7 @@ import { readCookie, verify } from '../../../lib/us/session';
 import { getSongs, wingDate, wingDateLabel, type SongRecord } from '../../../lib/us/kv';
 import { countVisitSafe, getMarksSafe } from '../../../lib/us/marks';
 import { countdown, newSince } from '../../../lib/us/status';
+import { presenceLine, touchAndRead } from '../../../lib/us/presence';
 import {
   ANSWER_MAX,
   HER_TZ,
@@ -79,6 +80,8 @@ import {
   getAllSafe,
   identify,
   otherOne,
+  overlap,
+  overlapLine,
   sentLine,
   thinkingLine,
   togetherTier,
@@ -200,6 +203,21 @@ const until = countdown(today);
    perspective is resolved once, here.
    ========================================================================= */
 const twoClocks = clocks(nowMs);
+
+/* WHEN YOU CAN BOTH BE HERE. Derived from the two clocks above and the awake
+   window in together.ts — no storage, no endpoint, nothing either of them sets.
+   The clocks say where each of you is; this says whether reaching the other one
+   right now reaches a person or a phone on a nightstand. Nine hours apart, that
+   sum is the one both of them were doing in their heads and getting wrong. */
+const shared = overlap(twoClocks);
+const sharedLine = overlapLine(shared, twoClocks, viewer);
+
+/* AND WHETHER THEY ARE BOTH HERE *NOW*. One pipelined Upstash call that stamps
+   the reader's clock and reads the other's. Resolves to null on any failure and
+   whenever Upstash is absent, in which case the line simply does not render —
+   see presence.ts on why a durable fallback for this would be a lie. */
+const seen = await touchAndRead(viewer, nowMs);
+const seenLine = presenceLine(seen, viewer);
 const myClock = viewer === 'her' ? twoClocks.her : twoClocks.him;
 const theirClock = viewer === 'her' ? twoClocks.him : twoClocks.her;
 /** '' most of the time. Only worth saying when the gap has crossed a date line. */
@@ -487,6 +505,29 @@ const rooms = [
         </span>
         <span class="tg-apart">{apartLine(twoClocks, viewer)}</span>
     </p>
+
+    {/* ============================================================
+        WHEN, AND WHETHER RIGHT NOW
+
+        Two lines that both answer questions the clock strip above raises
+        and cannot itself settle. They sit directly under it, in the same
+        small type, because they are the same thought continued.
+
+        PRESENCE FIRST when it exists. "he is in here too, right now" is
+        the only line on this page that can stop her reading the rest of
+        it and that is exactly what it is for, so nothing is allowed to
+        sit above it. It renders only inside the hour and only from the
+        OTHER person's visit — with no Upstash it renders nothing at all.
+
+        `aria-live="polite"` is deliberately ABSENT. This is server
+        rendered once per page load; there is no client update to
+        announce, and a live region that never changes is a promise to a
+        screen reader that the page does not keep. */}
+    {seenLine && (
+        <p class="tg-seen" data-together={seen?.together ? 'yes' : 'no'}>{seenLine}</p>
+    )}
+
+    <p class="tg-shared" data-both={shared.bothAwake ? 'yes' : 'no'}>{sharedLine}</p>
 
     {/* Nothing at all when the date is unset, mistyped, or long past. No
         placeholder, no "TBD", no empty box — see countdown() in status.ts. */}
