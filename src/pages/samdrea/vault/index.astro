@@ -390,14 +390,29 @@ const rooms = [
        on top of the words and is aria-hidden accordingly. */
     fresh: fresh.song,
   },
-  {
-    n: 'line 02',
-    title: 'the studio',
-    note: 'a dark room, a carriage on a rail, and every photo I have of us on it.',
-    href: '/samdrea/vault/room',
-    ready: true,
-    fresh: fresh.studio,
-  },
+  /* LINE 02 — THE STUDIO — IS BENCHED, NOT DELETED.
+
+     The 3D room works, but it is not finished enough to be how she first sees
+     these photographs: the captions are still bracketed developer notes, the
+     backdrop still carries wall text, and it asks her to learn a scroll-and-hold
+     gesture before it shows her anything. A room that needs explaining is the
+     wrong first impression for a gift.
+
+     So it comes off HER hub and nothing else about it changes:
+
+       src/components/StudioRoom.tsx        untouched, ~4700 lines
+       src/pages/samdrea/vault/room.astro   untouched, still routes
+       public/css/us-studio.css             untouched
+       /samdrea/vault/room                  STILL REACHABLE by direct URL, so it
+                                            can be worked on and looked at with no
+                                            branch and no revert
+
+     Removed rather than flagged `ready: false`: the grid renders a not-ready room
+     as a visible disabled card, which would put "coming soon" on the front door
+     of a present. Absent is better than pending.
+
+     TO BRING IT BACK, restore this one object. Nothing else is needed —
+     `fresh.studio` is still computed in status.ts and still correct. */
   {
     n: 'line 03',
     title: 'letters',
