@@ -1203,6 +1203,23 @@ export function loadPrompts(): readonly string[] {
     }
   }
 
+  /* A LIST WHOSE LENGTH IS A MULTIPLE OF SEVEN LOSES PROMPTS ENTIRELY.
+     Sunday's slot is taken by WEEK_PROMPT, and prompt `i` is served on the days
+     where `dayNumber ≡ i (mod n)`. When n and 7 share a factor those days do not
+     walk through the weekdays — they land on the SAME weekday forever. So with
+     n divisible by 7, every prompt at a Sunday index is never asked once, and no
+     amount of waiting fixes it.
+     Logged rather than corrected: silently dropping or duplicating one of his
+     own prompts to make the arithmetic work would be a worse surprise than a
+     line in the build output. */
+  if (out.length > 0 && out.length % 7 === 0) {
+    console.error(
+      `[us] the prompt list has ${out.length} entries, a multiple of 7. Because ` +
+        'Sunday is the week prompt, every 7th prompt would never be asked. Add or ' +
+        'remove one.',
+    );
+  }
+
   promptsCacheKey = key;
   promptsCache = out;
   return promptsCache;
@@ -1212,6 +1229,69 @@ export function loadPrompts(): readonly string[] {
 function dayNumber(date: string): number {
   const at = Date.parse(`${date}T00:00:00Z`);
   return Number.isNaN(at) ? 0 : Math.floor(at / 86_400_000);
+}
+
+/**
+ * 0 = Sunday. 1970-01-01 was a Thursday, hence the +4.
+ *
+ * Derived from `dayNumber` rather than from `new Date(date).getDay()`, which
+ * would read the SERVER's timezone and put the week boundary in a third place —
+ * neither Paris nor Los Angeles nor the wing's New York.
+ */
+function weekdayIndex(date: string): number {
+  return ((dayNumber(date) + 4) % 7 + 7) % 7;
+}
+
+/**
+ * THE WEEK, IN FIVE WORDS.
+ *
+ * ---------------------------------------------------------------------------
+ * A SEVENTH OF THE DAILY QUESTION, NOT A SECOND FEATURE
+ *
+ * "Tell each other about the week" wants to be its own thing: its own key space,
+ * its own record, its own seal, its own archive, its own endpoint, and the same
+ * three storage tiers as everything else in this file. That is several hundred
+ * lines to ask one question once a week.
+ *
+ * But it IS a question that both of them answer and then both of them see. That
+ * is precisely what the daily question already is. So Sunday's slot in the
+ * rotation simply becomes this instead, and the feature costs a constant and two
+ * small functions: it gets the existing seal, the existing edit-until-revealed
+ * rule, the existing late window, the existing archive table and the existing
+ * endpoint, all for free and all already tested.
+ *
+ * What it costs is Sunday's ordinary prompt. That is not a loss. A week has one
+ * day that is for looking back at the other six, and now the wing has one too.
+ *
+ * ---------------------------------------------------------------------------
+ * THE ROTATION SURVIVES IT
+ *
+ * `promptFor` indexes the list by `dayNumber % list.length`, so skipping Sundays
+ * skips whichever prompt would have landed there. Because prompt `i` appears on
+ * days where `dayNumber ≡ i (mod 48)` and 48 and 7 are coprime, those days walk
+ * through every weekday in turn — so each prompt loses one appearance in seven,
+ * evenly, and NO prompt is ever permanently unreachable. If the list length ever
+ * becomes a multiple of 7, that stops being true and some prompts would never be
+ * asked at all, so loadPrompts() warns when a list is a multiple of 7.
+ *
+ * ---------------------------------------------------------------------------
+ * FIVE WORDS IS AN INVITATION, NOT A VALIDATION
+ *
+ * There is deliberately no shorter cap and no word counting. The server ceiling
+ * stays ANSWER_MAX for every day, because a second cap would mean either
+ * `normalizeAnswer` taking a date — which it does not need for anything else —
+ * or a `maxlength` on the textarea that disagrees with what the endpoint accepts.
+ * A form that silently truncates at 60 and an endpoint that allows 400 is the
+ * exact divergence the comment on maxlength in index.astro warns about.
+ *
+ * And if she answers in seven words, seven words is the right answer. This is a
+ * gift, not a form. The brevity is the prompt's job.
+ */
+export const WEEK_PROMPT = 'your week, in five words';
+
+/** True on Sundays in WING_TZ, where the week prompt replaces the rotation. */
+export function isWeekPrompt(date: string): boolean {
+  return weekdayIndex(date) === 0;
 }
 
 /**
@@ -1230,6 +1310,10 @@ function dayNumber(date: string): number {
  * cannot produce a negative index.
  */
 export function promptFor(date: string): string {
+  // Sunday looks back at the other six. See WEEK_PROMPT for why this is a
+  // seventh of this feature rather than a feature of its own.
+  if (isWeekPrompt(date)) return WEEK_PROMPT;
+
   const list = loadPrompts();
   if (list.length === 0) return '';
   const i = ((dayNumber(date) % list.length) + list.length) % list.length;

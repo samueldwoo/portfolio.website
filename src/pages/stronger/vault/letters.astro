@@ -140,7 +140,24 @@ const wanted = Astro.url.searchParams.get('read') ?? '';
 const requested = wanted ? findLetter(wanted) : null;
 const askedForMissing = Boolean(wanted) && !requested;
 
-const view: VisibleLetter | null = requested ? visibleLetter(requested, today) : null;
+/* ---- the two ways a letter can be open ------------------------------------
+   `openedBefore` is the read receipt, which for an open-when envelope is also
+   the opened receipt: once she has read it, it is open forever.
+
+   `choosingNow` is the tear along the flap, and requiring it is the whole safety
+   of a single-use envelope. A bare `?read=<id>` on a labelled letter renders the
+   CARD — the label and a button — and never the letter, so a mistap, a stale
+   link, a prefetch or a URL she pasted to herself cannot spend one of these. She
+   has to arrive at `&open=1`, which only the button produces.
+
+   For a date-sealed letter `opened` is inert: isSealed() checks the date first
+   and ignores this argument entirely, so `&open=1` on a birthday letter does
+   nothing at all. That is worth knowing before anybody tries it. */
+const openedBefore = requested ? (states[requested.id]?.firstReadAt ?? 0) > 0 : false;
+const choosingNow = Astro.url.searchParams.get('open') === '1';
+const view: VisibleLetter | null = requested
+  ? visibleLetter(requested, today, openedBefore || choosingNow)
+  : null;
 /* Split into two variables rather than checked inline, so that every use below is
    unambiguous about whether it is allowed to see a body. `reading` is only ever an
    OPEN letter; a sealed request falls into `sealedRequest` and gets a card. */
@@ -161,13 +178,19 @@ if (reading) await markReadSafe(reading.id);
 /* ---- the shelf ------------------------------------------------------------ */
 const board = shelf(states, today);
 const totals = summarize(states, today);
-const nothingAtAll = board.waiting.length + board.again.length + board.sealed.length === 0;
+const nothingAtAll =
+  board.waiting.length + board.again.length + board.sealed.length + board.whenever.length === 0;
 
 /* ---- previous / next, among OPEN letters only -----------------------------
    Sealed ones are skipped rather than shown as an inaccessible step, because a
    "next" that refuses to open is a dead end with a label on it. In written order,
    which is loadLetters()' canonical order — a letter is part of a sequence. */
-const openLetters = loadLetters().filter((l) => !isSealed(l, today));
+/* The opened flag matters here too: without it an open-when letter she has
+   already read is judged sealed, drops out of this list, and the letter she is
+   reading has no previous or next — the sequence silently loses a link. */
+const openLetters = loadLetters().filter(
+  (l) => !isSealed(l, today, (states[l.id]?.firstReadAt ?? 0) > 0),
+);
 const here = reading ? openLetters.findIndex((l) => l.id === reading.id) : -1;
 /* Only the id is used, so these stay raw Letters rather than going through
    visibleLetter(): splitting a whole body into paragraphs to build a link is work
@@ -220,6 +243,12 @@ function countWord(n: number): string {
 function statusLine(): string {
   if (totals.unread === 1) return 'one waiting for you.';
   if (totals.unread > 1) return `${countWord(totals.unread)} waiting for you.`;
+  /* BELOW the unread count, deliberately. Unread letters are a sequence and she
+     should be pointed at them first; the open-when ones are a standing offer that
+     does not expire. So they surface exactly when there is nothing new — which is
+     the visit on which knowing they exist is worth something. */
+  if (totals.whenever === 1) return 'one for whenever you want it.';
+  if (totals.whenever > 1) return `${countWord(totals.whenever)} for whenever you want them.`;
   if (totals.open > 0) return 'nothing new. Everything here keeps.';
   if (totals.sealed > 0) return 'nothing open yet.';
   return '';
@@ -516,11 +545,31 @@ function replyParagraphs(text: string): string[] {
                    sealed. Refused HERE, before any body could have been
                    rendered — and there is nothing to refuse anyway, because
                    visibleLetter() already removed it. */
-                <p class="notice" data-kind="warn" role="status">
-                    that one is still sealed
-                    {sealedRequest.opensOn && <> until {wingDateLabel(sealedRequest.opensOn, { withYear: true })}</>}.
-                    It opens on its own.
-                </p>
+                sealedRequest.openWhen && !sealedRequest.opensOn ? (
+                    /* A LABELLED ENVELOPE, ARRIVED AT WITHOUT `&open=1`. This is the
+                       card that makes a single-use letter safe to link to: she gets
+                       the label and a button, never the letter. Saying "it opens on
+                       its own" here would be a straight lie — this one opens when
+                       she says so, and it is the only seal on the site that does. */
+                    <div class="lt-choose" role="group" aria-labelledby="choose-head">
+                        <p class="lt-choose-head" id="choose-head">
+                            open when <strong>{sealedRequest.openWhen}</strong>
+                        </p>
+                        <p class="lt-choose-note">
+                            This one is yours to open whenever you decide that is today.
+                            Once it is open it stays open &mdash; there is no putting it back.
+                        </p>
+                        <a class="lt-choose-go" href={`/stronger/vault/letters?read=${sealedRequest.id}&open=1`}>
+                            open it now
+                        </a>
+                    </div>
+                ) : (
+                    <p class="notice" data-kind="warn" role="status">
+                        that one is still sealed
+                        {sealedRequest.opensOn && <> until {wingDateLabel(sealedRequest.opensOn, { withYear: true })}</>}.
+                        It opens on its own.
+                    </p>
+                )
             )}
 
             {errorText && (
@@ -603,6 +652,12 @@ function replyParagraphs(text: string): string[] {
                                             <p class="lt-card-meta">
                                                 {[
                                                     dayLabel(letter.written),
+                                                    /* The label survives into the archive. Once she has
+                                                       opened "when you cannot sleep", the night she chose
+                                                       it is part of what the letter IS — dropping the label
+                                                       here would leave an untitled card and no record that
+                                                       she was ever the one who decided. */
+                                                    letter.openWhen ? `opened when ${letter.openWhen}` : '',
                                                     (states[letter.id]?.reply ?? '') ? 'you answered' : '',
                                                 ].filter(Boolean).join(' · ')}
                                             </p>
@@ -616,6 +671,40 @@ function replyParagraphs(text: string): string[] {
                                             {letter.paragraphs[0] && (
                                                 <p class="lt-card-excerpt">{letter.paragraphs[0]}</p>
                                             )}
+                                        </a>
+                                    </li>
+                                ))}
+                            </ul>
+                        </>
+                    )}
+
+                    {board.whenever.length > 0 && (
+                        /* ABOVE "not yet", deliberately. These are the only
+                           sealed-looking letters on the page she can do anything
+                           about, and burying them under a list of ones she cannot
+                           would hide the single actionable thing among the inert. */
+                        <>
+                            <hr class="studio-rule">
+                            <h2 class="lt-section-head">whenever you want them</h2>
+                            <p class="lt-section-note">
+                                Each of these opens when you decide the words on it
+                                describe today. One at a time, and only once.
+                            </p>
+                            <ul class="lt-shelf">
+                                {board.whenever.map((letter) => (
+                                    /* A REAL LINK, because this one is hers to
+                                       follow — unlike the sealed cards below, which
+                                       are <div>s precisely because a disabled link
+                                       is still a link to a keyboard.
+
+                                       It goes to the CARD, not to `&open=1`: the
+                                       tear is a second, deliberate tap. No title
+                                       and no body exist in this object. */
+                                    <li>
+                                        <a class="lt-card lt-card--whenever" href={`/stronger/vault/letters?read=${letter.id}`}>
+                                            <span class="lt-seal lt-seal--whenever">yours to open</span>
+                                            <p class="lt-when">open when <strong>{letter.openWhen}</strong></p>
+                                            {letter.teaser && <p class="lt-teaser">{letter.teaser}</p>}
                                         </a>
                                     </li>
                                 ))}

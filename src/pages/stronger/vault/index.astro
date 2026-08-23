@@ -79,6 +79,7 @@ import {
   clocks,
   getAllSafe,
   identify,
+  isWeekPrompt,
   otherOne,
   overlap,
   overlapLine,
@@ -664,8 +665,14 @@ const rooms = [
         Read the block comment in the frontmatter.
         ============================================================ */}
     <section class="tg-block" id="question" aria-labelledby="question-head">
+        {/* Sunday's slot IS the week prompt — see WEEK_PROMPT in together.ts
+            for why that is a seventh of this feature and not a second one. The
+            eyebrow has to change with it, or the page calls a look back at
+            seven days "today's question" and the ritual reads as an accident. */}
         <p class="tg-eyebrow" id="question-head">
-            today&rsquo;s question &middot; you both answer, then you both see
+            {isWeekPrompt(dayToday.date)
+                ? <Fragment>sunday &middot; look back at the week, then you both see</Fragment>
+                : <Fragment>today&rsquo;s question &middot; you both answer, then you both see</Fragment>}
         </p>
 
         <div class="tg-q">

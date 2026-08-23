@@ -191,6 +191,40 @@ export interface Letter {
    */
   openOn?: string;
   /**
+   * OPTIONAL — the label on the outside of an envelope she chooses when to open.
+   * The words AFTER "open when": `you can't sleep`, `you're annoyed with me`,
+   * `you miss me`, `it's a bad day`.
+   *
+   * ---------------------------------------------------------------------------
+   * THE OTHER KIND OF SEAL, AND WHY IT IS A DIFFERENT KIND
+   *
+   * `openOn` is a seal against the CALENDAR: it opens on its own, whether or not
+   * she wants it, and nothing she does moves it. That is right for a birthday and
+   * wrong for everything else, because the moment a letter is actually needed is
+   * not a date anybody can put on it in advance.
+   *
+   * This is a seal against her CHOICE. The letter sits there indefinitely showing
+   * only its label, and it opens when she decides the label describes today. So
+   * the timing is handed to the only person who can know it.
+   *
+   * IT IS SINGLE USE, AND THAT IS THE POINT. Once opened it stays open forever —
+   * it is not a trick and it never re-seals — but it cannot go back to being
+   * unopened, so there is a real decision in picking one. A set of these that
+   * could all be opened and re-sealed at will is just a list of letters with
+   * moods written on them; the finality is what makes choosing feel like
+   * anything. `LetterState.firstReadAt` already records it, so this needs no new
+   * storage at all.
+   *
+   * BOTH SEALS CAN APPLY. With `openOn` as well, the date must pass FIRST and
+   * then it becomes hers to open — "you can have this one, but not before
+   * October". The date gate is checked first in isSealed() for that reason.
+   *
+   * Safe to send to the browser while sealed, like `teaser` and for the same
+   * reason: she cannot choose an envelope she is not allowed to read the outside
+   * of. It is capped at TEASER_MAX so it cannot quietly become a second body.
+   */
+  openWhen?: string;
+  /**
    * The letter. Paragraphs separated by BLANK LINES — see `paragraphs()`, which is
    * the only thing that interprets this string.
    *
@@ -290,6 +324,28 @@ export const PLACEHOLDER_LETTERS: readonly Letter[] = [
       '[if you can see this text in the page source, the seal is broken and that',
       'is a bug worth stopping for. a sealed body is never sent to the browser —',
       'see visibleLetter() in src/lib/us/letters.ts.]',
+    ].join('\n'),
+  },
+  {
+    id: 'l04',
+    title: '[an open-when one]',
+    /* THE OTHER SEAL. No date at all — this one sits on the `whenever` shelf
+       showing nothing but its label until she decides the label describes today,
+       and then it is open forever. Check the same thing here as on l03: the body
+       must not appear in the HTML of the shelf, and `?read=l04` WITHOUT `&open=1`
+       must render the choose card rather than the letter. */
+    written: '2026-04-02',
+    openWhen: "you can't sleep",
+    teaser: '[a line she reads before deciding]',
+    body: [
+      '[replace this. these are the ones worth writing carefully, because she will',
+      'open this one at 3am on the night it applies and nothing else on the site',
+      'will be doing any work at that moment. write it for that night.',
+      '',
+      'good labels are specific states, not moods in general: "you cannot sleep",',
+      '"you are annoyed with me", "you got bad news", "you are about to do the',
+      'thing you are nervous about". a label she never reaches is a letter she',
+      'never reads.]',
     ].join('\n'),
   },
 ] as const;
@@ -429,6 +485,9 @@ function parseLetter(raw: unknown, where: string): Letter | null {
     body,
     signoff: tidyLine(obj.signoff, 80, `letters: ${id} signoff`) || undefined,
     teaser: tidyLine(obj.teaser, TEASER_MAX, `letters: ${id} teaser`) || undefined,
+    /* Same cap as a teaser: both are words on the OUTSIDE of an envelope, both
+       are sent while sealed, and neither may quietly become a second body. */
+    openWhen: tidyLine(obj.openWhen, TEASER_MAX, `letters: ${id} openWhen`) || undefined,
   };
 }
 
@@ -591,8 +650,23 @@ export function findLetter(id: unknown): Letter | null {
  * "opens on the third" and "opens on the fourth" are different sentences and only
  * one of them is the one written on the card.
  */
-export function isSealed(letter: Letter, today: string = wingDate()): boolean {
-  return Boolean(letter.openOn && letter.openOn > today);
+export function isSealed(
+  letter: Letter,
+  today: string = wingDate(),
+  opened: boolean = false,
+): boolean {
+  // THE DATE GATE FIRST. A letter with both seals is not hers to open until its
+  // day has come, so "open when you miss me, but not before October" behaves as
+  // written rather than opening the moment she taps it in September.
+  if (letter.openOn && letter.openOn > today) return true;
+
+  // Then the one she holds. `opened` defaults to false, so EVERY caller that has
+  // not been taught about this seal keeps an open-when letter sealed — the
+  // failure direction is a letter she has to tap twice, not a letter that opened
+  // itself. See the comment on Letter.openWhen.
+  if (letter.openWhen) return !opened;
+
+  return false;
 }
 
 /**
@@ -623,10 +697,20 @@ export interface VisibleLetter {
   teaser: string;
   /** The day it opens, when it is sealed. '' when it is not. */
   opensOn: string;
+  /**
+   * The label on an envelope she chooses when to open, WITHOUT the words "open
+   * when" — the page supplies those. Present whether sealed or open: after she
+   * has opened it, "you couldn't sleep" is part of what the letter is.
+   */
+  openWhen: string;
 }
 
-export function visibleLetter(letter: Letter, today: string = wingDate()): VisibleLetter {
-  const sealed = isSealed(letter, today);
+export function visibleLetter(
+  letter: Letter,
+  today: string = wingDate(),
+  opened: boolean = false,
+): VisibleLetter {
+  const sealed = isSealed(letter, today, opened);
   if (sealed) {
     return {
       id: letter.id,
@@ -640,6 +724,7 @@ export function visibleLetter(letter: Letter, today: string = wingDate()): Visib
          31 Dec 9999" is a bug report printed on her page; "sealed" with no date
          is the truthful version of the same state. */
       opensOn: letter.openOn === '9999-12-31' ? '' : (letter.openOn ?? ''),
+      openWhen: letter.openWhen ?? '',
     };
   }
   return {
@@ -651,6 +736,7 @@ export function visibleLetter(letter: Letter, today: string = wingDate()): Visib
     signoff: letter.signoff ?? '',
     teaser: letter.teaser ?? '',
     opensOn: '',
+    openWhen: letter.openWhen ?? '',
   };
 }
 
@@ -1554,6 +1640,20 @@ export interface Shelf {
   again: VisibleLetter[];
   /** Still sealed, SOONEST OPENING FIRST. Bodies and titles absent by construction. */
   sealed: VisibleLetter[];
+  /**
+   * Hers to open whenever she decides the label fits, AUTHORED ORDER.
+   *
+   * A fourth bucket rather than a flag on `sealed`, because the two are opposite
+   * instructions. A sealed letter says WAIT and there is nothing to do about it.
+   * These say CHOOSE, and putting them in the same list as the calendar-sealed
+   * ones would bury the only letters on the page she can act on among the only
+   * ones she cannot.
+   *
+   * Not sorted by anything meaningful on purpose: they are a set of options, not a
+   * sequence, and ordering a set by date implies a reading order that does not
+   * exist. Authored order is his order, which is the only intentional one there is.
+   */
+  whenever: VisibleLetter[];
 }
 
 /**
@@ -1573,13 +1673,30 @@ export function shelf(
   const waiting: VisibleLetter[] = [];
   const again: VisibleLetter[] = [];
   const sealed: VisibleLetter[] = [];
+  const whenever: VisibleLetter[] = [];
 
   // loadLetters() is already oldest-first, so `waiting` needs no sort at all.
   for (const letter of loadLetters()) {
-    const view = visibleLetter(letter, today);
-    if (view.sealed) sealed.push(view);
-    else if ((states[letter.id]?.firstReadAt ?? 0) > 0) again.push(view);
-    else waiting.push(view);
+    /* THE READ RECEIPT IS ALSO THE OPENED RECEIPT. An open-when letter she has
+       read once is open forever, and `firstReadAt` already records exactly that,
+       which is why this seal needed no new storage. Computed BEFORE
+       visibleLetter() so the seal is evaluated with the fact, not after it. */
+    const opened = (states[letter.id]?.firstReadAt ?? 0) > 0;
+    const view = visibleLetter(letter, today, opened);
+
+    if (view.sealed) {
+      /* Sealed AND labelled AND past any date gate means the seal is hers to
+         break — that is the `whenever` shelf. Sealed and labelled but NOT past
+         its date is still just sealed, because there is nothing she can do about
+         it yet; isSealed() checks the date first for this reason. */
+      const dateStillHolding = Boolean(letter.openOn && letter.openOn > today);
+      if (letter.openWhen && !dateStillHolding) whenever.push(view);
+      else sealed.push(view);
+    } else if (opened) {
+      again.push(view);
+    } else {
+      waiting.push(view);
+    }
   }
 
   again.reverse();
@@ -1587,7 +1704,7 @@ export function shelf(
      to the end, which is exactly where a letter nobody can date belongs. */
   sealed.sort((a, b) => (a.opensOn || '9999-12-31').localeCompare(b.opensOn || '9999-12-31'));
 
-  return { waiting, again, sealed };
+  return { waiting, again, sealed, whenever };
 }
 
 export interface LettersSummary {
@@ -1595,8 +1712,17 @@ export interface LettersSummary {
   open: number;
   /** Open and never opened. The number the hub would badge. */
   unread: number;
-  /** How many are still sealed. */
+  /** How many are still sealed by a DATE — nothing she can do about these. */
   sealed: number;
+  /**
+   * How many are hers to open whenever she likes.
+   *
+   * Counted apart from `sealed` because the hub's badge is a call to action and
+   * these are the only sealed-looking letters that answer to one. Folding them in
+   * would make the hub say "three sealed" about a shelf where one of them is
+   * waiting for her to simply decide.
+   */
+  whenever: number;
   /** `YYYY-MM-DD` of the next seal to open, or '' when there is none. */
   nextOpens: string;
   /** How many she has answered. */
@@ -1614,12 +1740,13 @@ export function summarize(
   states: Record<string, LetterState>,
   today: string = wingDate(),
 ): LettersSummary {
-  const { waiting, again, sealed } = shelf(states, today);
+  const { waiting, again, sealed, whenever } = shelf(states, today);
   const replied = Object.values(states).filter((s) => s.reply.length > 0).length;
   return {
     open: waiting.length + again.length,
     unread: waiting.length,
     sealed: sealed.length,
+    whenever: whenever.length,
     nextOpens: sealed.find((s) => s.opensOn)?.opensOn ?? '',
     replied,
   };

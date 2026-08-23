@@ -282,6 +282,118 @@
     color: var(--chalk-dim);
     margin: 0;
 }
+/* ---- open when ----------------------------------------------
+   The OTHER seal, and it has to look like a third thing — not
+   like an open letter and not like a sealed one.
+
+   A SOLID border where sealed cards are dashed. Dashed means
+   "nothing you can do"; these are the only sealed-looking cards
+   on the page she can act on, so they must not borrow the visual
+   language of the ones she cannot. The accent edge on the left
+   is the same device the open cards use, at a quieter weight.
+
+   These ARE anchors, unlike .lt-card--sealed, because following
+   one is hers to do. It leads to the card, not to the letter.
+   ------------------------------------------------------------ */
+.lt-card--whenever {
+    border-style: solid;
+    border-color: var(--concrete-2);
+    border-left: 2px solid var(--blue-brand);
+    background: transparent;
+}
+.lt-card--whenever:hover,
+.lt-card--whenever:focus-visible {
+    border-left-color: var(--blue-glow);
+    border-color: var(--concrete-3);
+}
+.lt-seal--whenever {
+    color: var(--blue-glow);
+    border-color: var(--blue-brand);
+}
+/* "open when you can't sleep". Display face at the same size as
+   .lt-opens, so the two shelves read as siblings; the <strong>
+   carries the label itself, which is the only part that varies. */
+.lt-when {
+    font-family: var(--us-display);
+    font-size: 1.1rem;
+    font-weight: 400;
+    letter-spacing: -0.01em;
+    color: var(--concrete-4);
+    margin: 0;
+}
+.lt-when strong {
+    font-weight: 600;
+    color: var(--chalk);
+}
+
+/* A one-line note under a section heading. Only the `whenever`
+   shelf needs one, because it is the only shelf whose rule is
+   not obvious from the cards on it. */
+.lt-section-note {
+    font-family: var(--us-mono);
+    font-size: 0.7rem;
+    line-height: 1.6;
+    letter-spacing: 0.04em;
+    color: var(--concrete-4);
+    margin: -6px 0 18px;
+    max-width: 54ch;
+}
+
+/* ---- the tear ------------------------------------------------
+   Shown when she has followed a labelled envelope but has NOT
+   passed &open=1. It is the whole safety of a single-use letter,
+   so it is a real block on the page rather than a notice strip:
+   this is a decision, and it should look like one.
+   ------------------------------------------------------------ */
+.lt-choose {
+    border: 1px solid var(--concrete-2);
+    border-left: 2px solid var(--blue-glow);
+    padding: 22px 22px 24px;
+    margin: 0 0 28px;
+    max-width: 56ch;
+}
+.lt-choose-head {
+    font-family: var(--us-display);
+    font-size: 1.25rem;
+    font-weight: 400;
+    letter-spacing: -0.01em;
+    color: var(--concrete-4);
+    margin: 0;
+}
+.lt-choose-head strong {
+    font-weight: 600;
+    color: var(--chalk);
+}
+.lt-choose-note {
+    font-family: var(--us-mono);
+    font-size: 0.72rem;
+    line-height: 1.7;
+    letter-spacing: 0.03em;
+    color: var(--concrete-4);
+    margin: 12px 0 20px;
+}
+/* 44px minimum target, like every other action in the wing. */
+.lt-choose-go {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0 20px;
+    font-family: var(--us-mono);
+    font-size: 0.74rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    text-decoration: none;
+    color: var(--void);
+    background: var(--blue-glow);
+    border: 1px solid var(--blue-glow);
+}
+.lt-choose-go:hover,
+.lt-choose-go:focus-visible {
+    background: var(--chalk);
+    border-color: var(--chalk);
+    color: var(--void);
+}
+
 /* The line on the outside of the envelope. Italic serif, so it
    is visibly a fragment of a letter and not a UI label. */
 .lt-teaser {
