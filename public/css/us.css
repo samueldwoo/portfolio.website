@@ -123,36 +123,25 @@
     overflow-x: clip;
 }
 
-/* No max-width, no centring. Text runs the full window like a
-   document nobody laid out. */
 /* ============================================================
-   THE BOX MOVES.
+   CENTRED, AND IT STAYS PUT.
 
-   Question 1 is CENTRED — first impression, so it has to look
-   deliberate. Every answer after that lands the box somewhere
-   else on the page, and the joke is that nothing explains why.
+   The box used to move: question 1 centred, then every answer
+   landed it in a different corner. That is reverted — it was
+   funnier described than used, and on a phone there was no room
+   to move sideways without clipping a 20em input, so it degraded
+   to a small vertical hop that read as a layout bug rather than
+   a joke.
 
-   THE SPOTS ARE DELIBERATE, NOT RANDOM. `data-spot` is set by
-   the script from the step index, so the same question always
-   appears in the same place: reproducible, testable, and it
-   cannot land twice in a row somewhere useless. Math.random()
-   here would eventually put the input under her thumb or half
-   off the screen, and "funny" stops being funny at that point.
+   One position, both axes, no surprises. `svh` rather than `vh`
+   so the iOS URL bar collapsing does not shift the question
+   under her while she is answering it.
 
-   CONSTRAINTS THE JOKE IS NOT ALLOWED TO BREAK:
-     - the input and button stay fully on screen at 320px
-     - nothing lands under the notch or the home indicator
-     - no horizontal overflow (the mobile audit already caught
-       one of those on another page)
-     - 44px targets and the 16px input floor are untouched
-   So the offsets are percentages of the VIEWPORT with generous
-   insets, not fixed pixel jumps, and the phone gets a narrower
-   range than the desktop.
-
-   No transition. It should CUT to the new place — a slide would
-   read as an animation somebody wrote, which is the opposite of
-   the effect. That also means prefers-reduced-motion has nothing
-   to withdraw.
+   `overflow-x: clip` above and the input's auto margins below are
+   what remain of that experiment. Both are worth keeping: the
+   clip is a free guarantee against any future transform, and the
+   margins are what actually centre a 20em input inside a centred
+   column.
    ============================================================ */
 
 .crude-wrap {
