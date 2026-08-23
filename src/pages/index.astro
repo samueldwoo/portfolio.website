@@ -560,6 +560,25 @@ const reachAxisTicks = AXIS_TICKS.map((t) => `M${vbX(t)} 0.6 V5.4`).join(' ');
                                     <span class="book-spine" title={b.title}>
                                         <span class="book-title">{b.short ?? b.title}</span>
                                     </span>
+                                    {/* Foot mark, outside the vertical-writing context so it
+                                        stays upright. The oakleaf is the Rangers' actual
+                                        insignia, not an ornament I liked the look of: an
+                                        apprentice wears a bronze oakleaf and a qualified Ranger
+                                        a silver one, and book four is titled "Oakleaf Bearers"
+                                        (verified on Wikipedia). Books 1-6 are the apprentice
+                                        arc, which is the bronze one. Everything else gets a
+                                        plain imprint rule, the way a spine's foot usually
+                                        carries a publisher mark. */}
+                                    <span class="book-mark" aria-hidden="true">
+                                        {b.series === 'ra' ? (
+                                            <svg viewBox="0 0 16 16" class="book-oak" fill="none">
+                                                <path d="M8 1.4C6 3.2 6.9 4.6 5 4.9 6.6 5.8 4.6 7.2 3.4 7.6 5.1 8.4 3.4 10.2 3.3 11.3 5.1 11.2 6.1 10.5 7.1 12.2L8 14.2 8.9 12.2C9.9 10.5 10.9 11.2 12.7 11.3 12.6 10.2 10.9 8.4 12.6 7.6 11.4 7.2 9.4 5.8 11 4.9 9.1 4.6 10 3.2 8 1.4Z" />
+                                                <path d="M8 3.6V13.4" class="book-oak-rib" />
+                                            </svg>
+                                        ) : (
+                                            <span class="book-imprint"></span>
+                                        )}
+                                    </span>
                                     {/* Everything the spine cannot fit. A 26px-wide spine has
                                         room for a short title and nothing else, so the author,
                                         the reading state and the page count live here — real
