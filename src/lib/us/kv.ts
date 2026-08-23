@@ -219,7 +219,10 @@ function dateScore(date: string): number {
  * day is 23 or 25 hours long, +24h lands on the wrong side of midnight, and a
  * streak silently loses or double-counts a day once every spring.
  */
-function shiftDate(date: string, days: number): string {
+/* Exported because frames.ts needs the same day arithmetic and a second
+   implementation of it would be a second place for the DST bug above to come
+   back. One definition of "the day before, in the wing's timezone". */
+export function shiftDate(date: string, days: number): string {
   const at = Date.parse(`${date}T00:00:00Z`);
   if (Number.isNaN(at)) return date;
   return new Date(at + days * 86_400_000).toISOString().slice(0, 10);

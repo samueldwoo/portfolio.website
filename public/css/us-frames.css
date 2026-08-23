@@ -1,0 +1,330 @@
+/* ============================================================
+   us-frames.css — `line 04`, one photograph each per day.
+
+   Loaded by /stronger/vault/day after us.css (which owns every
+   token used here) and us-song.css (which owns .notice, .sr-only
+   and the wing's shared form primitives). Absolute paths, because
+   this page lives two segments deep.
+
+   ------------------------------------------------------------
+   THE ONE RULE, AND WHY THIS PAGE IS THE TEST OF IT
+
+   us.css's rule is that the PHOTOGRAPHS are the only warm,
+   saturated things in the wing. Every other page states that
+   rule; this one is almost entirely photographs, so it is the
+   page where the rule either holds or is exposed as decoration.
+
+   It holds by subtraction. There is no border colour, no tint,
+   no gradient, no blue anywhere near a frame — the chrome is
+   concrete grey on black and gets quieter the closer it sits to
+   an image. The pictures are the only colour on the page
+   because everything else has been drained on purpose.
+
+   ------------------------------------------------------------
+   NO ASPECT-RATIO CROPPING
+
+   A square grid would be tidier and it would also crop somebody
+   out of half the pictures. Portrait phone photographs are the
+   normal case here and they are allowed to be tall; the frame
+   holds a max-height instead, so a very tall picture is bounded
+   without ever being cut. Tidiness is not worth a cropped face.
+   ============================================================ */
+
+/* ------------------------------------------------------------
+   SHARED
+   ------------------------------------------------------------ */
+
+.fr-eyebrow {
+    font-family: var(--us-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--concrete-4);
+    margin: 0 0 16px;
+}
+
+/* ------------------------------------------------------------
+   TODAY — two equal frames
+
+   `1fr 1fr` at every width above the breakpoint and NOT
+   auto-fit/minmax: auto-fit would silently drop to one column
+   when a frame is narrow, and which of the two ends up on top
+   would then depend on the viewport. The order of these two is
+   a deliberate decision (see the page), so it must not be a
+   function of how wide the window happens to be.
+   ------------------------------------------------------------ */
+
+.fr-pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+    align-items: start;
+}
+
+@media (max-width: 620px) {
+    /* One column on a phone, viewer's own frame first — which is
+       the DOM order, so nothing needs reordering and no `order`
+       property can get out of step with the markup. */
+    .fr-pair { grid-template-columns: 1fr; gap: 26px; }
+}
+
+.fr-frame {
+    margin: 0;
+    min-width: 0;   /* or a wide image forces the grid track open */
+}
+
+/* "you" / "him". A word, never a colour — same call the clock
+   strip makes, and for the same reason: whose picture this is
+   IS the information. */
+.fr-who {
+    font-family: var(--us-mono);
+    font-size: 0.66rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--concrete-4);
+    margin: 0 0 8px;
+}
+
+.fr-img {
+    display: block;
+    width: 100%;
+    height: auto;
+    /* Bounded, not cropped. A tall portrait shot stops growing
+       rather than being cut — see the header. */
+    max-height: 76vh;
+    object-fit: contain;
+    background: var(--machine);
+    border: 1px solid var(--concrete-1);
+    border-radius: 2px;
+}
+
+.fr-cap {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 10px 0 0;
+}
+
+/* The line under the picture. Serif, so it reads as somebody's
+   words rather than as a UI label — the same distinction
+   us-letters.css draws with .lt-teaser. */
+.fr-note {
+    font-family: var(--letter-serif, ui-serif, Georgia, serif);
+    font-size: 1rem;
+    line-height: 1.5;
+    color: var(--chalk-dim);
+}
+
+.fr-time {
+    font-family: var(--us-mono);
+    font-size: 0.64rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--concrete-3);
+}
+
+/* THE EMPTY HALF, which is the state this page is in most of the
+   time. A held box with a real sentence, sized so the grid does
+   not lurch when the other half is a tall photograph.
+
+   Dashed and NOT dimmed with opacity: us.css records the bug
+   where `opacity: .55` dragged prose to 1.97:1. The border style
+   carries "nothing here", the words carry the rest, and both stay
+   at full contrast. */
+.fr-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    min-height: 200px;
+    padding: 24px 20px;
+    margin: 0;
+    border: 1px dashed var(--concrete-2);
+    border-radius: 2px;
+    font-family: var(--us-mono);
+    font-size: 0.72rem;
+    line-height: 1.7;
+    letter-spacing: 0.04em;
+    color: var(--concrete-4);
+}
+
+/* ------------------------------------------------------------
+   POSTING
+   ------------------------------------------------------------ */
+
+.fr-form {
+    display: grid;
+    gap: 20px;
+    max-width: 46ch;
+}
+
+.fr-field { display: grid; gap: 8px; }
+
+.fr-label {
+    font-family: var(--us-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--chalk-dim);
+}
+.fr-optional { color: var(--concrete-3); }
+
+/* 16px MINIMUM on both controls, and this is not a preference:
+   iOS Safari zooms the whole page when a focused input's text is
+   under 16px, and the zoom does not undo itself. Everything else
+   in the wing holds this floor too. */
+.fr-file,
+.fr-input {
+    font-family: var(--us-mono);
+    font-size: 16px;
+    color: var(--chalk-dim);
+    background: var(--machine);
+    border: 1px solid var(--concrete-2);
+    border-radius: 2px;
+    padding: 12px 14px;
+    min-height: 44px;
+    width: 100%;
+}
+.fr-file { padding: 10px 12px; }
+
+.fr-input:focus-visible,
+.fr-file:focus-visible,
+.fr-go:focus-visible {
+    outline: 2px solid var(--blue-light);
+    outline-offset: 2px;
+}
+
+.fr-hint {
+    font-family: var(--us-mono);
+    font-size: 0.68rem;
+    line-height: 1.65;
+    letter-spacing: 0.03em;
+    color: var(--concrete-4);
+    margin: 0;
+}
+/* "you already put one up today". A word-carried warning — no
+   colour is doing the work on its own. */
+.fr-hint--warn { color: var(--chalk-dim); }
+
+.fr-go {
+    justify-self: start;
+    min-height: 44px;
+    padding: 0 22px;
+    font-family: var(--us-mono);
+    font-size: 0.74rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--void);
+    background: var(--blue-glow);
+    border: 1px solid var(--blue-glow);
+    border-radius: 2px;
+    cursor: pointer;
+}
+.fr-go:hover:not(:disabled) {
+    background: var(--chalk);
+    border-color: var(--chalk);
+}
+.fr-go:disabled {
+    /* Greyed by BACKGROUND, not by opacity, so the label keeps its
+       measured contrast while it is uploading. */
+    background: var(--concrete-2);
+    border-color: var(--concrete-2);
+    color: var(--chalk-dim);
+    cursor: default;
+}
+
+/* "shrinking it…" / "sending…". Spoken by role="status", so it is
+   announced without stealing focus. */
+.fr-status {
+    font-family: var(--us-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--blue-glow);
+    margin: 0;
+    min-height: 1em;   /* reserved, so appearing text does not shift the button */
+}
+
+/* ------------------------------------------------------------
+   THE WEEK BEHIND
+
+   Quieter than today in every dimension: smaller, lower
+   contrast labels, lazy-loaded. It is a glance backward and it
+   must not compete with the two frames above it.
+   ------------------------------------------------------------ */
+
+.fr-week-list {
+    display: grid;
+    gap: 26px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.fr-day-label {
+    font-family: var(--us-mono);
+    font-size: 0.64rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--concrete-3);
+    margin: 0 0 8px;
+}
+
+.fr-day-pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    align-items: start;
+}
+
+.fr-thumb { margin: 0; min-width: 0; }
+
+.fr-thumb-img {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-height: 40vh;
+    object-fit: contain;
+    background: var(--machine);
+    border: 1px solid var(--concrete-1);
+    border-radius: 2px;
+}
+
+/* The held box for a day only one of them posted on. Empty and
+   aria-hidden — it exists so the other's picture does not slide
+   across the row, and it says nothing because there is nothing
+   to say that "the day before this one" has not already said. */
+.fr-thumb--none {
+    min-height: 96px;
+    border: 1px dashed var(--concrete-1);
+    border-radius: 2px;
+}
+
+.fr-thumb-cap {
+    font-family: var(--us-mono);
+    font-size: 0.62rem;
+    line-height: 1.6;
+    letter-spacing: 0.06em;
+    color: var(--concrete-4);
+    margin: 6px 0 0;
+}
+
+.fr-week-empty {
+    font-family: var(--us-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    color: var(--concrete-4);
+    margin: 22px 0 0;
+}
+
+/* ------------------------------------------------------------
+   REDUCED MOTION
+
+   There is nothing animated on this page, which is itself the
+   right answer for a grid of photographs — but the transition
+   on the button is a real one, so it is withdrawn here for
+   consistency with the rest of the wing.
+   ------------------------------------------------------------ */
+@media (prefers-reduced-motion: reduce) {
+    .fr-go { transition: none; }
+}

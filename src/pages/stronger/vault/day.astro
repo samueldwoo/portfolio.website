@@ -1,0 +1,539 @@
+---
+/**
+ * /stronger/vault/day — `line 04`. One photograph each, every day.
+ *
+ * ---------------------------------------------------------------------------
+ * THE SHAPE OF THE PAGE, AND WHY IT IS TWO COLUMNS AND NOT A FEED
+ *
+ * Today is one row of two frames, hers and his, side by side and the same size.
+ * That is the entire layout, and every alternative was worse:
+ *
+ *   A FEED, newest first, would put whoever posted later on top, which invents a
+ *   ranking between two people who are not competing and makes "he posted first
+ *   today" a visible fact with no meaning.
+ *
+ *   ONE BIG FRAME with the other tucked under it makes one of them the subject
+ *   and the other a reply.
+ *
+ *   A CAROUSEL hides half the content behind a gesture to save space that a
+ *   two-column grid does not need.
+ *
+ * Equal size, side by side, in a fixed order that never changes. Same reasoning
+ * as the mutual song page, which arrived at the same answer for the same reason.
+ *
+ * ---------------------------------------------------------------------------
+ * THE EMPTY HALF IS A REAL THING AND NOT A GAP
+ *
+ * Most of the time exactly one of the two frames will be missing, because they
+ * are nine hours apart and one of them is asleep. So the empty half is the state
+ * this page is in more often than any other, and it gets a real box with a real
+ * sentence in it rather than a collapse — a grid that reflows depending on who has
+ * posted makes the page feel broken by the ordinary case.
+ *
+ * ---------------------------------------------------------------------------
+ * WHAT IS DELIBERATELY ABSENT
+ *
+ * No reactions, no likes, no counts, no "seen at". The studio is where a
+ * photograph gets a note written about it; this is where one gets looked at. A
+ * reaction affordance here would turn a glance into an obligation, and the entire
+ * pitch of this feature is that it costs nothing to use.
+ */
+
+import { HER_NAME, SESSION_SECRET, hasKV } from '../../../lib/us/config';
+import { readCookie, verify } from '../../../lib/us/session';
+import { wingDate, wingDateLabel } from '../../../lib/us/kv';
+import { touch } from '../../../lib/us/presence';
+import { identify, type Who } from '../../../lib/us/together';
+import {
+  FRAME_DAYS,
+  MAX_BYTES,
+  NOTE_MAX,
+  framesAvailable,
+  getDaysSafe,
+  withUrls,
+  type VisibleDayFrames,
+} from '../../../lib/us/frames';
+
+export const prerender = false;
+
+const secret = SESSION_SECRET();
+const session = secret ? verify(secret, 'session', readCookie(Astro.cookies, 'session', Astro.url)) : null;
+if (!session) return Astro.redirect('/stronger', 302);
+
+const viewer: Who = identify(Astro.cookies, Astro.url) ?? 'her';
+const them: Who = viewer === 'her' ? 'him' : 'her';
+await touch(viewer);
+
+const her = HER_NAME();
+const today = wingDate();
+
+/* ---- the week -------------------------------------------------------------
+   One pipelined read for the metadata, then the presigns in parallel. `reachable`
+   is carried through rather than swallowed: "nothing here yet" and "I could not
+   ask" are different sentences and she should never be shown the first one when
+   the second is true. */
+const { days: stored, reachable } = await getDaysSafe(today, FRAME_DAYS);
+const available = framesAvailable();
+const week: VisibleDayFrames[] = available ? await withUrls(stored) : [];
+
+const todayRow = week[0] ?? { date: today, her: null, him: null };
+const earlier = week.slice(1).filter((d) => d.her || d.him);
+
+const mine = todayRow[viewer];
+const theirs = todayRow[them];
+
+/* ---- outcomes from the no-JavaScript path ---------------------------------
+   Both paths land back here as a 303 with ?ok= or ?e=, written in her language
+   rather than in HTTP. */
+const okCode = Astro.url.searchParams.get('ok') ?? '';
+const errCode = Astro.url.searchParams.get('e') ?? '';
+
+const ERRORS: Record<string, string> = {
+  'no-photo': 'no photograph came through. Pick one and try again?',
+  'too-big': `that one is bigger than ${Math.round(MAX_BYTES / (1024 * 1024))}MB. A screenshot of it would work, or try again with JavaScript on and it will shrink it for you.`,
+  'not-an-image': "I could not read that as a photograph. If it came straight off an iPhone it may be a HEIC — opening it and re-saving, or screenshotting it, both work.",
+  'bad-upload': 'that upload cut out partway. Usually just signal — try it again?',
+  store: "that didn't save, and it is not your fault. Try again?",
+  rate: 'okay, easy. Give it a minute.',
+  unauthorized: 'your session ran out. Answer the questions again and you are back in.',
+  unconfigured: 'something is unplugged on my end. Not your fault.',
+  'cross-site': 'that request came from somewhere I do not recognise.',
+};
+const errText = errCode ? (ERRORS[errCode] ?? "that didn't go through. Try again?") : '';
+const posted = okCode === 'posted' && !errText;
+
+/* ---- copy ----------------------------------------------------------------- */
+
+/** `18:42`, in the poster's own timezone. Absent when the store could not say. */
+function clockOf(atMs: number, tz: string): string {
+  if (!atMs) return '';
+  try {
+    return new Intl.DateTimeFormat('en-GB', {
+      timeZone: tz, hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+    }).format(new Date(atMs));
+  } catch {
+    return '';
+  }
+}
+
+const whoWord = (w: Who): string => (w === viewer ? 'you' : w === 'her' ? (her || 'her') : 'him');
+---
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="dark">
+    <meta name="robots" content="noindex, nofollow, noarchive">
+    <meta name="referrer" content="no-referrer">
+    <title>[us]</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="apple-touch-icon" href="/assets/us/icons/apple-touch-icon.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="[us]">
+    <meta name="theme-color" content="#000000">
+    <!-- us.css first: it owns every token the others use. -->
+    <link rel="stylesheet" href="/css/us.css">
+    <link rel="stylesheet" href="/css/us-song.css">
+    <link rel="stylesheet" href="/css/us-frames.css">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23000'/%3E%3Ctext x='16' y='23' font-family='monospace' font-size='20' font-weight='700' text-anchor='middle' fill='%233e7bff'%3E%5B%5D%3C/text%3E%3C/svg%3E">
+</head>
+<body class="studio">
+<div class="studio-wrap">
+
+    <p class="studio-kicker">line 04 &middot; today, seen</p>
+
+    <h1 class="us-mark">
+        <span class="us-mark-bracket" aria-hidden="true">[</span>day<span
+              class="us-mark-bracket" aria-hidden="true">]</span>
+    </h1>
+
+    <p class="studio-lede">
+        One picture each. Whatever you were looking at.
+    </p>
+
+    {errText && <p class="notice" data-kind="bad" role="status">hm &mdash; {errText}</p>}
+    {posted && <p class="notice" data-kind="ok" role="status">that's up.</p>}
+
+    {!available && (
+        /* R2 absent. Said plainly, because photographs are bytes and there is no
+           degraded version of storing bytes — a spinner or an empty grid here
+           would be a lie about a configuration problem. */
+        <p class="notice" data-kind="warn" role="status">
+            This one needs the photo bucket wired up before it does anything.
+            Nothing is broken and nothing is lost.
+        </p>
+    )}
+
+    {available && !reachable && (
+        <p class="notice" data-kind="warn" role="status">
+            I can't reach the shelf, so this may be missing things. Anything either
+            of us posted is still there.
+        </p>
+    )}
+
+    {available && !hasKV() && reachable && (
+        <p class="notice" data-kind="warn" role="status">
+            dev &mdash; no Upstash, so captions and times are not being kept. The
+            pictures themselves are safe in the bucket.
+        </p>
+    )}
+
+    <hr class="studio-rule">
+
+    {/* ============================================================
+        TODAY — two frames, equal, in a fixed order.
+
+        `viewer` first is the one asymmetry, and it is the right one:
+        she is the person holding the phone, so her own half is where
+        the action is (posting, replacing). His is the half she came
+        to look at. Reversing that would put the thing she can do
+        second on every visit.
+        ============================================================ */}
+    <section class="fr-today" aria-labelledby="today-head">
+        <p class="fr-eyebrow" id="today-head">
+            {wingDateLabel(today)} &middot; one each
+        </p>
+
+        <div class="fr-pair">
+            {[viewer, them].map((w) => {
+                const f = w === viewer ? mine : theirs;
+                const tz = w === 'her' ? 'Europe/Paris' : 'America/Los_Angeles';
+                return (
+                    <figure class="fr-frame" data-whose={w === viewer ? 'mine' : 'theirs'}>
+                        <p class="fr-who">{whoWord(w)}</p>
+
+                        {f && f.url ? (
+                            <>
+                                {/* width/height are the aspect the client resizer
+                                    targets, so the box is reserved before the image
+                                    arrives and the page does not jump. `loading`
+                                    is eager for today: this is the content, not
+                                    something below the fold. */}
+                                <img
+                                    class="fr-img"
+                                    src={f.url}
+                                    alt={f.note
+                                        ? `${whoWord(w)}: ${f.note}`
+                                        : `a photograph ${w === viewer ? 'you' : whoWord(w)} posted today`}
+                                    loading="eager"
+                                    decoding="async"
+                                >
+                                <figcaption class="fr-cap">
+                                    {f.note && <span class="fr-note">{f.note}</span>}
+                                    {clockOf(f.atMs, tz) && (
+                                        /* "their time" ONLY on the other person's
+                                           frame. On her own it read "04:11 their
+                                           time" about herself, which is both wrong
+                                           and confusing — she does not need her own
+                                           timezone named, so it is simply the time. */
+                                        <span class="fr-time">
+                                            {clockOf(f.atMs, tz)}{w === viewer ? '' : ' their time'}
+                                        </span>
+                                    )}
+                                </figcaption>
+                            </>
+                        ) : f && !f.url ? (
+                            /* Metadata says there is one but signing failed. One
+                               picture lost, not the page — and it says which. */
+                            <p class="fr-empty">
+                                There is one here that I could not load. Refreshing
+                                usually fixes it.
+                            </p>
+                        ) : (
+                            /* THE COMMON CASE. Nine hours apart means one of these
+                               is usually empty, so it is a real box with a real
+                               sentence rather than a collapse. */
+                            <p class="fr-empty">
+                                {w === viewer
+                                    ? 'Nothing from you yet today.'
+                                    : `Nothing from ${whoWord(w)} yet today.`}
+                            </p>
+                        )}
+                    </figure>
+                );
+            })}
+        </div>
+    </section>
+
+    {available && (
+        <>
+            <hr class="studio-rule">
+
+            {/* ============================================================
+                POSTING
+
+                A REAL FORM with a real enctype, so it works with the
+                script absent — which for the one feature most likely to
+                be used from a phone is not a nicety. The script below
+                upgrades it: it shrinks the picture in a canvas first, so
+                what leaves her phone is a few hundred KB instead of
+                twelve megapixels.
+                ============================================================ */}
+            <section class="fr-post" id="post" aria-labelledby="post-head">
+                <p class="fr-eyebrow" id="post-head">
+                    {mine ? 'swap it for another one' : 'put one up'}
+                </p>
+
+                <form
+                    class="fr-form"
+                    method="post"
+                    action="/api/us/frame"
+                    enctype="multipart/form-data"
+                    data-fr-form
+                >
+                    <div class="fr-field">
+                        <label class="fr-label" for="fr-photo">A photograph</label>
+                        {/* `capture` is absent on purpose: it forces the camera on
+                            some phones and skips the camera roll, and most of these
+                            will be something taken earlier in the day. */}
+                        <input
+                            class="fr-file"
+                            type="file"
+                            id="fr-photo"
+                            name="photo"
+                            accept="image/jpeg,image/png,image/webp"
+                            required
+                            aria-describedby="fr-photo-hint"
+                        >
+                        <p class="fr-hint" id="fr-photo-hint">
+                            JPEG, PNG or WebP. It gets shrunk before it is sent, so
+                            size does not matter much.
+                        </p>
+                    </div>
+
+                    <div class="fr-field">
+                        <label class="fr-label" for="fr-note">
+                            A line about it <span class="fr-optional">&mdash; optional</span>
+                        </label>
+                        <input
+                            class="fr-input"
+                            type="text"
+                            id="fr-note"
+                            name="note"
+                            maxlength={NOTE_MAX}
+                            autocomplete="off"
+                            placeholder=""
+                            aria-describedby="fr-note-hint"
+                        >
+                        <p class="fr-hint" id="fr-note-hint">
+                            Up to {NOTE_MAX} characters. Leave it blank and the
+                            picture stands on its own.
+                        </p>
+                    </div>
+
+                    {mine && (
+                        <p class="fr-hint fr-hint--warn">
+                            You already put one up today. A new one replaces it.
+                        </p>
+                    )}
+
+                    <button class="fr-go" type="submit" data-fr-go>put it up</button>
+                    <p class="fr-status" data-fr-status role="status"></p>
+                </form>
+            </section>
+        </>
+    )}
+
+    {earlier.length > 0 && (
+        <>
+            <hr class="studio-rule">
+
+            {/* ============================================================
+                THE WEEK BEHIND
+
+                Small, and only the last few days — see frames.ts on why
+                the window is a week while the retention is forever. This
+                is a glance backward, not an archive; the studio is the
+                archive and it is a different room.
+                ============================================================ */}
+            <section class="fr-week" aria-labelledby="week-head">
+                <p class="fr-eyebrow" id="week-head">the days before this one</p>
+
+                <ul class="fr-week-list">
+                    {earlier.map((d) => (
+                        <li class="fr-day">
+                            <p class="fr-day-label">{wingDateLabel(d.date)}</p>
+                            <div class="fr-day-pair">
+                                {[viewer, them].map((w) => {
+                                    const f = d[w];
+                                    return f && f.url ? (
+                                        <figure class="fr-thumb">
+                                            <img
+                                                class="fr-thumb-img"
+                                                src={f.url}
+                                                alt={f.note
+                                                    ? `${whoWord(w)}, ${wingDateLabel(d.date)}: ${f.note}`
+                                                    : `${whoWord(w)}, ${wingDateLabel(d.date)}`}
+                                                loading="lazy"
+                                                decoding="async"
+                                            >
+                                            <figcaption class="fr-thumb-cap">
+                                                {whoWord(w)}{f.note ? ` — ${f.note}` : ''}
+                                            </figcaption>
+                                        </figure>
+                                    ) : (
+                                        /* A held box, so a day where only one of
+                                           them posted does not reflow the row and
+                                           make the other's picture jump sideways. */
+                                        <div class="fr-thumb fr-thumb--none" aria-hidden="true"></div>
+                                    );
+                                })}
+                            </div>
+                        </li>
+                    ))}
+                </ul>
+            </section>
+        </>
+    )}
+
+    {available && earlier.length === 0 && (todayRow.her || todayRow.him) && (
+        <p class="fr-week-empty">Nothing before today yet. This is the first one.</p>
+    )}
+
+    <hr class="studio-rule">
+
+    <div class="studio-foot">
+        <span class="studio-tag">Stronger for it.</span>
+        <a href="/stronger/vault">&larr; back to the room</a>
+    </div>
+</div>
+
+<script is:inline define:vars={{ maxBytes: MAX_BYTES }}>
+/**
+ * SHRINK IT BEFORE IT LEAVES THE PHONE.
+ *
+ * The whole reason this is client side rather than a resize in the function:
+ * server-side image processing means `sharp`, which is a native binary an order of
+ * magnitude larger than the rest of this project put together, and it would be
+ * pulled in to do a job the browser already has hardware for. Doing it here also
+ * means the twelve megabytes never crosses the network at all, which on her phone
+ * on a train is the part that actually matters.
+ *
+ * IT IS AN UPGRADE, NOT A REQUIREMENT. The form is a real multipart form with a
+ * real action, so with this script absent, blocked, or thrown, the original file
+ * is posted and the endpoint accepts it up to MAX_BYTES. Every branch below that
+ * fails falls back to submitting the form untouched — there is no path where a
+ * resize error costs her the upload.
+ */
+(function () {
+    'use strict';
+
+    var LONG_EDGE = 1600;   // Plenty for a phone screen at 3x, and small.
+    var QUALITY = 0.82;     // JPEG q82 is the knee of the curve for photographs.
+
+    var form = document.querySelector('[data-fr-form]');
+    if (!form) return;
+    var file = form.querySelector('input[type=file]');
+    var go = form.querySelector('[data-fr-go]');
+    var status = form.querySelector('[data-fr-status]');
+
+    function say(text) { if (status) status.textContent = text || ''; }
+
+    /* Feature-detect everything used below rather than assuming. An older browser
+       that lacks any one of these submits the plain form, which works. */
+    var canResize = !!(
+        window.HTMLCanvasElement &&
+        HTMLCanvasElement.prototype.toBlob &&
+        window.FileReader &&
+        window.FormData &&
+        window.fetch
+    );
+    if (!canResize) return;
+
+    function shrink(f) {
+        return new Promise(function (resolve, reject) {
+            var url = URL.createObjectURL(f);
+            var img = new Image();
+            img.onload = function () {
+                URL.revokeObjectURL(url);
+                var w = img.naturalWidth, h = img.naturalHeight;
+                if (!w || !h) return reject(new Error('no dimensions'));
+
+                var scale = Math.min(1, LONG_EDGE / Math.max(w, h));
+                /* Already small enough AND already an accepted type: send it
+                   untouched rather than re-encoding, which would only lose
+                   quality for nothing. */
+                if (scale === 1 && f.size < maxBytes * 0.5) return resolve(f);
+
+                var cw = Math.max(1, Math.round(w * scale));
+                var ch = Math.max(1, Math.round(h * scale));
+                var canvas = document.createElement('canvas');
+                canvas.width = cw; canvas.height = ch;
+                var ctx = canvas.getContext('2d');
+                if (!ctx) return reject(new Error('no 2d context'));
+                ctx.drawImage(img, 0, 0, cw, ch);
+
+                canvas.toBlob(function (blob) {
+                    if (!blob) return reject(new Error('toBlob gave nothing'));
+                    /* JPEG, always. The endpoint sniffs the bytes, so the name is
+                       cosmetic — but a canvas re-encode of a photograph is smaller
+                       as JPEG than as PNG by a wide margin, and PNG is what
+                       toBlob defaults to. */
+                    resolve(new File([blob], 'frame.jpg', { type: 'image/jpeg' }));
+                }, 'image/jpeg', QUALITY);
+            };
+            img.onerror = function () {
+                URL.revokeObjectURL(url);
+                /* HEIC lands here on browsers that cannot decode it. The plain
+                   form is the fallback and the endpoint's message names HEIC. */
+                reject(new Error('could not decode'));
+            };
+            img.src = url;
+        });
+    }
+
+    form.addEventListener('submit', function (ev) {
+        if (!file || !file.files || !file.files[0]) return;   // let the form complain
+        var original = file.files[0];
+
+        ev.preventDefault();
+        if (go) go.disabled = true;
+        say('shrinking it…');
+
+        shrink(original).then(function (small) {
+            var body = new FormData();
+            body.append('photo', small, 'frame.jpg');
+            var note = form.querySelector('input[name=note]');
+            if (note) body.append('note', note.value);
+
+            say('sending…');
+            return fetch(form.action, {
+                method: 'POST',
+                body: body,
+                /* Accept decides the response shape — see wantsJson() in the
+                   endpoint. The Content-Type is set by FormData, boundary and all,
+                   and must NOT be set by hand. */
+                headers: { Accept: 'application/json' },
+                credentials: 'same-origin',
+            });
+        }).then(function (res) {
+            return res.json().catch(function () { return { ok: res.ok }; });
+        }).then(function (data) {
+            if (data && data.ok) {
+                /* Reload rather than patch the DOM: the new frame needs a freshly
+                   signed URL, and the server is the only thing that can mint one. */
+                window.location.assign('/stronger/vault/day?ok=posted#post');
+                return;
+            }
+            say('');
+            if (go) go.disabled = false;
+            /* Hand the real form the job. It re-posts the ORIGINAL file, which is
+               the right move when the failure was the resize or a rejected
+               re-encode — and the endpoint's own error page explains the rest. */
+            form.submit();
+        }).catch(function () {
+            say('');
+            if (go) go.disabled = false;
+            form.submit();
+        });
+    });
+})();
+</script>
+</body>
+</html>

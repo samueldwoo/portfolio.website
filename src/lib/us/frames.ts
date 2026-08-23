@@ -1,0 +1,506 @@
+/**
+ * frames.ts — one photograph each, every day. `line 04`.
+ *
+ * ---------------------------------------------------------------------------
+ * WHAT WAS MISSING, AND WHY THE STUDIO IS NOT IT
+ *
+ * The studio (`line 02`) holds the CURATED PAST: twelve photographs chosen
+ * because they are the twelve, each with a note written about it afterwards, on a
+ * rail she moves along. It is a room you visit.
+ *
+ * There was nothing at all for TODAY. Not the twelve, not a memory, not anything
+ * worth keeping — the coffee, the sky out of the window on the walk home, the dog
+ * somebody else was walking, the mess on the desk at 1am. The whole content of it
+ * is "this is what I was looking at". Nobody would ever choose one of these for
+ * the studio, and that is exactly the point: a photograph you would only send to
+ * one person is a different object from a photograph you would keep.
+ *
+ * So `line 04` is deliberately the opposite of the studio in every axis. Two
+ * frames a day, one each, side by side. No chapters, no reveal, no hold gesture,
+ * no scroll. A caption, if there is one worth writing. Then tomorrow, two more.
+ *
+ * ---------------------------------------------------------------------------
+ * IT KEEPS EVERYTHING AND SHOWS A WEEK
+ *
+ * The display window is seven days. The bytes are kept FOREVER.
+ *
+ * Those are two separate decisions and both are deliberate. A page showing every
+ * frame since the beginning becomes an archive, and an archive of snapshots is a
+ * second studio with a worse curator — the point of a daily photograph is that it
+ * is about today and stops mattering, and a feature that quietly turns into a
+ * scroll of four hundred images has lost the thing that made it casual.
+ *
+ * But DELETING them is unthinkable and it would be a strange thing to build. They
+ * are photographs of each other. Storage is the cheapest part of this entire
+ * project — a year of two frames a day at 400KB is about 290MB, well inside R2's
+ * free tier — and the cost of being wrong about "she will not want these" is
+ * unrecoverable. So retention is forever, and only the window is a week.
+ *
+ * That also means "show me more than a week" is a future feature and not a
+ * migration. The data is already there.
+ *
+ * ---------------------------------------------------------------------------
+ * THE SPLIT: BYTES IN R2, WORDS IN UPSTASH
+ *
+ * R2 holds the image at a key this file derives — `frames/<date>/<who>.<ext>` —
+ * and NEVER at a name that came from the client. The upload's filename is
+ * discarded entirely: the date is the server's, `who` comes from the session
+ * cookie, and the extension comes from sniffing the bytes. There is no
+ * client-controlled character anywhere in the key, so there is no traversal to
+ * escape and no key to collide with.
+ *
+ * Upstash holds one hash per day with both captions and both timestamps, so the
+ * whole week's metadata is a single pipelined read rather than fourteen HEADs
+ * against R2.
+ *
+ * WITHOUT R2 THERE IS NO FEATURE, and the page says so rather than pretending.
+ * Photographs are bytes; there is no degraded version of storing bytes. Without
+ * UPSTASH the frames still render — they are in R2, they are never lost — but the
+ * captions and timestamps are unavailable, because those live in the hash. Both
+ * of those are stated on the page instead of being silently absent.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THE UPLOAD IS PROXIED AND NOT A PRESIGNED PUT
+ *
+ * A presigned PUT handed to the browser is one fewer hop and the wrong shape
+ * here: it means the client names the object. Even signed to a single key it
+ * moves the decision about WHERE bytes land to the least trusted participant, and
+ * the whole reason photos are in R2 rather than in `public/` is that this wing
+ * does not do that.
+ *
+ * Proxying costs one hop and buys: the key is server-derived, the size is checked
+ * against real bytes rather than a promise, and the type is sniffed from the
+ * magic number rather than believed from a header. The client resizes first (see
+ * the page), so what arrives is a few hundred KB and comfortably inside the
+ * serverless body limit.
+ */
+
+import { AwsClient } from 'aws4fetch';
+import { hasKV, hasR2, kvConfig, r2Config, r2Endpoint } from './config';
+import { presignedUrl } from './photos';
+import { WING_TZ, shiftDate, wingDate } from './kv';
+import type { Who } from './together';
+
+/* ============================================================================
+   THE SHAPE
+   ========================================================================= */
+
+/** How many days the strip shows. Retention is separate — see the file header. */
+export const FRAME_DAYS = 7;
+
+/**
+ * Caption cap.
+ *
+ * The same 200 as a song's note, and for the same reason: this is a line under a
+ * picture, not a post. Anything that wants four hundred words wants the letters
+ * page, which exists and is built for it.
+ */
+export const NOTE_MAX = 200;
+
+/**
+ * The most bytes an upload may be.
+ *
+ * FOUR megabytes, not the platform limit. Vercel's serverless request body caps
+ * at 4.5MB and hitting a PLATFORM limit produces a failure this code never sees
+ * and cannot explain — she would get an opaque 413 from infrastructure with no
+ * sentence attached. Refusing at 4MB means the refusal is ours, so it can say
+ * something true and suggest the fix.
+ *
+ * The page resizes before uploading, so a normal phone photograph arrives at
+ * 200–500KB and never comes near this. This is the guard for the no-JavaScript
+ * path, where the original 12-megapixel file is what gets sent.
+ */
+export const MAX_BYTES = 4 * 1024 * 1024;
+
+/**
+ * What an image may be, by SNIFFED magic number — never by declared type.
+ *
+ * `Content-Type` on a multipart part is a claim made by the client, and the
+ * client is a phone browser at best and a script at worst. The bytes are the
+ * fact. So the declared type is not consulted at all: the first bytes decide
+ * both whether this is an image and what extension the key gets.
+ *
+ * GIF and AVIF are absent deliberately. GIF invites an animation, which is a
+ * different feature; AVIF encodes beautifully and decodes inconsistently on the
+ * older phones this has to work on. Three formats cover every camera either of
+ * them owns.
+ */
+export const ALLOWED = ['image/jpeg', 'image/png', 'image/webp'] as const;
+export type FrameType = (typeof ALLOWED)[number];
+
+export interface Sniffed {
+  type: FrameType;
+  /** The extension the key gets. Server-derived, never from a filename. */
+  ext: 'jpg' | 'png' | 'webp';
+}
+
+/**
+ * What kind of image these bytes actually are, or null.
+ *
+ * Magic numbers only, and short ones — this is a format check, not a validator.
+ * A file that passes here is still only "plausibly a JPEG"; what makes that safe
+ * is that it is stored under a server-chosen key with a server-chosen
+ * Content-Type and served from R2's origin rather than from this domain, so a
+ * crafted payload has nowhere to execute.
+ */
+export function sniff(bytes: Uint8Array): Sniffed | null {
+  if (bytes.length < 12) return null;
+
+  // FF D8 FF — JPEG SOI, every variant.
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return { type: 'image/jpeg', ext: 'jpg' };
+  }
+  // 89 50 4E 47 0D 0A 1A 0A — the full PNG signature, all eight bytes. The
+  // trailing CR/LF/EOF bytes exist to catch transfer corruption, so checking
+  // only "\x89PNG" would accept a file the decoder then rejects.
+  if (
+    bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47 &&
+    bytes[4] === 0x0d && bytes[5] === 0x0a && bytes[6] === 0x1a && bytes[7] === 0x0a
+  ) {
+    return { type: 'image/png', ext: 'png' };
+  }
+  // RIFF....WEBP — a container check: bytes 0-3 'RIFF', bytes 8-11 'WEBP'. The
+  // four bytes between are the length and are not part of the signature.
+  if (
+    bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
+    bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50
+  ) {
+    return { type: 'image/webp', ext: 'webp' };
+  }
+  return null;
+}
+
+/** One person's frame for one day, as STORED. */
+export interface Frame {
+  /** `jpg` | `png` | `webp`. Needed to rebuild the key. */
+  ext: string;
+  /** Epoch ms it was posted. */
+  atMs: number;
+  /** Her or his words under it. '' when there are none, which is common. */
+  note: string;
+}
+
+/** One day, both sides. Either may be absent. */
+export interface DayFrames {
+  /** `YYYY-MM-DD` in WING_TZ. */
+  date: string;
+  her: Frame | null;
+  him: Frame | null;
+}
+
+/** A frame with a URL an <img> can actually load. */
+export interface VisibleFrame extends Frame {
+  /** A short-lived presigned GET. '' when R2 could not sign it. */
+  url: string;
+}
+
+export interface VisibleDayFrames {
+  date: string;
+  her: VisibleFrame | null;
+  him: VisibleFrame | null;
+}
+
+/* ============================================================================
+   KEYS
+   ========================================================================= */
+
+/**
+ * The R2 object key. Every component is server-derived.
+ *
+ * `date` is produced by wingDate()/shiftWingDate() and is therefore always
+ * `YYYY-MM-DD`; `who` is a union of two literals from the session cookie; `ext`
+ * comes from sniff(). None of the three can carry a `/`, a `.` or a `%`, so this
+ * cannot be walked out of its prefix — which is asserted rather than assumed, in
+ * frameKey's guard below, because the whole safety of this feature rests on it.
+ */
+export function frameKey(date: string, who: Who, ext: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    throw new Error(`frames: refusing to build a key from a non-date: ${JSON.stringify(date)}`);
+  }
+  if (who !== 'her' && who !== 'him') {
+    throw new Error(`frames: refusing to build a key for: ${JSON.stringify(who)}`);
+  }
+  if (!/^(jpg|png|webp)$/.test(ext)) {
+    throw new Error(`frames: refusing to build a key with extension: ${JSON.stringify(ext)}`);
+  }
+  return `frames/${date}/${who}.${ext}`;
+}
+
+/** `us:frame:` — distinct from us:song:, us:mark:, us:letter:, us:together:. */
+const DAY_KEY = (date: string) => `us:frame:${date}`;
+
+/* ============================================================================
+   TIDYING
+   ========================================================================= */
+
+/**
+ * A caption, safe to store.
+ *
+ * Newlines to spaces because this renders on one or two lines under a picture and
+ * a pasted paragraph would break the grid. Control characters out. Truncated
+ * rather than refused: a caption two characters over the cap is not worth an
+ * error message.
+ */
+export function tidyNote(raw: unknown): string {
+  const s = String(raw ?? '')
+    .replace(/[\r\n\t]+/g, ' ')
+    // eslint-disable-next-line no-control-regex
+    .replace(/[ -]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return s.length <= NOTE_MAX ? s : s.slice(0, NOTE_MAX).trimEnd();
+}
+
+/* ============================================================================
+   THE STORE
+   ========================================================================= */
+
+const TIMEOUT_MS = 4000;
+
+export class FramesError extends Error {}
+
+export type Tier = 'upstash' | 'memory';
+
+/** Metadata tier. Bytes are always R2 — there is no fallback for bytes. */
+export function framesTier(): Tier {
+  return hasKV() ? 'upstash' : 'memory';
+}
+
+/** Dev-only, and per-instance. See the header on why this is not a real tier. */
+const memory = new Map<string, DayFrames>();
+
+async function redis(cmds: (string | number)[][]): Promise<unknown[]> {
+  const { url, token } = kvConfig();
+  if (!url || !token) throw new FramesError('upstash is not configured');
+
+  let res: Response;
+  try {
+    res = await fetch(`${url.replace(/\/+$/, '')}/pipeline`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(cmds.map((c) => c.map(String))),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+  } catch (err) {
+    throw new FramesError('upstash unreachable', { cause: err });
+  }
+  if (!res.ok) throw new FramesError(`upstash HTTP ${res.status}`);
+
+  let parsed: Array<{ result?: unknown; error?: string }>;
+  try {
+    parsed = (await res.json()) as Array<{ result?: unknown; error?: string }>;
+  } catch (err) {
+    throw new FramesError('upstash response was not JSON', { cause: err });
+  }
+  if (!Array.isArray(parsed) || parsed.length !== cmds.length) {
+    throw new FramesError('upstash returned a malformed pipeline response');
+  }
+  return parsed.map((e, i) => {
+    if (e?.error) throw new FramesError(`upstash ${String(cmds[i][0])} failed: ${e.error}`);
+    return e?.result ?? null;
+  });
+}
+
+/** Upstash returns a hash as a flat array. Folded here, once. */
+function foldHash(raw: unknown): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (Array.isArray(raw)) {
+    for (let i = 0; i + 1 < raw.length; i += 2) out[String(raw[i])] = String(raw[i + 1]);
+  } else if (raw && typeof raw === 'object') {
+    for (const [k, v] of Object.entries(raw as Record<string, unknown>)) out[k] = String(v);
+  }
+  return out;
+}
+
+function frameFrom(h: Record<string, string>, who: Who): Frame | null {
+  const ext = h[`${who}Ext`] ?? '';
+  if (!/^(jpg|png|webp)$/.test(ext)) return null;
+  const atMs = Number(h[`${who}At`] ?? 0);
+  return {
+    ext,
+    atMs: Number.isFinite(atMs) && atMs > 0 ? atMs : 0,
+    note: h[`${who}Note`] ?? '',
+  };
+}
+
+/**
+ * R2 client for the byte writes. Header-signed, same as kv.ts's document writes.
+ *
+ * Returns null rather than throwing when unconfigured, so callers decide whether
+ * a missing bucket is fatal — for an upload it is; for a read it is a blank page
+ * with an explanation.
+ */
+function r2(): { client: AwsClient; base: string } | null {
+  if (!hasR2()) return null;
+  const { accessKeyId, secretAccessKey, bucket } = r2Config();
+  const endpoint = r2Endpoint();
+  if (!accessKeyId || !secretAccessKey || !bucket || !endpoint) return null;
+  return {
+    client: new AwsClient({ accessKeyId, secretAccessKey, service: 's3', region: 'auto' }),
+    base: `${endpoint}/${bucket}`,
+  };
+}
+
+/**
+ * Store one frame: bytes to R2, then metadata to the day's hash.
+ *
+ * THE ORDER MATTERS AND IT IS BYTES FIRST. If the metadata write fails after the
+ * bytes land, the result is an orphaned object in R2 that nothing points at —
+ * invisible, harmless, and overwritten by her next attempt. If the metadata
+ * landed first and the bytes failed, the page would say she posted a photograph
+ * and render a broken image, which is a worse thing to show her than nothing.
+ *
+ * Overwriting is deliberate: a second upload on the same day REPLACES the first,
+ * because "actually, this one" is the normal case and there is no version of this
+ * feature where she wants a stack of nine attempts at Tuesday.
+ */
+export async function putFrame(input: {
+  date: string;
+  who: Who;
+  bytes: Uint8Array;
+  sniffed: Sniffed;
+  note: string;
+  atMs: number;
+}): Promise<Frame> {
+  const { date, who, bytes, sniffed, note, atMs } = input;
+
+  const bucket = r2();
+  if (!bucket) throw new FramesError('r2 is not configured, so there is nowhere to put a photograph');
+
+  const key = frameKey(date, who, sniffed.ext);
+
+  let res: Response;
+  try {
+    res = await bucket.client.fetch(`${bucket.base}/${key}`, {
+      method: 'PUT',
+      headers: {
+        // The SNIFFED type, never the declared one. This is the value R2 hands
+        // back on the presigned GET, so it is what the browser will believe.
+        'Content-Type': sniffed.type,
+        // Nothing else may cache a private photograph.
+        'Cache-Control': 'private, max-age=0, no-store',
+      },
+      /* An explicit ArrayBuffer slice rather than the Uint8Array itself. TS's
+         BodyInit wants `Uint8Array<ArrayBuffer>` and a view read off a request
+         body is `Uint8Array<ArrayBufferLike>`, which is not the same type; the
+         slice also guarantees the bytes sent are exactly this view's range and
+         not the whole backing buffer it may be a window onto. */
+      body: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch (err) {
+    throw new FramesError('r2 unreachable', { cause: err });
+  }
+  if (!res.ok) throw new FramesError(`r2 PUT HTTP ${res.status}`);
+
+  const frame: Frame = { ext: sniffed.ext, atMs, note };
+
+  if (!hasKV()) {
+    // Dev without Upstash. The bytes are safely in R2 either way.
+    const day = memory.get(date) ?? { date, her: null, him: null };
+    day[who] = frame;
+    memory.set(date, day);
+    return frame;
+  }
+
+  /* HSET of that person's fields only — never a whole-object write. Both of them
+     posting within the same second is the case this feature is designed to
+     produce, and a read-modify-write would make one of the two disappear. */
+  await redis([
+    [
+      'HSET',
+      DAY_KEY(date),
+      `${who}Ext`, frame.ext,
+      `${who}At`, String(frame.atMs),
+      `${who}Note`, frame.note,
+    ],
+  ]);
+  return frame;
+}
+
+/**
+ * The last `days` days, newest first, today always present.
+ *
+ * One pipelined read for the whole window. Days with nothing in them come back as
+ * a record with both sides null rather than being omitted, because the page draws
+ * a row per day and a missing Wednesday should read as "neither of us posted"
+ * rather than as Wednesday not existing.
+ */
+export async function getDays(
+  today: string = wingDate(),
+  days: number = FRAME_DAYS,
+): Promise<DayFrames[]> {
+  const dates: string[] = [];
+  for (let i = 0; i < Math.max(1, days); i += 1) dates.push(shiftDate(today, -i));
+
+  if (!hasKV()) {
+    return dates.map((d) => memory.get(d) ?? { date: d, her: null, him: null });
+  }
+
+  const out = await redis(dates.map((d) => ['HGETALL', DAY_KEY(d)]));
+  return dates.map((date, i) => {
+    const h = foldHash(out[i]);
+    return { date, her: frameFrom(h, 'her'), him: frameFrom(h, 'him') };
+  });
+}
+
+/** As above, but never throws — a dead store costs the strip, not the page. */
+export async function getDaysSafe(
+  today: string = wingDate(),
+  days: number = FRAME_DAYS,
+): Promise<{ days: DayFrames[]; reachable: boolean }> {
+  try {
+    return { days: await getDays(today, days), reachable: true };
+  } catch (err) {
+    console.error('[us] frames store unreachable:', err instanceof Error ? err.message : err);
+    const dates: string[] = [];
+    for (let i = 0; i < Math.max(1, days); i += 1) dates.push(shiftDate(today, -i));
+    return { days: dates.map((d) => ({ date: d, her: null, him: null })), reachable: false };
+  }
+}
+
+/**
+ * Turn stored frames into ones with loadable URLs.
+ *
+ * Signing is per object and the URLs are short-lived — see PRESIGN_BUCKET_SEC in
+ * photos.ts for why they are bucketed to a fifteen-minute boundary, which is what
+ * lets a browser reuse a cached image between two renders of this page instead of
+ * re-downloading every photograph on every visit.
+ */
+export async function withUrls(days: DayFrames[]): Promise<VisibleDayFrames[]> {
+  const jobs: Array<Promise<void>> = [];
+  const out: VisibleDayFrames[] = days.map((d) => ({ date: d.date, her: null, him: null }));
+
+  days.forEach((day, i) => {
+    (['her', 'him'] as const).forEach((who) => {
+      const f = day[who];
+      if (!f) return;
+      jobs.push(
+        presignedUrl(frameKey(day.date, who, f.ext))
+          .then((url) => {
+            out[i][who] = { ...f, url: url ?? '' };
+          })
+          .catch(() => {
+            // A signing failure costs one picture, not the page.
+            out[i][who] = { ...f, url: '' };
+          }),
+      );
+    });
+  });
+
+  await Promise.all(jobs);
+  return out;
+}
+
+/** Is this feature usable at all? Bytes have no fallback. */
+export function framesAvailable(): boolean {
+  return hasR2();
+}
+
+/** Dev-only reset, so tests do not leak state between cases. */
+export function __resetMemory(): void {
+  memory.clear();
+}
+
+/** Re-exported so pages need one import for the day arithmetic. */
+export { WING_TZ, shiftDate };

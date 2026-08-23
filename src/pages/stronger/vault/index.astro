@@ -402,6 +402,18 @@ const rooms = [
        left off rather than faked — an always-absent marker is honest, an
        always-present one would train her to ignore all three. */
   },
+  {
+    n: 'line 04',
+    title: 'today, seen',
+    note: 'one picture each. whatever we were looking at.',
+    href: '/stronger/vault/day',
+    ready: true,
+    /* No `fresh` signal, for the same reason as line 03 and one more. status.ts
+       does not read the frames store, so wiring one would be a fourth store read
+       on every hub render — and this is the room most likely to have something new
+       in it on any given day, so a marker that was almost always lit would be
+       decoration rather than information. The page itself is one tap away. */
+  },
 ];
 ---
 
