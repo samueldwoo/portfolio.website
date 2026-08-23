@@ -281,8 +281,24 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
      same reason: it must be known before the body is parsed, because the
      authorization and rate-limit exits happen first and those are exactly the
      failures where being dumped in the wrong room is worst. An allowlist lookup,
-     so this can only ever be one of two literal strings — see RETURN_TO. */
-  const backTo = RETURN_TO[url.searchParams.get('from') ?? ''] ?? ROOM_PAGE;
+     so this can only ever be one of two literal strings — see RETURN_TO.
+
+     THE DEFAULT IS THE BOARD, NOT THE ROOM, AND THAT IS THE POINT OF IT.
+
+     It was ROOM_PAGE, on the reasoning in the RETURN_TO comment above: room.astro
+     sends no `from`, so defaulting to the room kept the benched page working
+     untouched. True, and it made the default FAIL TOWARDS the one page in the
+     wing she is not supposed to be sent to. Every way this lookup can miss —
+     a dropped query param, a hand-typed action, a form posted from a cached copy
+     of the board, an early 401/429 exit before the body is read — landed her in
+     the unfinished 3D studio.
+
+     Flipping it moves the cost onto the right person. Worst case now: a no-JS tap
+     on room.astro's fallback grid returns to the board instead of the room, which
+     inconveniences ME on a page that is benched. Worst case before: it showed HER
+     the room the board exists to replace. room.astro is unchanged either way —
+     this is the endpoint's default, not the page's markup. */
+  const backTo = RETURN_TO[url.searchParams.get('from') ?? ''] ?? BOARD_PAGE;
 
   /** One exit point, so the fetch and no-JS paths cannot drift apart. */
   const answer = (

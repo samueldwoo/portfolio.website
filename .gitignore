@@ -85,6 +85,19 @@ photos/
 
 __pycache__/
 # Verification screenshots dropped in the repo root by Playwright runs.
-*-1440.png
-gate-act*.jpeg
-studio-room*.jpeg
+#
+# The pattern list below used to be an allow-by-name list (*-1440.png and two
+# jpeg prefixes), which only ever covered the filenames somebody had already
+# used. A review pass on 2026-08-23 left bar.png, given.png and
+# react-her-390.png sitting in the root, none of them matched, and every one of
+# them is a screenshot of the GATED wing — her name, her answers, her half of a
+# song. On a PUBLIC repo one `git add -A` publishes them.
+#
+# So the root is now closed to loose screenshots by extension. Anything the site
+# actually serves lives under public/ or src/, which these patterns do not
+# touch; a genuinely wanted image in the root has to be forced in with
+# `git add -f`, which is the right amount of friction for a repo strangers read.
+/*.png
+/*.jpeg
+/*.jpg
+/*.webp

@@ -248,8 +248,19 @@
 .tg-more > summary {
     /* Padding rather than height, so the 44px target comes from real
        box size and the text can wrap on a narrow phone without the
-       target collapsing. */
-    padding: 13px 4px;
+       target collapsing.
+
+       15px, up from 13px, and that was a real miss rather than a tidy-up:
+       0.72rem of uppercase mono is a ~15px line box, so 13px either side
+       measured 41px in the browser at 320px — three pixels under the floor
+       every other target in the wing clears. 15px puts it at 45px.
+
+       It matters most on the third of the three summaries that use this
+       rule. "the ones we've done" is the only way into the ticked-off
+       lines, and together.ts keeps those forever on the grounds that they
+       are proof of a year, so the one door to them cannot be the one
+       control on the page that is hard to hit. */
+    padding: 15px 4px;
     font-family: var(--us-mono);
     font-size: 0.72rem;
     text-transform: uppercase;
@@ -426,6 +437,18 @@
     letter-spacing: 0.04em;
     color: var(--concrete-3);
 }
+/* DAY ONE, THIS PARAGRAPH IS EMPTY, and .tg-think is a grid with a 12px gap —
+   so an empty receipt still claimed a row and put ~26px of nothing directly
+   under the button. sentLine() returns '' until she has actually sent one, which
+   is most first visits, so the hole was in the state this block is in most
+   often.
+
+   `:empty` rather than a `{outgoing && …}` guard in the template, because the
+   inline script repaints #think-sent after a successful fetch and needs the
+   element to already be in the DOM. This hides it and un-hides it with no
+   coupling to the script at all: the moment text lands the selector stops
+   matching, and with JavaScript off it is empty forever and stays hidden. */
+.tg-think-sent:empty { display: none; }
 
 .tg-think-form {
     margin: 2px 0 0;

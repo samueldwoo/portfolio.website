@@ -35,9 +35,10 @@
  *   2. Never invent a specific. No named places, no dates, no quoted speech, no
  *      claims about what either of them did. A slot description is honest; a
  *      fabricated memory is not.
- *   3. `note` is what she reaches at MAX TENSION, and every one of them says the
- *      word "replace" out loud, because that is the field most likely to ship
- *      unedited — it is hidden behind a gesture, so nobody sees it in review.
+ *   3. `note` is the back of the photograph, and every one of them says the word
+ *      "replace" out loud, because that is the field most likely to ship
+ *      unedited. On the board it is ONE TAP away, so it is not hidden from
+ *      review any more — it is the first thing a reader who taps will read.
  * ---------------------------------------------------------------------------
  * TWO MODES, AND WHY THE SECOND ONE EXISTS
  *
@@ -62,46 +63,47 @@ import { AwsClient } from 'aws4fetch';
 import { hasR2, r2Config, r2Endpoint } from './config';
 
 /* ===========================================================================
-   CHAPTERS — solidcore's real MUSCLE GROUPINGS, used as navigation.
+   CHAPTERS — four groupings of the photographs, used as navigation.
 
-   These are the four filter tabs on solidcore's own /exercises page — "Center
-   core", "Lower body", "Obliques", "Upper body" — and every exercise they
-   publish is filed under one of them.
+   These labels used to be solidcore's four muscle groupings ("Center core",
+   "Lower body", "Obliques", "Upper body"), borrowed because the wing borrows
+   that studio's black-and-electric-blue palette. The palette stays; the gym
+   vocabulary does not. A chapter heading that reads like a class booking is the
+   wrong voice for a room of photographs of two people, and Sam said so.
 
-   They replaced the class formats (starter50 / focus50 / signature50 /
-   advanced65) deliberately. A format name describes how LONG a class is and how
-   hard; a muscle grouping describes what the work is ABOUT. For a room whose
-   chapters are meant to mean something — how we started, the funny sideways
-   ones, the long-distance stretch — "what this is about" is the axis that
-   carries a memory, and "50 minutes vs 65 minutes" is not.
+   What replaced them names what is actually IN each stretch: the early ones,
+   the places, the accidents, the miles. Each still carries its own `blurb` as
+   the gloss underneath, so the label is a name and the blurb is what it means —
+   never the same sentence twice.
 
-   It also reads better out loud. `line 03 · obliques` is a section of a room.
-   `line 03 · signature50` is a booking confirmation.
-
-   `line` is the carriage line (1–4). The real machine has numbered position
-   lines on the rail; the room borrows them as its progress indicator, which is
-   why this is a small integer and not a percentage.
+   `line` is the chapter's position, 1–4. A small integer rather than a
+   percentage because it is an ordinal, not a measurement, and the hub numbers
+   its rooms the same way.
    =========================================================================== */
 
 export type ChapterId = 'core' | 'lower' | 'obliques' | 'upper';
 
 export interface Chapter {
   id: ChapterId;
-  /** Carriage line 1–4. Doubles as the display number and the sort order. */
+  /** Position, 1–4. Doubles as the display number and the sort order. */
   line: 1 | 2 | 3 | 4;
-  /** The muscle grouping, spelled the way solidcore spells it. */
+  /** What to call this chapter out loud. */
   label: string;
-  /** One line of what this stretch of the rail is about. */
+  /** One line of what is in it. Never a restatement of `label`. */
   blurb: string;
 }
 
+/* The `id`s are still `core` / `lower` / `obliques` / `upper` on purpose. They
+   are internal keys — every Memory below files itself under one, and the board
+   builds a lookup off them — so renaming them would be churn with a chance of
+   breaking a join, for no reader-visible gain. Only the labels are read out. */
 export const CHAPTERS: readonly Chapter[] = [
-  /* Their class structure opens with a core-activation warm-up, so core is
-     line 1 — the panel the room opens on, dead centre and low-lit. */
-  { id: 'core', line: 1, label: 'center core', blurb: 'how we started' },
-  { id: 'lower', line: 2, label: 'lower body', blurb: 'everywhere we went' },
-  { id: 'obliques', line: 3, label: 'obliques', blurb: 'the sideways ones' },
-  { id: 'upper', line: 4, label: 'upper body', blurb: 'the long-distance one' },
+  /* First, because these are the oldest photographs: the panel the room opens
+     on, dead centre and low-lit. */
+  { id: 'core', line: 1, label: 'the early ones', blurb: 'how we started' },
+  { id: 'lower', line: 2, label: 'the places', blurb: 'everywhere we went' },
+  { id: 'obliques', line: 3, label: 'the accidents', blurb: 'the sideways ones' },
+  { id: 'upper', line: 4, label: 'the miles', blurb: 'the long-distance one' },
 ] as const;
 
 /* ===========================================================================
@@ -125,7 +127,7 @@ export interface Memory {
   /** Shown on the panel and in the fallback grid. */
   caption: string;
   /**
-   * The hidden note, revealed at MAX TENSION.
+   * The back of the photograph. On the board, one tap away.
    *
    * This ships to the browser with the page. That is deliberate and it is not a
    * leak: the entire page is behind the session cookie, and the reveal has to
@@ -184,7 +186,7 @@ export interface Memory {
  * WebP is ~120KB where the JPEG is ~400KB.
  */
 export const MEMORIES: readonly Memory[] = [
-  /* ---- WARM-UP / CORE ACTIVATION -----------------------------------------
+  /* ---- 01 - THE EARLY ONES - how we started ------------------------------
      One panel, dead centre, low light, before the room widens into chapters.
      This is the first thing she sees, so it is the one caption worth writing
      first — and the one placeholder it would be most embarrassing to ship. */
@@ -192,7 +194,7 @@ export const MEMORIES: readonly Memory[] = [
     id: 'm01',
     key: 'photos/m01.webp',
     caption: '[the earliest one of us you still have]',
-    note: '[replace this note. she reaches it at max tension and nowhere else, so it is the one nobody catches in review. two sentences, in your voice, about why this is the one that opens the room.]',
+    note: '[replace this note. two sentences, in your voice, about why this is the one that opens the room.]',
     chapter: 'core',
     when: '[when it started]',
     aspect: 0.8,
@@ -218,7 +220,7 @@ export const MEMORIES: readonly Memory[] = [
     chapter: 'core',
     aspect: 0.8,
   },
-  /* ---- LINE 02 - LOWER BODY - everywhere we went ------------------------- */
+  /* ---- 02 - THE PLACES - everywhere we went ------------------------------ */
   {
     id: 'm04',
     key: 'photos/m04.webp',
@@ -244,7 +246,7 @@ export const MEMORIES: readonly Memory[] = [
     chapter: 'lower',
     aspect: 0.8,
   },
-  /* ---- LINE 03 - OBLIQUES - the sideways ones ---------------------------- */
+  /* ---- 03 - THE ACCIDENTS - the sideways ones ---------------------------- */
   {
     id: 'm07',
     key: 'photos/m07.webp',
@@ -270,7 +272,7 @@ export const MEMORIES: readonly Memory[] = [
     when: '[a weekday]',
     aspect: 1.0,
   },
-  /* ---- LINE 04 - UPPER BODY - the long-distance one ---------------------- */
+  /* ---- 04 - THE MILES - the long-distance one ---------------------------- */
   {
     id: 'm10',
     key: 'photos/m10.webp',
@@ -292,7 +294,7 @@ export const MEMORIES: readonly Memory[] = [
     id: 'm12',
     key: 'photos/m12.webp',
     caption: '[the most recent one of the two of you]',
-    note: '[replace this note. this is the last one on the rail before the room gives her one more.]',
+    note: '[replace this note. this is the last one before the board gives her one more.]',
     chapter: 'upper',
     when: '[recently]',
     aspect: 0.8,
@@ -306,7 +308,7 @@ export const MEMORIES: readonly Memory[] = [
     id: 'still-one-more',
     key: 'photos/still-one-more.webp',
     caption: '[still one more - put the best one here]',
-    note: '[replace this note. she only reaches this panel by scrolling to the very end, or by holding the + in the index. it is the one place in the room where being thorough is rewarded, so make it worth it.]',
+    note: '[replace this note. this is the last thing she gets to, so make it worth getting to.]',
     chapter: 'upper',
     aspect: 1.0,
     hidden: true,
@@ -434,7 +436,19 @@ export function placeholderSvg(m: Memory): string {
   // `when` is optional now, so the placeholder falls back to the chapter rather
   // than inventing a date. Never shows an empty strip where a label used to be.
   const label = m.hidden ? 'still one more' : (m.when || ch.label).toUpperCase();
-  const line = `line 0${ch.line} · ${ch.label}`;
+  /**
+   * The chapter, as a number and what is in it.
+   *
+   * This said `line 0N · <chapter label>` and it is the one place the old studio
+   * numbering was READER-VISIBLE WITHOUT BEING IN THE HTML — it is baked into an
+   * SVG served as an image, so grepping a rendered page for "line 0" never finds
+   * it. Every placeholder Polaroid on the board carried it.
+   *
+   * `blurb` rather than `label` because `label` is already the big line above
+   * whenever `when` is unset, and a card that says THE ACCIDENTS and then
+   * "the accidents" underneath is spending two lines on one fact.
+   */
+  const line = `0${ch.line} · ${ch.blurb}`;
 
   // Type sizes are in user units against a 1000-unit tall box, so they scale
   // with the panel rather than with the viewport.

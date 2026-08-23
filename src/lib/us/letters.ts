@@ -284,8 +284,15 @@ export const PLACEHOLDER_LETTERS: readonly Letter[] = [
     title: '[the first one]',
     written: '2026-01-01',
     body: [
+      /* The environment variable's NAME used to be in this sentence, and this
+         string is reader-visible and NOT dev-gated — the banner above the shelf
+         is, but the letter body is not, and the body is also the only one of the
+         two that a reader sees on the reading view. So the one place a config
+         key could reach production HTML was inside a placeholder. The
+         instruction to replace it belongs in the doc comment above this array,
+         where it already is. */
       '[replace this. this is the placeholder letter and it exists to prove the',
-      'room renders, nothing else. the real one goes in US_LETTERS.]',
+      'room renders, nothing else.]',
       '',
       '[two things about the body format, both of which matter more than they',
       'look. paragraphs are separated by a BLANK LINE and nothing else — no',
