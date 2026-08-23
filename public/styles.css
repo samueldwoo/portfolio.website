@@ -1394,6 +1394,101 @@ a.bubble.ticker:hover::after { transform: translate(2px, -2px); opacity: 1; }
     .hero-green-keys { transition: none; }
 }
 
+/* ---------- Putting green: the SCORECARD ----------
+   Created in HeroCanvas.tsx alongside `#green-keys` and `#green-live`, and removed
+   with them. It is DOM and not canvas ink on purpose (the reasoning is recorded in
+   the component, at the block that builds it): canvas text is invisible to a
+   screen reader, ignores text zoom, and would have to be argued safe against the
+   hero's tested zero-ink-over-copy budget. Real text needs none of those
+   arguments.
+
+   `left` plus `top`/`bottom`/`max-width` are written by the component from the
+   play box, so the card is anchored to the GREEN rather than to the viewport —
+   which is what keeps it clear of the hero copy at every width, since the play box
+   is itself derived from the measured copy edge.
+
+   NO TRANSITION AND NO ANIMATION ANYWHERE IN HERE, deliberately. The canvas paints
+   exactly one frame under `prefers-reduced-motion: reduce` and never starts a rAF
+   loop; a scorecard that faded or counted up would either animate against that
+   preference or need a media query to switch itself off. Having nothing to disable
+   is strictly better than remembering to disable it — so there is no
+   reduced-motion block for this component, and that absence is the design.
+
+   IT IS NOT A TAB STOP and has no role: it states a fact, it does not do
+   anything. `pointer-events: none` is restated locally so the card can never
+   intercept a press on the ball even if the wrapper's value ever changes. */
+.hero-scorecard {
+    position: absolute;
+    left: 0;                       /* both overwritten inline by syncCard() */
+    top: 0;
+    padding: 7px 12px 8px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-sm);
+    /* Same plate as `.hero-green-keys`, for the same reason: the card sits over
+       canvas contour lines, and legible micro-type needs a known ground. The 6%
+       that shows through is bounded by the canvas's own darkest possible ink — a
+       contour stroked at rgba(78,102,64,.5) — so the effective background has a
+       floor. Measured in-browser with a11y_chrome.py's own compositing maths:
+
+         on the plate alone      dt --mut 5.60:1   dd --sage-deep 5.87:1
+         over the darkest ink    dt --mut 5.38:1   dd --sage-deep 5.63:1
+
+       Every value clears AA (4.5:1) in the worst case, which is why this can be a
+       translucent plate rather than an opaque panel — and an opaque panel is
+       exactly what the component's own notes say made the play box read as UI
+       bolted onto the hero. */
+    background: rgba(245, 246, 242, .94);
+    line-height: 1.3;
+    pointer-events: none;
+}
+
+/* A strip, not a table: it wraps against the width of the green (max-width is set
+   from the play box), so four stats sit on one line from 1280 up and fold to two
+   on a narrow green without any breakpoint of its own. Same construction as
+   `.trip-stats`, one rung smaller. */
+.hero-sc-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 14px;
+    margin: 0;
+}
+.hero-sc-stat {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+}
+.hero-sc-stat dt {
+    font-family: var(--mono);
+    font-size: .66rem;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--mut);
+}
+.hero-sc-stat dd {
+    margin: 0;
+    font-family: var(--mono);
+    font-size: .8rem;
+    font-weight: 500;
+    /* The numbers change in place while you play; tabular figures stop the strip
+       twitching as 9 becomes 10. */
+    font-variant-numeric: tabular-nums;
+    color: var(--sage-deep);
+}
+
+/* Shown ONLY when a real localStorage read or write has failed — Safari private
+   mode, or storage disabled by policy. The component sets data-storage="off" at
+   that moment and never speculatively, so this line is a report, not a warning
+   the visitor has to dismiss. Scoring still works; it just is not saved. */
+.hero-sc-note {
+    display: none;
+    margin: 5px 0 0;
+    font-family: var(--mono);
+    font-size: .62rem;
+    letter-spacing: .04em;
+    color: var(--mut);
+}
+.hero-scorecard[data-storage="off"] .hero-sc-note { display: block; }
+
 /* ============================================================
    THE SHELF — books read edge-on
    ------------------------------------------------------------

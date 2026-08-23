@@ -270,6 +270,148 @@ function slopeAt(
   return { gx: -hx * SLOPE_ACCEL, gy: -hy * SLOPE_ACCEL };
 }
 
+/* ============================================================
+   THE SCORECARD — persistence and derivation
+   ------------------------------------------------------------
+   Split out of the component deliberately: this is pure data, it has no DOM and
+   no canvas, and keeping it module-level makes the honesty rules checkable by
+   reading forty lines instead of two thousand.
+   ============================================================ */
+
+/**
+ * localStorage key. Namespaced (this origin also serves other pages) and
+ * VERSIONED — a payload whose `v` is not 1 is discarded rather than coerced, so
+ * a future shape change can never be half-read as this one.
+ */
+const CARD_KEY = 'sw.green.card.v1';
+
+/**
+ * The ledger. A HISTOGRAM of completed holes, not a set of summary numbers:
+ *
+ *     { "1": 3, "2": 7 }   =  three holes sunk in one putt, seven in two
+ *
+ * WHY NOT `{ holed: 10, best: 1, aces: 3 }`: because then "best" is a stored
+ * number that has to be kept in step with everything else by hand, and the first
+ * time some path forgets to update it the card lies. Here every headline is
+ * DERIVED on read (see `cardView`) — holes completed is the sum of the values,
+ * best is the smallest key, aces is `scores["1"]` — so there is no second copy
+ * of any fact and nothing to drift.
+ *
+ * It is also bounded, which a per-hole array would not be: the keys are small
+ * integers, so the payload stays a few tens of bytes however long you play.
+ */
+interface Card {
+  scores: Record<string, number>;
+}
+
+/** A first-time visitor's card. EMPTY — no seeded holes, no plausible history. */
+const emptyCard = (): Card => ({ scores: {} });
+
+interface CardView {
+  /** Holes actually sunk. */
+  holed: number;
+  /** Fewest putts on any sunk hole, or null when nothing has been holed yet. */
+  best: number | null;
+  /** Holes sunk in a single putt. */
+  aces: number;
+}
+
+/** Everything the card displays, computed from the ledger. No stored totals. */
+function cardView(c: Card): CardView {
+  let holed = 0;
+  let best: number | null = null;
+  for (const k in c.scores) {
+    const n = c.scores[k];
+    const putts = Number(k);
+    if (!n) continue;
+    holed += n;
+    if (best === null || putts < best) best = putts;
+  }
+  return { holed, best, aces: c.scores['1'] || 0 };
+}
+
+/**
+ * Positive integer of type `number`, or null. Used to reject anything a corrupt
+ * or hand-edited payload might contain.
+ *
+ * TYPE-STRICT ON PURPOSE. An earlier version coerced with `Number(v)`, which
+ * accepts `true` (-> 1) and `"3"` — so `{"scores":{"1":true}}` would have counted
+ * as a real holed-in-one. Junk must produce nothing, so the value has to be an
+ * actual number. Object keys are always strings, so callers coerce those
+ * explicitly (`Number(k)`) and NaN then falls out here.
+ */
+function posInt(v: unknown): number | null {
+  return typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= 1e6 ? v : null;
+}
+
+/**
+ * Read the ledger.
+ *
+ * TWO FAILURES, TWO ANSWERS, and the distinction matters:
+ *   - the ACCESS threw   -> storage is unusable (Safari private mode can throw
+ *                           from the `localStorage` getter itself, and an
+ *                           enterprise policy can disable it outright). Report
+ *                           `ok: false` so the card can say so.
+ *   - the VALUE was junk -> storage works fine, the payload does not. Report
+ *                           `ok: true` and start from an empty card.
+ *
+ * Nothing is re-thrown and nothing is logged. A console error here would both
+ * break the page for a visitor who has done nothing wrong and fail the
+ * verification harnesses, which treat any severe console message as a failure.
+ */
+function readCard(): { card: Card; ok: boolean } {
+  let raw: string | null = null;
+  try {
+    raw = window.localStorage.getItem(CARD_KEY);
+  } catch {
+    return { card: emptyCard(), ok: false };
+  }
+  if (!raw) return { card: emptyCard(), ok: true };
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== 'object') return { card: emptyCard(), ok: true };
+    const obj = parsed as Record<string, unknown>;
+    if (obj.v !== 1) return { card: emptyCard(), ok: true };
+    const src = obj.scores;
+    /* ARRAYS ARE REJECTED, not sanitised, and this was a real hole found by the
+       test suite. `typeof [] === 'object'` and `for (const k in [1,2,3])` yields
+       the indices "0","1","2" — so `{"v":1,"scores":[1,2,3]}` was being read as
+       "two holes in one putt, three holes in two putts": five holes and a
+       hole-in-one INVENTED out of a payload this code never wrote. Junk must
+       produce an empty card, never a plausible history. */
+    if (!src || typeof src !== 'object' || Array.isArray(src)) {
+      return { card: emptyCard(), ok: true };
+    }
+    const scores: Record<string, number> = {};
+    let keys = 0;
+    for (const k in src as Record<string, unknown>) {
+      // 64 distinct putt-counts is far more than anyone will ever produce; the
+      // cap exists so a hand-written blob cannot make the derivation loop long.
+      if (++keys > 64) break;
+      const putts = posInt(Number(k));   // keys are strings; NaN falls out in posInt
+      const n = posInt((src as Record<string, unknown>)[k]);
+      if (putts === null || n === null) continue;
+      scores[String(putts)] = n;
+    }
+    return { card: { scores }, ok: true };
+  } catch {
+    return { card: emptyCard(), ok: true };
+  }
+}
+
+/** Persist. Returns false when the write failed — Safari private mode has a
+ *  zero quota, so `getItem` can succeed while `setItem` throws. */
+function writeCard(c: Card): boolean {
+  try {
+    window.localStorage.setItem(CARD_KEY, JSON.stringify({ v: 1, scores: c.scores }));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
+
 export default function HeroCanvas() {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -499,6 +641,16 @@ export default function HeroCanvas() {
         });
       }
       hairGrad = grad(SAGE, 0.4 * globalAlpha);
+
+      /* The scorecard is pinned to the play box, and the play box is derived
+         from the copy measurement above — so it has to be re-pinned HERE, in the
+         one function that re-measures. Doing it from render() instead would work
+         and would also cost two style writes 60 times a second for a box that
+         moves twice a session. `syncCard` is declared further down; layout() is
+         never *called* before that point (first call is in the reduced-motion
+         branch / the animated bootstrap, both at the end of this effect), so
+         there is no TDZ here. */
+      syncCard();
     };
 
     /* ---------------- pointer / focus state ---------------- */
@@ -607,6 +759,174 @@ export default function HeroCanvas() {
       const left = Math.max(0.44, copyEdge + 0.05);
       return { x: cssW * left, y: cssH * 0.16, w: cssW * (0.94 - left), h: cssH * 0.68 };
     };
+
+    /* ---------------- THE SCORECARD ----------------
+
+       IT IS DOM, NOT CANVAS, and that is the whole design decision:
+
+       1. THE INK BUDGET. Canvas ink over the hero body copy is a tested, hard
+          zero (heroink_wide: twelve cases across nine widths, 0% coverage in
+          every one). Anything painted on the canvas has to be argued safe
+          against a fade whose stops are DERIVED from measured glyph rects; a DOM
+          sibling simply is not canvas ink and cannot enter that budget at all.
+          Cheaper to be right than to re-argue, and the probe stays at 0%.
+       2. IT IS TEXT. Numbers drawn with fillText are invisible to a screen
+          reader, do not respond to browser text zoom, cannot be selected, and
+          are not covered by 1.4.4 or 1.4.12. Real text gets all of that free.
+       3. REDUCED MOTION. The canvas paints exactly ONE frame and never calls
+          requestAnimationFrame. A DOM card is correct in that frame by
+          construction — there is no second render to forget.
+       4. PRECEDENT + CLEANUP. `#green-keys` and `#green-live` are already
+          effect-created siblings inside this wrapper, and the cleanup already
+          removes them. This joins that list (see the return at the end).
+
+       WHERE. Left-aligned to the play box and positioned in wrap-local px exactly
+       the way the ball handle is, so it inherits the box's own guarantee that it
+       cannot land on the copy (the box's left edge is DERIVED from the measured
+       copy edge). See `syncCard` for the vertical rule and the measurements
+       behind it.
+
+       WHAT IS NOT PERSISTED, and why: the putt count for the hole IN PLAY.
+       Every page load generates a fresh hole (`round` starts at 0), so a
+       restored in-progress count would be strokes taken on a green that no
+       longer exists. It starts at zero on load, deliberately. */
+    let holePutts = 0;
+    const loaded = readCard();
+    let card = loaded.card;
+    /** null = not yet attempted. false = a read or write failed, so scoring is
+     *  session-only and the card says so out loud. */
+    let storageOk: boolean | null = loaded.ok ? null : false;
+
+    const cardEl = document.createElement('div');
+    cardEl.className = 'hero-scorecard';
+
+    const cardList = document.createElement('dl');
+    cardList.className = 'hero-sc-stats';
+    /* Named, because four bare terms in the hero would otherwise be an
+       unexplained list. The <canvas> stays aria-hidden; this is one of the
+       elements that make the green legible without it. */
+    cardList.setAttribute('aria-label', 'Putting scorecard');
+
+    /** dd for each stat, so updates write ONE text node and touch nothing else. */
+    const cardVals: Record<string, HTMLElement> = {};
+    for (const [key, label] of [
+      ['hole', 'This hole'],
+      ['holed', 'Holed'],
+      ['best', 'Best'],
+      ['aces', 'Aces'],
+    ] as Array<[string, string]>) {
+      // dl > div > (dt, dd) is valid HTML5 and is what lets each pair stay glued
+      // together as one flex item while the strip wraps.
+      const row = document.createElement('div');
+      row.className = 'hero-sc-stat';
+      const dt = document.createElement('dt');
+      dt.textContent = label;
+      const dd = document.createElement('dd');
+      row.appendChild(dt);
+      row.appendChild(dd);
+      cardList.appendChild(row);
+      cardVals[key] = dd;
+    }
+    cardEl.appendChild(cardList);
+
+    /* Shown ONLY when a real read or write has actually failed — never
+       speculatively. It is the honest version of "scoring works this session
+       only": the game keeps score exactly as before, it just cannot save it. */
+    const cardNote = document.createElement('p');
+    cardNote.className = 'hero-sc-note';
+    cardNote.textContent = 'This session only — saving is off.';
+    cardEl.appendChild(cardNote);
+
+    wrap.appendChild(cardEl);
+
+    /**
+     * Write the numbers. Called at the FOUR moments the score can change (a putt
+     * is struck, a hole is holed, a hole is re-teed, and once at startup) —
+     * never from render(), which runs 60x a second.
+     */
+    const renderCard = () => {
+      const v = cardView(card);
+      cardVals.hole.textContent = String(holePutts);
+      cardVals.holed.textContent = String(v.holed);
+      // An em dash, not a 0: nothing has been holed, so there IS no best. A zero
+      // there would read as "best score: zero putts", which is a lie about a
+      // number this card exists to make honest.
+      cardVals.best.textContent = v.best === null ? '—' : String(v.best);
+      cardVals.aces.textContent = String(v.aces);
+      // Drives the "this session only" note. Cleared as well as set, so a
+      // recovered write (a freed quota) takes the notice back down.
+      if (storageOk === false) cardEl.dataset.storage = 'off';
+      else delete cardEl.dataset.storage;
+    };
+
+    /**
+     * Pin the card to the play box. Called from layout(), which is the one place
+     * the box can move (a resize, and the webfont re-measure).
+     *
+     * LEFT EDGE is always the box's, which is what makes the card safe: the box's
+     * left edge is derived from the measured copy edge, so it sits right of every
+     * glyph in the hero at every width. Measured gap from the copy's rightmost
+     * glyph to the box: 45px at 900, 51 at 1024, 64 at 1280, 72 at 1440, 96 at
+     * 1920, 128 at 2560.
+     *
+     * VERTICALLY the two layouts want opposite things:
+     *
+     *  wide   — ABOVE the box, when it fits. There is 128-224px of empty canvas
+     *           between the top of the hero and the top of the green (the box
+     *           starts at 0.16H), so the card lives there and never sits on the
+     *           ball, the cup or an aim line. Expressed as `bottom` so the card's
+     *           bottom edge is `pad` above the green whatever height it wrapped
+     *           to.
+     *
+     *  narrow — INSIDE the box, top-left. There is no room above: the gap between
+     *           the copy's last line and the green is only the box's own padding
+     *           (18-23px measured at 390x844), so a card placed there would slide
+     *           under `.band-inner` — which is z-index 1 to this wrapper's 0 — and
+     *           be half-covered by the explore cue. Inside the box the top strip
+     *           is the safest ground available: `placeCup` never cuts a hole in
+     *           the first ~84px, and the destination-out vignette has already
+     *           faded the contour ink toward the box edge.
+     *
+     * WHY THE HEIGHT IS MEASURED rather than assumed to fit. `above` is a real
+     * test, not a viewport guess, because two things can make the card taller than
+     * the strip: a short landscape window (0.16H shrinks with H) and a large root
+     * font-size (the labels wrap to more lines while max-width stays in px). With
+     * a hardcoded "wide means above" the card's top would go negative and be
+     * clipped by the wrapper's overflow. Falling back to the in-box placement is
+     * always safe, because the box has a 130px floor.
+     *
+     * Reading offsetHeight here does force a synchronous reflow from inside a
+     * ResizeObserver callback, which is normally how you invite "ResizeObserver
+     * loop completed with undelivered notifications". It cannot happen here: the
+     * observed element is `wrap`, whose size comes from its containing block and
+     * not its content (`position: absolute; inset: 0` plus `contain: layout
+     * paint`), so nothing this function does can change the observed box. Verified
+     * by a live-resize test that watches for severe console errors.
+     *
+     * `.hero-green-keys` cannot collide with either choice: it sits BELOW the box
+     * on wide and in the box's lower half on narrow.
+     */
+    const syncCard = () => {
+      const b = playBox();
+      const pad = 10;
+      cardEl.style.left = Math.round(b.x + pad) + 'px';
+      /* Derived, not guessed: the strip wraps against the width of the GREEN. At
+         900 the box is only 177px wide and the four stats wrap to two lines; from
+         1280 up they fit on one. The 96px floor keeps the card from collapsing
+         into a column if a pathological box ever appears.
+         Set BEFORE the height is read, or the height would be the wrap of the
+         previous width. */
+      cardEl.style.maxWidth = Math.max(96, Math.round(b.w - pad * 2)) + 'px';
+      if (!narrow && b.y - pad >= cardEl.offsetHeight) {
+        cardEl.style.top = 'auto';
+        cardEl.style.bottom = Math.round(cssH - b.y + pad) + 'px';
+      } else {
+        cardEl.style.top = Math.round(b.y + pad) + 'px';
+        cardEl.style.bottom = 'auto';
+      }
+    };
+
+    renderCard();
 
     /* Randomise the green itself: fall-line angle, steepness and undulation.
        Called on every re-tee, so sinking a putt genuinely produces a new hole. */
@@ -803,6 +1123,23 @@ export default function HeroCanvas() {
       onWall = false;
       stalled = 0;
       rollTime = 0;
+
+      /* A NEW HOLE ZEROES THE HOLE COUNTER — and that is the ONLY thing any
+         re-tee does to the score.
+         A hole is credited at the instant the ball drops (see recordHole, called
+         from the cup-capture branch of stepBall), so this path cannot credit
+         anything. `R`, and the tap-to-re-tee accelerator, therefore DISCARD the
+         strokes taken on an abandoned hole and bank nothing: a re-tee can only
+         ever forget an attempt, never improve a record.
+
+         Guarded on `vary` because resetBall(false) is the "put the ball back on
+         the SAME hole" path — startup, and the webfont re-measure that re-lays
+         the opening hole. Zeroing there would silently erase a stroke the player
+         genuinely took, which is the one direction this rule must not bend. */
+      if (vary) {
+        holePutts = 0;
+        renderCard();
+      }
     };
 
     /** Boxed so resetBall can read the animation clock without forward refs. */
@@ -892,6 +1229,11 @@ export default function HeroCanvas() {
           ballY = cupY;
           velX = 0;
           velY = 0;
+          /* THE ONE PLACE A HOLE IS EVER CREDITED — inside the cup-capture
+             branch, i.e. the ball is physically in the hole and slow enough to
+             have stayed there. Nothing else in the file may bank a hole; put it
+             anywhere else and a re-tee or a rim-out starts counting. */
+          recordHole();
           return false;
         }
         // Rim-out: deflect around the lip instead of dropping.
@@ -1106,6 +1448,35 @@ export default function HeroCanvas() {
 
     const say = (msg: string) => { live.textContent = msg; };
 
+    /**
+     * The score as one spoken sentence, or '' when there is nothing yet to say.
+     *
+     * DERIVED at every call from the same `cardView` the visible card uses, so the
+     * spoken and printed scores cannot disagree — there is no second copy of any
+     * total to keep in step. Returns '' for a first-time visitor rather than
+     * "0 holes holed, best none", which would be noise.
+     *
+     * @param includeCurrent false when the caller has already said how many putts
+     *        this hole took (the sink message does), so it is not repeated.
+     */
+    const summary = (includeCurrent: boolean) => {
+      const v = cardView(card);
+      const parts: string[] = [];
+      if (includeCurrent && holePutts > 0) {
+        parts.push(holePutts + ' ' + plural(holePutts, 'putt', 'putts') + ' on this hole');
+      }
+      if (v.holed > 0) {
+        parts.push(v.holed + ' ' + plural(v.holed, 'hole', 'holes') + ' holed');
+        if (v.best !== null) parts.push('best ' + v.best);
+        if (v.aces > 0) {
+          parts.push(v.aces + ' ' + plural(v.aces, 'hole in one', 'holes in one'));
+        }
+      }
+      if (!parts.length) return '';
+      return ' ' + parts.join(', ') + '.' +
+        (storageOk === false ? ' Scores are not being saved on this device.' : '');
+    };
+
     /** Aim starts pointing at the cup, so the first key press is a nudge off a
      *  sensible line rather than a hunt for one. */
     const resetAim = () => {
@@ -1157,17 +1528,34 @@ export default function HeroCanvas() {
           e.preventDefault();
           if (!kbActive) { resetAim(); kbActive = true; applyAim(); }
           kbActive = false;
-          say('Putt away, ' + bearing() + ' at ' + Math.round(kbPower * 100) + ' per cent power.');
+          /* launch() FIRST, then announce — so the stroke number in the message
+             is read off holePutts rather than computed as `holePutts + 1` here.
+             A second place that knows how strokes are counted is exactly the kind
+             of duplicate this file has been bitten by; launch() is the only
+             counter and this just reports it. launch() only schedules a frame, so
+             there is no reentrancy to worry about. */
           launch(kbPower);
+          say('Putt away, ' + bearing() + ' at ' + Math.round(kbPower * 100) +
+              ' per cent power. Putt ' + holePutts + ' on this hole.');
           return;
         case 'r':
-        case 'R':
+        case 'R': {
           kbActive = false;
+          /* Read the count BEFORE the re-tee zeroes it. An abandoned hole banks
+             nothing (see resetBall), and a keyboard player is TOLD that rather
+             than left to infer it from a counter that silently went back to 0. */
+          const abandoned = holePutts;
           resetBall(true);
           resetAim();
           if (!running) render(clock, Math.max(intro, 0.001));
-          say('New hole. Ball re-teed.');
+          say('New hole. Ball re-teed.' +
+              (abandoned > 0
+                ? ' Previous hole abandoned after ' + abandoned + ' ' +
+                  plural(abandoned, 'putt', 'putts') + '; it does not count.'
+                : '') +
+              summary(false));
           return;
+        }
         default:
           handled = false;
       }
@@ -1183,7 +1571,11 @@ export default function HeroCanvas() {
     handle.addEventListener('focus', () => {
       wrap.classList.add('is-green-focus');
       resetAim();
-      say('Putting green. Arrow keys to aim and set power, Enter to putt.');
+      /* The greeting carries the score, because the scorecard is a DOM sibling a
+         screen-reader user may not have walked past yet — and this is the moment
+         the green becomes theirs to play. `summary` returns '' on a first visit,
+         so a newcomer hears the controls and nothing else. */
+      say('Putting green. Arrow keys to aim and set power, Enter to putt.' + summary(true));
     });
     handle.addEventListener('blur', () => {
       wrap.classList.remove('is-green-focus');
@@ -1254,7 +1646,55 @@ export default function HeroCanvas() {
       stalled = 0;
       rollTime = 0;
       putts += 1;
+      /* ONE STROKE, AND ONLY FOR A REAL PUTT.
+         Every path that can actually send the ball funnels through launch(), and
+         every guard that decides whether a gesture WAS a putt sits upstream of
+         it: `onUp` returns early on `power < 0.06` — a tap on the ball, not a
+         stroke — before launch is called at all, and the keyboard floors kbPower
+         at 0.08. So a no-power tap cannot burn a stroke for the simple reason
+         that it never reaches this line. Counting here rather than in onUp is
+         what keeps that true for any future input path as well. */
+      holePutts += 1;
+      renderCard();
       start(); // make sure the loop is running to animate the roll
+    }
+
+    /**
+     * Bank a completed hole.
+     *
+     * A hoisted `function` and not a `const`, for the same reason `launch` is
+     * one: `stepBall` is defined further up and calls it. Its closure over
+     * `say`/`summary`/`card` is only READ when called, and the only caller is the
+     * cup-capture branch inside stepBall, which runs from tick().
+     */
+    function recordHole() {
+      /* A sink with no recorded strokes is not a hole anyone played, so it is not
+         credited. This should be unreachable — every path that sets
+         `phase = 'rolling'` increments holePutts first — and it is here so that
+         if some future path forgets, the bug is a MISSING hole rather than a free
+         one. Errors in a scorecard should fall on the side of not crediting. */
+      if (holePutts < 1) return;
+      const k = String(holePutts);
+      card.scores[k] = (card.scores[k] || 0) + 1;
+      /* Persisted here, once, on a rare event — never on a timer and never per
+         frame. A failed write leaves the in-memory ledger untouched, so the
+         session keeps scoring perfectly; only saving is lost, and the card then
+         states that rather than pretending. */
+      if (writeCard(card)) {
+        if (storageOk === null) storageOk = true;
+      } else {
+        storageOk = false;
+      }
+      renderCard();
+
+      /* THE SCORE IS ANNOUNCED, ONCE PER HOLE.
+         Everything on the green is painted into an aria-hidden <canvas>, and
+         before the scorecard existed the live region had NO sink message at all —
+         a screen-reader player could putt and never learn the ball dropped. This
+         is fired from the cup-capture branch, which runs exactly once per hole,
+         so it cannot spam; render() still never touches the live region. */
+      say('Holed in ' + holePutts + ' ' + plural(holePutts, 'putt', 'putts') + '.' +
+          summary(false));
     }
 
     /** Re-tee after a sunk putt so it can be replayed. */
@@ -1840,7 +2280,21 @@ export default function HeroCanvas() {
         render(0, 1); // re-lay-out only; deliberately does NOT bump __heroFrames
       });
       ro.observe(wrap);
-      return () => ro.disconnect();
+      /* THIS CLEANUP HAS TO REMOVE THE NODES TOO.
+         `handle`, `keys`, `live` and `cardEl` are all appended ABOVE this early
+         return, so they exist under reduced motion as well — but this branch used
+         to disconnect the observer and leave all of them in the DOM, so a remount
+         stacked duplicates and duplicate `#green-keys` / `#green-live` ids (which
+         would break the aria-describedby wiring). Pre-existing; fixed here rather
+         than reproduced for a fourth element. Removing `handle` is safe in this
+         branch: reduced motion attaches no listeners to it at all. */
+      return () => {
+        ro.disconnect();
+        handle.remove();
+        keys.remove();
+        live.remove();
+        cardEl.remove();
+      };
     }
 
     /* ---------------- animated path ---------------- */
@@ -1914,6 +2368,12 @@ export default function HeroCanvas() {
       stalled = 0;
       rollTime = 0;
         putts += 1;
+        /* Mirrors launch(). This hook sends the ball for real — it can sink, and
+           the suites use it to drive genuine putts — so it must cost a stroke, or
+           the harnesses would sink holes in zero putts and recordHole's
+           `holePutts < 1` guard would silently refuse to credit them. */
+        holePutts += 1;
+        renderCard();
         start();
       },
       place(fx: number, fy: number) {
@@ -1942,6 +2402,14 @@ export default function HeroCanvas() {
           copyEdge,
           copyBottom,
           narrow,
+          /* Scorecard, for a probe to assert against. `card` is the DERIVED view
+             (the same one the DOM shows) plus the raw ledger, so a test can check
+             that the two agree instead of trusting either. `storageOk` is
+             tri-state: null = no write attempted yet. */
+          holePutts,
+          card: cardView(card),
+          ledger: { ...card.scores },
+          storageOk,
         };
       },
     };
@@ -2088,6 +2556,10 @@ export default function HeroCanvas() {
       // aria-describedby wiring).
       keys.remove();
       live.remove();
+      // Same contract as the three above: appended by this effect, so removed by
+      // it. Leaving it behind would stack a second scorecard on every remount and
+      // the stale one would never update again.
+      cardEl.remove();
       delete w.__puttTest;
     };
   }, []);
