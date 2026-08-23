@@ -111,6 +111,199 @@ const STATUS_WORD: Record<Book['status'], string> = {
   finished: 'finished',
   abandoned: 'gave up on',
 };
+
+/**
+ * THE REACH STRIP — the six recommended places, plotted by how far they are
+ * from home. Replaces six flat `.bubble` chips that said only the names.
+ *
+ * WHY THIS IS NOT A MAP. The idea was "a small line-art map, one labelled dot
+ * per restaurant". Verifying the six BEFORE drawing anything killed that, which
+ * is the right outcome: they are not in one place. Every location below was
+ * read off the business's own site and then geocoded through OpenStreetMap's
+ * Nominatim, which is where the coordinates come from — none of them is placed
+ * by eye:
+ *
+ *   Zareen's ................ four shops: Sunnyvale, Mountain View, Palo Alto,
+ *                            Redwood City          (zareensrestaurant.com)
+ *   Duc Huong Sandwiches .... four shops in San Jose (duchuongsandwiches.com).
+ *                            A fifth, in Sacramento, is deliberately NOT
+ *                            plotted: the recommendation is a San Jose banh mi
+ *                            shop, and folding in a 100-mile outlier from the
+ *                            same brand would misreport it.
+ *   San Ho Won .............. Mission District, San Francisco  (sanhowon.com)
+ *   Arsicault ............... three shops in San Francisco: Inner Richmond
+ *                            (the original), Civic Center, Mission Bay
+ *   Wolf in the Woods ....... Mission Hills, SAN DIEGO — 421 miles south, not
+ *                            the Bay Area at all  (thewolfinthewoods.com)
+ *   Double Chicken Please ... Lower East Side, NEW YORK — 2,556 miles east
+ *                            (doublechickenplease.com + Wikipedia)
+ *
+ * Three metros on two coasts. A single geographic map of that is one of two
+ * lies: a map of the United States with four dots piled on one pixel, or a Bay
+ * Area map with two of the six quietly deleted. So the drawing keeps the one
+ * spatial fact that survives verification — DISTANCE FROM HOME — and says out
+ * loud that it is a ruler, not a map. Home is Sunnyvale, which is the city the
+ * hero already names; the origin is Sunnyvale's own OSM city node, so these are
+ * city-to-address distances rather than door-to-door ones. The three-metro
+ * grouping then falls out of the data as three clusters instead of being
+ * asserted by the layout.
+ *
+ * A place with several locations gets a BAR spanning all of them, and a range
+ * for its readout, so no branch is silently promoted to "the" one. That is why
+ * Zareen's is a wide bar — nearest shop 0.7 mi, farthest 13 — and Arsicault is
+ * a fat dot: its three shops sit 34 to 37 miles out, which at this scale is
+ * about two pixels. Both are the truth about the data.
+ */
+type Place = {
+  name: string;
+  /** What it is. Verified from the business's own words where they have any. */
+  what: string;
+  /** The location line, printed under the name as real text. */
+  where: string;
+  /** Metro, used only to count the grouping line — never to place a dot. */
+  metro: string;
+  /** Every verified location. Coordinates from OSM/Nominatim, address in the
+   *  comment beside each so the number can be re-checked. */
+  spots: { lat: number; lon: number }[];
+};
+
+const HOME = { name: 'Sunnyvale', lat: 37.3688301, lon: -122.0363490 };
+
+const places: Place[] = [
+  {
+    name: "Zareen's",
+    what: 'Pakistani',
+    where: 'four shops, Sunnyvale out to Redwood City',
+    metro: 'Bay Area',
+    spots: [
+      /* 135 S Murphy Ave, Sunnyvale     */ { lat: 37.3770961, lon: -122.0303137 },
+      /* 1477 Plymouth St, Mountain View */ { lat: 37.4162132, lon: -122.0794250 },
+      /* 365 S California Ave, Palo Alto */ { lat: 37.4267838, lon: -122.1441329 },
+      /* 2039 Broadway, Redwood City     */ { lat: 37.4864550, lon: -122.2270570 },
+    ],
+  },
+  {
+    name: 'Duc Huong',
+    what: 'Vietnamese sandwiches',
+    where: 'four shops in San Jose',
+    metro: 'Bay Area',
+    spots: [
+      /* 2090 N Capitol Ave, San Jose */ { lat: 37.4069947, lon: -121.8873545 },
+      /* 2345 McKee Rd, San Jose      */ { lat: 37.3675885, lon: -121.8491572 },
+      /* 1020 Story Rd, San Jose      */ { lat: 37.3314346, lon: -121.8550318 },
+      /* 2569 S King Rd, San Jose     */ { lat: 37.3192726, lon: -121.8239063 },
+    ],
+  },
+  {
+    name: 'San Ho Won',
+    what: 'Korean barbecue',
+    where: 'Mission District, San Francisco',
+    metro: 'Bay Area',
+    spots: [
+      /* 2170 Bryant St, San Francisco */ { lat: 37.7595769, lon: -122.4102101 },
+    ],
+  },
+  {
+    name: 'Arsicault',
+    what: 'Croissants',
+    where: 'three shops in San Francisco',
+    metro: 'Bay Area',
+    spots: [
+      /* 1070 Bridgeview Way, San Francisco */ { lat: 37.7750292, lon: -122.3886035 },
+      /* 87 McAllister St, San Francisco    */ { lat: 37.7807870, lon: -122.4133760 },
+      /* 397 Arguello Blvd, San Francisco   */ { lat: 37.7834067, lon: -122.4592270 },
+    ],
+  },
+  {
+    name: 'Wolf in the Woods',
+    what: 'Tapas and wine',
+    where: 'Mission Hills, San Diego',
+    metro: 'San Diego',
+    spots: [
+      /* 1920 Fort Stockton Dr, San Diego */ { lat: 32.7529238, lon: -117.1830940 },
+    ],
+  },
+  {
+    name: 'Double Chicken Please',
+    what: 'Cocktail bar',
+    where: 'Lower East Side, New York',
+    metro: 'New York',
+    spots: [
+      /* 115 Allen St, New York */ { lat: 40.7195842, lon: -73.9904912 },
+    ],
+  },
+];
+
+/* Haversine on a sphere of R = 6371.0088 km (the IUGG mean radius), converted
+   to miles. Great-circle, i.e. "as the crow flies" — not a driving distance,
+   which is what the caption says. */
+function milesFromHome(lat: number, lon: number) {
+  const R = 6371.0088;
+  const rad = Math.PI / 180;
+  const p1 = HOME.lat * rad;
+  const p2 = lat * rad;
+  const dp = p2 - p1;
+  const dl = (lon - HOME.lon) * rad;
+  const h = Math.sin(dp / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
+  return (2 * R * Math.asin(Math.sqrt(h))) / 1.609344;
+}
+
+/* Four decades, half a mile to five thousand. Log, because the six span 0.7 to
+   2,556 miles: on a linear axis all four Bay Area places would land inside the
+   first one percent of the track and the chart would say nothing. */
+const AXIS_LO = 0.5;
+const AXIS_HI = 5000;
+const AXIS_TICKS = [1, 10, 100, 1000];
+const DECADES = Math.log10(AXIS_HI) - Math.log10(AXIS_LO);
+const axisPct = (mi: number) =>
+  +(((Math.log10(mi) - Math.log10(AXIS_LO)) / DECADES) * 100).toFixed(2);
+/* Every run's viewBox is 400 units wide, so one percent of the axis is four
+   user units. `preserveAspectRatio="none"` maps those 400 units onto whatever
+   width the row gets, which is why the SVG x and the CSS `left:%` used by the
+   axis labels land on exactly the same pixel. */
+const vbX = (mi: number) => +(axisPct(mi) * 4).toFixed(2);
+
+/* One decimal under a mile, whole miles above it. The origin is a city node,
+   not a front door, so a second decimal would be invented precision. */
+const milesLabel = (v: number) =>
+  v < 1 ? v.toFixed(1) : Math.round(v).toLocaleString('en-US');
+
+const reach = places
+  .map((p) => {
+    const dists = p.spots.map((s) => milesFromHome(s.lat, s.lon)).sort((a, b) => a - b);
+    const near = dists[0];
+    const far = dists[dists.length - 1];
+    return {
+      ...p,
+      dists,
+      near,
+      far,
+      spread: far - near > 0.05,
+      readout:
+        far - near > 0.05
+          ? `${milesLabel(near)}–${milesLabel(far)} mi`
+          : `${milesLabel(near)} mi`,
+    };
+  })
+  .sort((a, b) => a.near - b.near);
+
+/* The grouping, counted rather than typed out, so it cannot drift from the
+   array above. Insertion order follows the sort, i.e. nearest metro first. */
+const metroLine = Object.entries(
+  reach.reduce<Record<string, number>>((m, p) => {
+    m[p.metro] = (m[p.metro] ?? 0) + 1;
+    return m;
+  }, {})
+)
+  .map(([m, n]) => `${n} ${m}`)
+  .join(' · ');
+
+/* The decade grid, shared by every row: one path with four subpaths. Six units
+   of a fourteen-unit box, so it reads as a tick against the full-width track
+   without needing a second, weaker colour that would fail the 3:1 non-text
+   contrast floor on one of the two grounds this strip can sit on. */
+const reachGrid = AXIS_TICKS.map((t) => `M${vbX(t)} 4 V10`).join(' ');
+const reachAxisTicks = AXIS_TICKS.map((t) => `M${vbX(t)} 0.6 V5.4`).join(' ');
 ---
 
 <Base
@@ -193,15 +386,85 @@ const STATUS_WORD: Record<Book['status'], string> = {
                             <article class="interest-block reveal" aria-labelledby="int-food-title">
                                 <span class="interest-index" aria-hidden="true">02</span>
                                 <h3 id="int-food-title" class="interest-heading">Food &amp; Restaurants</h3>
-                                <p class="interest-copy">I keep a running list of places to try and happily plan a trip around one good meal. A few I recommend often:</p>
-                                <ul class="bubble-list">
-                                    <li class="bubble">Wolf in the Woods</li>
-                                    <li class="bubble">Double Chicken Please</li>
-                                    <li class="bubble">San Ho Won</li>
-                                    <li class="bubble">Arsicault</li>
-                                    <li class="bubble">Zareen's</li>
-                                    <li class="bubble">Duc Huong</li>
-                                </ul>
+                                <p class="interest-copy">I keep a running list of places to try and happily plan a trip around one good meal. Six I recommend often — which, once you check, turn out to be nowhere near each other.</p>
+
+                                {/* THE REACH STRIP. Was six `.bubble` chips carrying nothing but
+                                     the names. The six places are now drawn against a real
+                                     four-decade log ruler of straight-line distance from
+                                     Sunnyvale; the data block at the top of this file has the
+                                     verified addresses, the coordinate sources and the reason
+                                     this is a ruler and NOT a map.
+
+                                     No dot on it is placed by hand. Every x comes from
+                                     `vbX(miles)`, i.e. from a geocoded street address, and the
+                                     grid lines sit on the real decade marks. Layout carries no
+                                     meaning: which ROW a place is on is just sort order
+                                     (nearest first), and the caption says position means
+                                     distance, never direction.
+
+                                     Each `svg` is aria-hidden because it is a redundant
+                                     depiction — the name, the location and the distance are all
+                                     real HTML text in the same row, so a screen reader gets the
+                                     whole dataset without it, and no dot depends on colour to
+                                     be identified (WCAG 1.4.1). Nothing here is focusable: the
+                                     dots are not links, so the strip adds no tab stops. */}
+                                <figure class="reach">
+                                    <figcaption class="reach-head">
+                                        <span class="reach-title">How far for a meal</span>
+                                        <span class="reach-span">{metroLine}</span>
+                                    </figcaption>
+
+                                    <p class="reach-note">Position is straight-line distance from Sunnyvale on a log scale — distance, not direction. The six sit in three metros on two coasts, so there is no single honest map to draw. A bar rather than a dot means several locations, and it covers all of them.</p>
+
+                                    <ol class="reach-list">
+                                        {reach.map((p) => (
+                                            <li class="reach-row">
+                                                <span class="reach-row-head">
+                                                    <span class="reach-name">{p.name}</span>
+                                                    <span class="reach-mi">{p.readout}</span>
+                                                </span>
+                                                <span class="reach-where">{p.what} · {p.where}</span>
+                                                <svg class="reach-run" viewBox="0 0 400 14" preserveAspectRatio="none" fill="none" aria-hidden="true" focusable="false">
+                                                    <path class="reach-grid" d={reachGrid} vector-effect="non-scaling-stroke" />
+                                                    <path class="reach-track" d="M0 7 H400" vector-effect="non-scaling-stroke" />
+                                                    {p.spread && (
+                                                        <path class="reach-bar" d={`M${vbX(p.near)} 7 H${vbX(p.far)}`} vector-effect="non-scaling-stroke" />
+                                                    )}
+                                                    {p.dists.map((d) => (
+                                                        <path class="reach-dot" d={`M${vbX(d)} 7 h.01`} vector-effect="non-scaling-stroke" />
+                                                    ))}
+                                                </svg>
+                                            </li>
+                                        ))}
+                                    </ol>
+
+                                    {/* The shared ruler. aria-hidden for the same reason as the
+                                         runs: every row already prints its own distance, so the
+                                         scale is a sighted-reader aid, not the only copy of the
+                                         data. The tick labels are positioned with `left:%` from
+                                         the SAME `axisPct()` that drives the SVG, so label and
+                                         tick cannot drift apart. */}
+                                    <div class="reach-axis" aria-hidden="true">
+                                        <svg class="reach-axis-rule" viewBox="0 0 400 6" preserveAspectRatio="none" fill="none">
+                                            <path class="reach-track" d="M0 0.6 H400" vector-effect="non-scaling-stroke" />
+                                            <path class="reach-grid" d={reachAxisTicks} vector-effect="non-scaling-stroke" />
+                                        </svg>
+                                        <span class="reach-axis-labels">
+                                            {AXIS_TICKS.map((t) => (
+                                                <span class="reach-axis-label" style={`left:${axisPct(t)}%`}>{t.toLocaleString('en-US')} mi</span>
+                                            ))}
+                                        </span>
+                                    </div>
+
+                                    {/* The tie to Travel, and the reason the two long rows are
+                                         worth plotting at all: the only two places on this strip
+                                         that are not in the Bay Area are San Diego and New York,
+                                         and travel.astro's boarding-pass wall carries real stubs
+                                         for both (two San Diego, one New York). So this sentence
+                                         is checkable against another page rather than being a
+                                         flourish. Directory-format URL, root-absolute. */}
+                                    <p class="reach-foot">The two long hauls are real trips — San Diego and New York both have a boarding pass on the <a href="/travel/">travel page</a>.</p>
+                                </figure>
                             </article>
 
                             <article class="interest-block reveal" aria-labelledby="int-markets-title">

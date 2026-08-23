@@ -823,6 +823,218 @@
 }
 
 
+/* ---- THE REACH STRIP ------------------------------------------------------
+   Six recommended places drawn against a four-decade log ruler of
+   straight-line distance from Sunnyvale. The data block in index.astro has the
+   verified addresses and the argument for why this is a ruler and not a map
+   (the six sit in three metros on two coasts, so no single honest map exists).
+
+   EVERY MEANINGFUL DIMENSION IS SET BY THE MARKUP, not here: the dot and bar
+   x-coordinates come out of geocoded street addresses via `vbX(miles)`, and the
+   grid sits on the real decade marks. This file only sets the register — type,
+   colour, weight, rhythm. There is nothing to tune here that could move a dot,
+   which is deliberate.
+
+   COLOUR IS NEVER THE ONLY CHANNEL. Each row prints its own name, location and
+   distance as real HTML text, so the drawing is a redundant depiction and both
+   `svg`s are aria-hidden. Dots are told apart by their row, never by hue.
+
+   CONTRAST. The strip lives inside `#interests`, a `.band--dark` plate, so
+   `--panel` / `--sage` / `--mut` resolve to the dark ramp and the ground under
+   it is --panel #232d1d. Computed against that: sage dots and bars 7.7:1, the
+   mono meta line 7.6:1, the distance readout 8.8:1. The one literal, #8f9884,
+   is the value styles.css already proved is exactly 3.00:1 on the LIGHT
+   --panel; on this plate it measures 4.8:1. So the ruler clears the WCAG
+   1.4.11 non-text floor on either ground, which is what lets the strip survive
+   being moved to a light band. Track and grid share that one colour and are
+   told apart by GEOMETRY — a full-width rule versus a 6-unit tick — rather
+   than by a second, weaker hue that would fail the floor on one of the two
+   grounds.
+
+   NOTHING HERE ANIMATES, deliberately. The parent `.interest-block` already
+   carries `.reveal`, whose reduced-motion opt-out lives in styles.css, so this
+   strip needs no tween of its own and no rule below authors an invisible or
+   zero-area resting state — it is drawn in its finished form. It also uses
+   none of the `.shape-*` names, so scroll.css's self-drawing stroke tween
+   (which drives `stroke-width` from `--contour` and would leave these
+   hairlines at zero width) cannot reach it.
+
+   FLUIDITY. Each run is `width:100%` over a `viewBox` of 400x14 with
+   `preserveAspectRatio="none"`, and the CSS height matches the viewBox height
+   exactly, so the y-scale is always 1 and only x stretches.
+   `vector-effect="non-scaling-stroke"` then keeps every stroke width in device
+   pixels, which is what makes the dots true circles (a zero-length subpath
+   with a round cap) at any column width instead of ellipses. Verified painted
+   at 284px, 405px and 810px — the three widths this column actually takes
+   between a 320px phone and a 1920px desktop.
+   ------------------------------------------------------------------------ */
+.reach {
+    max-width: 34rem;
+    margin: clamp(18px, 2.2vw, 26px) 0 0;
+    padding: clamp(15px, 2vw, 21px) clamp(15px, 2.2vw, 23px) clamp(12px, 1.6vw, 17px);
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--r);
+    box-shadow: var(--shadow-card);
+}
+
+/* Caption row in the same mono register as the travel page's trip-cadence
+   head, so the site has one voice for "this is a chart". */
+.reach-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 5px 14px;
+    padding-bottom: 11px;
+    border-bottom: 1px solid var(--line);
+}
+.reach-title {
+    font-family: var(--mono);
+    font-size: .72rem;
+    line-height: 1.2;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: var(--sage-deep);
+}
+/* The grouping line is COUNTED from the data, not typed, so it is allowed to
+   wrap rather than being pinned with `nowrap` — at 320px the column is 284px
+   wide and "4 Bay Area · 1 San Diego · 1 New York" does not fit on one line. */
+.reach-span {
+    font-family: var(--mono);
+    font-size: .68rem;
+    letter-spacing: .05em;
+    color: var(--mut);
+}
+.reach-note {
+    margin: 11px 0 0;
+    font-family: var(--sans);
+    font-size: .8rem;
+    line-height: 1.55;
+    color: var(--mut);
+    max-width: 48ch;
+}
+
+.reach-list {
+    list-style: none;
+    margin: clamp(14px, 1.8vw, 19px) 0 0;
+    padding: 0;
+    display: grid;
+    gap: clamp(11px, 1.4vw, 15px);
+}
+.reach-row {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+}
+.reach-row-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+}
+/* No negative tracking: the modular scale reserves --tr-sm for 22–30px and
+   this sits at 16–17.4px, where tightening starts to cost legibility. */
+.reach-name {
+    min-width: 0;
+    font-family: var(--display);
+    font-size: var(--fs-1);
+    line-height: 1.25;
+    color: var(--ink);
+}
+/* `flex: none` + tabular figures: the readouts are a column of numbers the eye
+   compares, so they must not reflow or wobble as the digits change. */
+.reach-mi {
+    flex: none;
+    font-family: var(--mono);
+    font-size: .7rem;
+    letter-spacing: .02em;
+    color: var(--sage-deep);
+    font-variant-numeric: tabular-nums;
+}
+.reach-where {
+    font-family: var(--mono);
+    font-size: .64rem;
+    line-height: 1.45;
+    letter-spacing: .03em;
+    color: var(--mut);
+}
+
+.reach-run {
+    display: block;
+    width: 100%;
+    height: 14px;
+    margin-top: 5px;
+}
+.reach-track { stroke: #8f9884; stroke-width: 1; }
+.reach-grid  { stroke: #8f9884; stroke-width: 1; }
+/* The bar means "this place has locations spread over this range". It sits
+   under the dots in paint order, so a cluster reads as one lozenge with its
+   real ends marked. */
+.reach-bar {
+    stroke: var(--sage);
+    stroke-width: 2.4;
+    stroke-linecap: round;
+}
+/* One dot per verified location. Drawn as a zero-length subpath with a round
+   cap so the mark stays circular under the run's non-uniform x-stretch. */
+.reach-dot {
+    stroke: var(--sage);
+    stroke-width: 6.4;
+    stroke-linecap: round;
+}
+
+.reach-axis { margin-top: clamp(12px, 1.5vw, 16px); }
+.reach-axis-rule {
+    display: block;
+    width: 100%;
+    height: 6px;
+}
+.reach-axis-labels {
+    position: relative;
+    display: block;
+    height: 1rem;
+    margin-top: 3px;
+}
+/* Centred on the tick, from the same percentage the SVG uses. The extreme
+   labels are checked, not assumed: at the narrowest column (252px of inner
+   width) "1 mi" starts 7px in and "1,000 mi" ends 20px short of the right
+   edge, so neither leaves the card. */
+.reach-axis-label {
+    position: absolute;
+    top: 0;
+    transform: translateX(-50%);
+    font-family: var(--mono);
+    font-size: .62rem;
+    letter-spacing: .04em;
+    color: var(--mut);
+    white-space: nowrap;
+}
+
+/* The one interactive thing in the strip, and the only tab stop it adds: a
+   link to the travel page, where the San Diego and New York rows both have a
+   real boarding pass. The site's base rule is `a { color: inherit;
+   text-decoration: none }`, so without the underline below this link would be
+   signalled by nothing — not even colour. Underline plus colour is two
+   channels (WCAG 1.4.1). It is an inline link inside a sentence, the case WCAG
+   2.5.8 exempts from the minimum target size, and the global `:focus-visible`
+   ring in styles.css (2px --sage, 3px offset) covers keyboard use. */
+.reach-foot {
+    margin: clamp(10px, 1.3vw, 14px) 0 0;
+    font-family: var(--mono);
+    font-size: .64rem;
+    line-height: 1.5;
+    letter-spacing: .03em;
+    color: var(--mut);
+}
+.reach-foot a {
+    color: var(--sage-deep);
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 3px;
+}
+
+
 /* ==========================================================================
    8. HOME — the featured bento
 
