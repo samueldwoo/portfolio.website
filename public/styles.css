@@ -1770,6 +1770,34 @@ a.bubble.ticker:hover::after { transform: translate(2px, -2px); opacity: 1; }
     .book-title { font-size: .72rem; }
 }
 
+/* ---------- Scorecard: hole difficulty ----------
+   The rating sits above the stats: it describes the hole in front of you, while
+   the stats below describe your history. Word AND pip count, so the rating never
+   rests on colour alone — and `data-diff` only shifts the pips' tone, never
+   their number, so the information survives with colour off entirely. */
+.hero-sc-diff {
+    display: flex;
+    align-items: baseline;
+    gap: 7px;
+    margin: 0 0 5px;
+    font-family: var(--mono);
+    font-size: .62rem;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    line-height: 1.2;
+}
+.hero-sc-diff-word { color: var(--ink); font-weight: 500; }
+.hero-sc-diff-pips {
+    letter-spacing: .18em;
+    color: var(--sage-deep);
+    font-size: .54rem;
+}
+/* Gentle reads calm, Brutal reads deliberate. Two steps of the SAME hue rather
+   than a red/green scale: the palette has no alarm colour and the word already
+   carries the meaning. */
+.hero-scorecard[data-diff="0"] .hero-sc-diff-pips { color: var(--mut); }
+.hero-scorecard[data-diff="3"] .hero-sc-diff-word { letter-spacing: .18em; }
+
 /* ---------- Contact form status + fallback note ----------
    `.form-status` is the aria-live region the submit handler writes to (see the
    inline script in index.astro). It is EMPTY in the resting state so it never

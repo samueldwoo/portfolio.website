@@ -827,6 +827,24 @@ export default function HeroCanvas() {
       cardList.appendChild(row);
       cardVals[key] = dd;
     }
+    /* HOLE DIFFICULTY — a rating, above the stats.
+       It goes FIRST because it describes the hole in front of you, where the
+       stats below describe your history. */
+    const cardDiff = document.createElement('p');
+    cardDiff.className = 'hero-sc-diff';
+    const cardDiffWord = document.createElement('span');
+    cardDiffWord.className = 'hero-sc-diff-word';
+    const cardDiffPips = document.createElement('span');
+    cardDiffPips.className = 'hero-sc-diff-pips';
+    cardDiffPips.setAttribute('aria-hidden', 'true');
+    cardDiff.appendChild(cardDiffWord);
+    cardDiff.appendChild(cardDiffPips);
+    /* APPEND, in order — do not use insertBefore(cardDiff, cardList) here.
+       cardList is appended on the NEXT line, so at this point it is not yet a
+       child of cardEl and insertBefore throws NotFoundError. That killed the
+       whole island: no scorecard, no ball handle, no keyboard putting, because
+       the exception escaped the effect before any of them were wired. */
+    cardEl.appendChild(cardDiff);
     cardEl.appendChild(cardList);
 
     /* Shown ONLY when a real read or write has actually failed — never
@@ -844,6 +862,83 @@ export default function HeroCanvas() {
      * is struck, a hole is holed, a hole is re-teed, and once at startup) —
      * never from render(), which runs 60x a second.
      */
+    /* ================= HOLE DIFFICULTY =================
+       CALIBRATED AGAINST THE OFFLINE SWEEP, not invented.
+
+       `tools/golf_sweep.py` brute-forces every (aim, power) pair for a hole and
+       reports two things per round: `tolDeg`, the widest aim window that still
+       sinks, and `hits`, the raw NUMBER of sinking lines. 61 holes were swept at
+       1440x900 and every cheap runtime signal was ranked against both
+       (Spearman, on ranks):
+
+                        vs tolDeg   vs hits
+           distance        -0.420    -0.633
+           dist/maxReach   -0.333    -0.556
+           mean up-slope   -0.217    -0.399
+           lateral break   -0.029       ---
+           tiltMag         +0.055       ---
+
+       Two findings changed the design. First, `hits` is the far better ground
+       truth — `tolDeg` is a single widest window and is dominated by pure
+       geometry (the angular size of the cup, which shrinks with distance), while
+       `hits` counts how much of the whole aim/power space works. Second, LATERAL
+       BREAK BARELY MATTERS: -0.03. That was the intuitive candidate — "the ball
+       curves, so aiming is hard" — and the measurement says no. Do not
+       reintroduce it on a hunch.
+
+       The shipped score is z(distance) + z(mean up-slope), which reaches
+       rho = -0.853 against `hits`. Distance in px is legitimately comparable
+       across viewports because reach is fixed by the physics (MAX_SPEED and
+       friction give ~425px on the flat regardless of screen size), so a 300px
+       putt is a 300px putt everywhere.
+
+       The mean up-slope is the SAME quantity reachToward() already integrates
+       (its `up`), sampled at the same five fractions along the line — one
+       definition, used twice.
+
+       Constants below are the mean/sd of those 61 swept holes and the quartile
+       cuts of the composite. The four bands separate cleanly by median sinking
+       lines: 226 / 196 / 76 / 39.
+
+       HONEST LIMIT: the spread is calibrated on desktop geometry. Measured label
+       counts over 80 holes — 1440: 25/20/19/16, 1280: 28/19/17/16,
+       1024: 39/16/13/12, 390: 63/5/4/8. A phone skews "Gentle" because its play
+       box is smaller and the putts really are shorter. That is the truth about
+       the hole, not a calibration bug, so it is left alone. */
+    const HOLE_CAL = { dMean: 271.5, dSd: 56.5, uMean: 5.7, uSd: 83.4 };
+    const HOLE_CUTS = [-0.793, 0.003, 0.852];
+    const HOLE_BANDS = ['Gentle', 'Fair', 'Tricky', 'Brutal'];
+
+    /** 0..3. Recomputed per hole and on resize, never per frame. */
+    const holeBand = (): number => {
+      const hm = home();
+      const span = Math.min(cssW, cssH) * 0.5;
+      const dx = cupX - ballX;
+      const dy = cupY - ballY;
+      const d = Math.hypot(dx, dy) || 1;
+      const ux = dx / d;
+      const uy = dy / d;
+      let up = 0;
+      for (const f of [0.15, 0.35, 0.55, 0.75, 0.95]) {
+        const sl = slopeAt(ballX + ux * d * f, ballY + uy * d * f,
+                           hm.x, hm.y, span, tiltAng, tiltMag, gSeed);
+        up -= sl.gx * ux + sl.gy * uy;
+      }
+      up /= 5;
+      const z = (d - HOLE_CAL.dMean) / HOLE_CAL.dSd + (up - HOLE_CAL.uMean) / HOLE_CAL.uSd;
+      return z <= HOLE_CUTS[0] ? 0 : z <= HOLE_CUTS[1] ? 1 : z <= HOLE_CUTS[2] ? 2 : 3;
+    };
+
+    const renderDiff = () => {
+      const i = holeBand();
+      cardDiffWord.textContent = HOLE_BANDS[i];
+      /* Filled pip COUNT carries the rating as well as the word, so the rating
+         never depends on colour alone (1.4.1) and stays legible to anyone who
+         reads the shapes rather than the label. */
+      cardDiffPips.textContent = '\u25CF'.repeat(i + 1) + '\u25CB'.repeat(3 - i);
+      cardEl.dataset.diff = String(i);
+    };
+
     const renderCard = () => {
       const v = cardView(card);
       cardVals.hole.textContent = String(holePutts);
@@ -857,6 +952,11 @@ export default function HeroCanvas() {
       // recovered write (a freed quota) takes the notice back down.
       if (storageOk === false) cardEl.dataset.storage = 'off';
       else delete cardEl.dataset.storage;
+      /* Folded in here rather than given its own call sites: renderCard already
+         runs at exactly the moments the hole can change (a putt, a sink, a
+         re-tee, and startup), and the rating depends on the tee and cup, which
+         only move then. */
+      renderDiff();
     };
 
     /**
@@ -909,7 +1009,16 @@ export default function HeroCanvas() {
     const syncCard = () => {
       const b = playBox();
       const pad = 10;
-      cardEl.style.left = Math.round(b.x + pad) + 'px';
+      /* RIGHT-ALIGNED to the play box, not left-aligned to it. Reviewed: "can you
+         have it lie a bit further to the right of the view".
+         Still derived, not a magic number — the box's right bound is itself
+         derived (0.94 of the canvas, chosen so the ball clears the section rail),
+         so anchoring here keeps the card inside the green at every width and
+         moves it as far from the hero copy as the green allows. `left` is cleared
+         explicitly because the two would otherwise both apply and stretch the
+         card across the box. */
+      cardEl.style.left = 'auto';
+      cardEl.style.right = Math.round(cssW - (b.x + b.w) + pad) + 'px';
       /* Derived, not guessed: the strip wraps against the width of the GREEN. At
          900 the box is only 177px wide and the four stats wrap to two lines; from
          1280 up they fit on one. The 96px floor keeps the card from collapsing
@@ -2277,6 +2386,7 @@ export default function HeroCanvas() {
         layout();
         placeCup();
         resetBall(false);
+        renderCard();   // the rating's inputs moved with the box — see above
         render(0, 1); // re-lay-out only; deliberately does NOT bump __heroFrames
       });
       ro.observe(wrap);
@@ -2421,6 +2531,11 @@ export default function HeroCanvas() {
       const b = playBox();
       ballX = Math.min(b.x + b.w, Math.max(b.x, ballX));
       ballY = Math.min(b.y + b.h, Math.max(b.y, ballY));
+      /* The box moving moves the cup and clamps the ball, so the rating's two
+         inputs (distance and the slope along the line) have both changed. Without
+         this the card would keep asserting the difficulty of a hole that no
+         longer exists. */
+      renderCard();
       if (!running) render(clock, Math.max(intro, 0.001));
     });
     ro.observe(wrap);
@@ -2464,6 +2579,7 @@ export default function HeroCanvas() {
           ) {
             placeCup();
             resetBall(false);
+            renderCard();   // new tee and cup => new rating
           }
           if (!running) render(clock, Math.max(intro, 0.001));
         })
