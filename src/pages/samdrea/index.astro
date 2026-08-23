@@ -109,7 +109,7 @@ const showPlaceholderWarning = import.meta.env.DEV && gateNeedsReview();
          the redirects and JSON responses that cannot carry a meta tag. -->
     <meta name="robots" content="noindex, nofollow, noarchive">
     <meta name="referrer" content="no-referrer">
-    <title>Samuel Woo&apos;s Home Page</title>
+    <title>private</title>
     <!-- Absolute path: this page is at /samdrea, so "css/us.css" would
          resolve to /samdrea/css/us.css and 404. -->
     <!-- Installable-app metadata. `scope` is "/" and that is a CORRECTION, not
@@ -162,34 +162,55 @@ const showPlaceholderWarning = import.meta.env.DEV && gateNeedsReview();
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23000'/%3E%3Ctext x='16' y='23' font-family='monospace' font-size='20' font-weight='700' text-anchor='middle' fill='%233e7bff'%3E%5B%5D%3C/text%3E%3C/svg%3E">
 </head>
 <body class="crude" id="crude">
+{/* ============================================================
+    NOTHING BUT THE QUESTION.
+
+    This page used to carry a name, a subtitle, three horizontal
+    rules, two paragraphs explaining what a private page is, a
+    three-row "verification status" table listing every question
+    with ASKING / LOCKED beside it, a "Question 1 of 3" counter,
+    a "Your answer" label and a footer.
+
+    All of it is gone. Every one of those was a website EXPLAINING
+    ITSELF, and the joke only works if the page seems not to know
+    it is a page. A status table is a design decision; a question
+    alone on a white screen is a person who does not make
+    websites. The second one is funny, so the second one is what
+    this is.
+
+    WHAT SURVIVES, AND ONLY BECAUSE IT HAS TO:
+      the question            — the entire content
+      the input and a button  — the entire mechanism
+      #q-msg                  — WRONG. / HINT: ; she has to be
+                                told, and it is hidden until then
+      #q-giveup               — the mailto, hidden until 3 misses,
+                                so she is never actually stuck
+      <noscript>              — invisible unless JS is off, and
+                                without it the page is inert with
+                                no explanation at all
+
+    The input keeps its name via aria-label rather than a <label>,
+    so it is still announced to a screen reader while showing
+    nothing on screen. Deleting the label outright would have
+    traded the joke for an unlabelled field.
+
+    #status-body, #q-count and #q-n are GONE, and the script was
+    made safe for their absence rather than left to throw on a
+    null: setStatus() already returned early when its cell was
+    missing, and the q-n write is now guarded the same way.
+    ============================================================ */}
 <div class="crude-wrap">
 
-    <h1>Samuel Woo</h1>
-    <p class="crude-sub">Private page. Please answer the questions.</p>
+    {/* Only when she has been sent back here by an expired session. Arriving at
+        a bare question with no explanation is fine; being BOUNCED to one is not. */}
+    {Astro.url.searchParams.get('e') === 'unauthorized' && (
+        <p>you got signed out. answer them again.</p>
+    )}
 
-    <hr>
-
-    <hr>
-
-    {/* Plain sentences, not a fake boot log in a monospace panel. A themed
-        terminal reads as a DESIGN CHOICE; two flat lines of body text read as a
-        page written by someone who does not make websites, which is the joke
-        Sam actually asked for. */}
-    <p>This page is private.</p>
-    {/* SENT BACK, rather than arriving cold. The middleware 303s a form post
-        carrying a stale cookie here with ?e=unauthorized (see middleware.ts);
-        without this line she would be dumped at "you are not on the list" with
-        no idea why, having just tapped something that worked yesterday. */}
-    {Astro.url.searchParams.get('e') === 'unauthorized' ? (
-        <p>
-            Your way in expired &mdash; that is all that happened. Nothing is lost
-            and nothing is broken. Answer the questions again and you are back.
-        </p>
-    ) : (
-        <p>
-            You are not on the list. The list has one name on it. If you are that
-            person, answer the questions below and it will let you in.
-        </p>
+    {/* Dev only, and one line. It used to be a paragraph with two npm commands
+        and an env var in it, which is a lot of screen for a note to myself. */}
+    {showPlaceholderWarning && (
+        <p class="crude-noscript">dev &mdash; gate answers not confirmed private.</p>
     )}
 
     <noscript>
@@ -199,71 +220,12 @@ const showPlaceholderWarning = import.meta.env.DEV && gateNeedsReview();
         </p>
     </noscript>
 
-    {!ready && (
-        <p class="crude-noscript">
-            TERMINAL OFFLINE &mdash; not configured.
-            {missing.length > 0 && (
-                <>
-                    <br />Missing: {missing.join(', ')}.
-                    <br />Run <code>npm run gate:hash</code>, then restart the dev server.
-                </>
-            )}
-        </p>
-    )}
-
-    {showPlaceholderWarning && (
-        <p class="crude-noscript">
-            DEV WARNING &mdash; these answers have not been confirmed as private.
-            If they are still the setup answers, or anything derivable from the
-            public portfolio, this gate only <em>looks</em> locked.
-            <br />Run <code>npm run gate:hash</code>, then
-            <code>npm run env:push -- --apply</code>, then redeploy.
-            Once they are genuinely private, set <code>US_GATE_REVIEWED=1</code>.
-        </p>
-    )}
-
-    <hr>
-
-    <table class="crude-table">
-        <caption class="crude-count">verification status</caption>
-        <thead>
-            <tr>
-                <th scope="col">#</th>
-                <th scope="col">Question</th>
-                <th scope="col">Status</th>
-            </tr>
-        </thead>
-        <tbody id="status-body">
-            {questions.map((q, i) => (
-                <tr>
-                    <td>{i + 1}</td>
-                    <td>{q.prompt}</td>
-                    {/* data-status is what the client script rewrites. The text
-                        inside carries the state too, so this never depends on
-                        colour alone to be readable. */}
-                    <td data-status={i} class={i === 0 ? 'is-now' : ''}>
-                        {i === 0 ? 'ASKING' : 'LOCKED'}
-                    </td>
-                </tr>
-            ))}
-        </tbody>
-    </table>
-
-    <hr>
-
     <div id="quiz" data-total={questions.length}>
-        <p class="crude-count" id="q-count">
-            Question <span id="q-n">1</span> of {questions.length}
-        </p>
         <p class="crude-q" id="q-prompt">{questions[0]?.prompt ?? '(no questions configured)'}</p>
 
-        <!-- A real <form>: Enter-to-submit, the on-screen keyboard shows a Go
-             key, and the submit button is a real button. The script intercepts
-             submit; it does not replace the form's semantics. -->
+        <!-- A real <form>: Enter-to-submit, and the on-screen keyboard shows a Go
+             key. The script intercepts submit; it does not replace the semantics. -->
         <form class="crude-form" id="q-form" autocomplete="off" novalidate>
-            <label class="crude-count" for="q-input" style="flex: 1 0 100%; margin: 0;">
-                Your answer
-            </label>
             <input
                 class="crude-input"
                 id="q-input"
@@ -274,6 +236,7 @@ const showPlaceholderWarning = import.meta.env.DEV && gateNeedsReview();
                 autocorrect="off"
                 spellcheck="false"
                 placeholder={questions[0]?.placeholder ?? ''}
+                aria-label="Your answer"
                 aria-describedby="q-msg"
                 required
                 disabled={!ready}
@@ -281,8 +244,7 @@ const showPlaceholderWarning = import.meta.env.DEV && gateNeedsReview();
             <button class="crude-submit" id="q-submit" type="submit" disabled={!ready}>SUBMIT</button>
         </form>
 
-        <!-- aria-live so a screen reader hears the verdict without the focus
-             having to move into it. -->
+        <!-- aria-live so a screen reader hears the verdict without focus moving. -->
         <p class="crude-msg" id="q-msg" role="status" aria-live="polite" hidden></p>
 
         <p id="q-giveup" hidden>
@@ -291,18 +253,6 @@ const showPlaceholderWarning = import.meta.env.DEV && gateNeedsReview();
             </a>
         </p>
     </div>
-
-    <hr>
-
-    <p class="crude-foot">
-        {/* Deliberately no counter. It used to be the literal `1`, which
-            would have read "visitors: 1" forever while the studio said "the
-            10th time you've been in here" two taps away. A fake number on
-            the one page whose whole job is to look artlessly honest was the
-            wrong kind of joke. */}
-        {/* The give-up route, after three misses. See the script. */}
-        <span id="q-giveup-slot"></span>
-    </p>
 </div>
 
 <script is:inline define:vars={{ questions, ready }}>
@@ -348,7 +298,10 @@ const showPlaceholderWarning = import.meta.env.DEV && gateNeedsReview();
         prompt.textContent = questions[i].prompt;
         input.placeholder = questions[i].placeholder || '';
         input.value = '';
-        qn.textContent = String(i + 1);
+        /* #q-n was the "Question 1 of 3" counter and is gone with the rest of
+           the chrome. Guarded rather than removed, so the script still works if
+           a counter is ever put back. setStatus() already guards the same way. */
+        if (qn) qn.textContent = String(i + 1);
         giveUp.hidden = true;
         for (var j = 0; j < questions.length; j++) {
             if (j === i) setStatus(j, 'ASKING', 'is-now');

@@ -132,7 +132,20 @@
     margin: .67em 0;
 }
 
-.crude-sub { text-align: left; margin: 0 0 1em; }
+/* REMOVED WITH THE CHROME: .crude-sub, .crude-table (+ its th/td and
+   is-done/is-now states), .crude-count and .crude-foot.
+
+   The gate now renders the question, an input and a button, and
+   nothing else — no name, no subtitle, no rules, no three-row
+   "verification status" table, no "Question 1 of 3", no footer.
+   Those were all the page explaining itself, and the joke only
+   works if it seems not to know it is a page.
+
+   The rules went with the markup rather than being left behind:
+   a stylesheet that still describes a table is a stylesheet that
+   tells the next reader there is a table. `.crude-log` and
+   `.crude-caret` are kept — the noscript and the caret still use
+   them. */
 
 /* Default rule. Not rainbow, not sage, not a gradient. */
 .crude hr { border: 0; border-top: 1px solid #000; margin: 1em 0; }
@@ -154,25 +167,7 @@
 }
 .crude-log b { font-weight: bold; }
 
-/* <table border="1"> and nothing else. */
-.crude-table { border-collapse: collapse; margin: 0 0 1em; font-size: 15px; }
-.crude-table th,
-.crude-table td { border: 1px solid #000; padding: 2px 5px; text-align: left; }
-.crude-table th { font-weight: bold; }
-/* State is the WORD in the cell. No fills — colour is not the signal. */
-.crude-table td.is-done,
-.crude-table td.is-now { background: transparent; font-weight: normal; }
-
 .crude-q { font-size: 1em; font-weight: bold; margin: 0 0 .3em; }
-.crude-count {
-    font-family: inherit;
-    font-size: 1em;
-    text-transform: none;
-    letter-spacing: normal;
-    color: #000;
-    margin: 0 0 .3em;
-}
-
 /* Label above, box below, button after. No flex, no gap. */
 .crude-form { margin: 0 0 1em; }
 
@@ -228,8 +223,6 @@
 .crude-msg[hidden] { display: none; }
 
 .crude-noscript { margin: 0 0 1em; font-weight: bold; }
-
-.crude-foot { margin: 2em 0 0; font-size: 13px; }
 
 /* The caret. A literal blinking underscore, resting VISIBLE so
    the line never reads as truncated. */
