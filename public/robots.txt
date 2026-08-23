@@ -1,0 +1,17 @@
+# robots.txt — samueldwoo.com
+#
+# This file exists for the Sitemap line: a sitemap nothing points at is a
+# sitemap nothing fetches. (A missing robots.txt already means "crawl
+# everything", so that part was never broken.)
+#
+# There is deliberately no Disallow rule. Do not add one. Reasoning is recorded
+# in the repo, NOT here: this file is world-readable and is one of the first
+# things any scanner fetches, so naming a path you would rather nobody tried is
+# self-defeating — it is an index of exactly those paths, with no authorisation
+# value whatsoever. Real access control belongs in src/middleware.ts, and that
+# is where it is.
+
+User-agent: *
+Allow: /
+
+Sitemap: https://www.samueldwoo.com/sitemap.xml

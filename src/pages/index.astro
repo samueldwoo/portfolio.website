@@ -1,7 +1,46 @@
 ---
+import fs from 'node:fs';
 import Base from '../layouts/Base.astro';
 import SiteFoot from '../components/SiteFoot.astro';
 import HeroCanvas from '../components/HeroCanvas.tsx';
+
+/**
+ * TWO BUILD-TIME CAPABILITY CHECKS.
+ *
+ * Both of these guard against the same failure: shipping a control that LOOKS
+ * like it works and doesn't. A portfolio's whole job is the résumé link and the
+ * contact form, so a broken one of either is worse than not offering it.
+ *
+ * 1. RESUME. The button pointed at `./25_Woo_Resume_Software.pdf`, which 404s —
+ *    the file has never existed in the repo. `.gitignore` has `*.pdf` but also
+ *    `!public/*.pdf` (line 53), so dropping it at
+ *    `public/25_Woo_Resume_Software.pdf` needs only a plain `git add` — verified
+ *    with `git add --dry-run`. Anywhere else in the tree still needs `-f`. Note
+ *    `git check-ignore -v` returns rc=0 for BOTH paths and so cannot be used to
+ *    tell them apart: it reports "a pattern matched", not "is ignored".
+ *    Rather than ship a dead primary CTA or
+ *    silently delete the feature, the button renders only if the file is
+ *    actually there at build time. Drop the PDF into public/ and it comes back
+ *    on the next build with no code change. Path is root-absolute on purpose:
+ *    URLs here are directory-format, so a `./` href resolves one level deeper
+ *    on any page but `/`.
+ *
+ * 2. CONTACT FORM. `action` was the literal Formspree placeholder
+ *    `https://formspree.io/f/YOUR_FORM_ID`. Submitting navigated the visitor to
+ *    a browser error page: they lost their message AND the site. Until a real
+ *    endpoint exists, the form degrades to composing the message in the
+ *    visitor's own mail client, which cannot lose it. Replace the ID below and
+ *    the normal POST path takes over — see the inline script by the form for
+ *    the JS-enhanced path and the status region.
+ */
+const RESUME_PATH = '/25_Woo_Resume_Software.pdf';
+const resumeExists = fs.existsSync(
+    new URL(`../../public${RESUME_PATH}`, import.meta.url)
+);
+
+const CONTACT_EMAIL = 'samuel.dw.woo@gmail.com';
+const FORM_ENDPOINT = 'https://formspree.io/f/YOUR_FORM_ID';
+const formConfigured = !FORM_ENDPOINT.includes('YOUR_FORM_ID');
 ---
 
 <Base
@@ -10,12 +49,12 @@ import HeroCanvas from '../components/HeroCanvas.tsx';
     page="home"
     skipTarget="home"
 >
-    <!-- Scrolling content -->
+    {/* Scrolling content */}
     <main class="content">
 
-        <!-- HOME -->
+        {/* HOME */}
         <section id="home" class="band band-home" aria-labelledby="home-title">
-            <!-- Generative atmosphere layer. This REPLACES the old static
+            {/* Generative atmosphere layer. This REPLACES the old static
                  `.hero-motif` line-draw SVG: same sage stroke register, but a
                  living contour field that eases toward the pointer. It is a
                  direct child of the band (not `.home-inner`) so it sits at
@@ -27,7 +66,7 @@ import HeroCanvas from '../components/HeroCanvas.tsx';
                  every viewport, so client:visible's IntersectionObserver would
                  fire on the very first frame anyway — it only adds a round-trip
                  before the atmosphere appears. The island still ships as a
-                 deferred module, so it never blocks first paint. -->
+                 deferred module, so it never blocks first paint. */}
             <HeroCanvas client:load />
             <div class="band-inner home-inner">
                 <p class="hero-meta reveal reveal-clip">
@@ -52,17 +91,17 @@ import HeroCanvas from '../components/HeroCanvas.tsx';
             </div>
         </section>
 
-        <!-- INTERESTS -->
-        <!-- First of the two dark plates. The page used to run five light
+        {/* INTERESTS */}
+        {/* First of the two dark plates. The page used to run five light
              bands in a row; inverting this one puts a hard tonal break
              immediately after the hero, so the scroll reads
              light / dark / inset-plate / dark / light instead of one
              uninterrupted sheet. All the colour inversion lives in
              `.band--dark` in styles.css (local custom-property overrides),
-             so the markup below is unchanged by it. -->
+             so the markup below is unchanged by it. */}
         <section id="interests" class="band band--shapes band--dark" aria-labelledby="interests-title">
-            <!-- Decorative line-art field: draws itself in on enter, then drifts.
-                 Same sage stroke register as the hero signature motif. -->
+            {/* Decorative line-art field: draws itself in on enter, then drifts.
+                 Same sage stroke register as the hero signature motif. */}
             <svg class="shape-field shape-field--interests" viewBox="0 0 260 260" fill="none" aria-hidden="true">
                 <g class="shape-drift">
                     <circle class="shape-ring" cx="132" cy="120" r="86" />
@@ -76,10 +115,10 @@ import HeroCanvas from '../components/HeroCanvas.tsx';
                     <path class="shape-tick" d="M24 236 L 40 236 M52 236 L 68 236 M80 236 L 96 236 M108 236 L 124 236 M136 236 L 152 236 M164 236 L 180 236" />
                 </g>
             </svg>
-            <!-- data-rail: the rotated mono running head in the band's left
+            {/* data-rail: the rotated mono running head in the band's left
                  margin (layout.css). Decorative — it repeats the <h2> below,
                  is drawn with generated content so it is never in the a11y
-                 tree, and only exists at >=1280px where the gutter does. -->
+                 tree, and only exists at >=1280px where the gutter does. */}
             <div class="band-inner" data-rail="01 / Interests">
                 <div class="section-head">
                     <h2 id="interests-title" class="section-title reveal reveal-clip">Interests</h2>
@@ -92,7 +131,7 @@ import HeroCanvas from '../components/HeroCanvas.tsx';
                                 <span class="interest-index" aria-hidden="true">01</span>
                                 <h3 id="int-sports-title" class="interest-heading">Sports &amp; Staying Active</h3>
                             </div>
-                            <p class="interest-copy">Basketball and baseball growing up, now mostly volleyball on Mondays — the highlight of my week — and golf, which I picked up last year and am still very much learning.</p>
+                            <p class="interest-copy">Basketball and baseball growing up, now mostly volleyball on Mondays — the highlight of my week — and golf, which I'm still very much learning.</p>
                         </article>
 
                         <div class="interest-columns">
@@ -126,7 +165,7 @@ import HeroCanvas from '../components/HeroCanvas.tsx';
                     </div>
 
                     <h3 class="subhead reveal">Random Favorites</h3>
-                    <!-- SEMANTICS. Six label/value pairs that were six generic
+                    {/* SEMANTICS. Six label/value pairs that were six generic
                          <div>s of <span>s: the grouping was carried entirely by
                          the grid, so a screen reader heard "Sport Volleyball
                          (Mondays!) Workout Chest day ..." as one undifferentiated
@@ -137,7 +176,7 @@ import HeroCanvas from '../components/HeroCanvas.tsx';
                          and because layout.css's bento spans key off
                          `.favorites-grid > .favorite-item:nth-child(n)` — so this
                          is a zero-CSS-change swap. dt/dd default margins are
-                         already zeroed by the global reset. -->
+                         already zeroed by the global reset. */}
                     <dl class="favorites-grid">
                         <div class="favorite-item reveal">
                             <dt class="favorite-label">Sport</dt>
@@ -168,14 +207,14 @@ import HeroCanvas from '../components/HeroCanvas.tsx';
             </div>
         </section>
 
-        <!-- PROJECTS -->
-        <!-- The one INSET band on the page: `band--plate` gives the section
+        {/* PROJECTS */}
+        {/* The one INSET band on the page: `band--plate` gives the section
              its own margins, hairline and rounded corners so it reads as a
              sheet laid on the page rather than another full-bleed slab. It
              sits between the two dark plates, which is what makes the
-             bleed/inset alternation legible. -->
+             bleed/inset alternation legible. */}
         <section id="projects" class="band band--shapes band--plate" aria-labelledby="projects-title">
-            <!-- Stacked-cards / layered-sheet abstraction, in line-art -->
+            {/* Stacked-cards / layered-sheet abstraction, in line-art */}
             <svg class="shape-field shape-field--projects" viewBox="0 0 240 240" fill="none" aria-hidden="true">
                 <g class="shape-drift">
                     <path class="shape-line" d="M30 88 L 120 44 L 210 88 L 120 132 Z" />
@@ -192,13 +231,13 @@ import HeroCanvas from '../components/HeroCanvas.tsx';
                 </div>
 
                 <div class="section-body">
-                    <!-- Bento mosaic (layout.css §8). Four tiles on a
+                    {/* Bento mosaic (layout.css §8). Four tiles on a
                          12-column grid with OFFSET seams — row 1 splits 7/5,
                          row 2 splits 5/7 — so the vertical join moves as the
                          eye travels down. DOM order matches visual order on
                          every breakpoint, including the single-column
-                         collapse below 900px. -->
-                    <!-- HEADING LEVEL. These were `h4` under the `h2`
+                         collapse below 900px. */}
+                    {/* HEADING LEVEL. These were `h4` under the `h2`
                          "Projects", skipping h3 entirely (WCAG 1.3.1 / 2.4.10
                          heading order). `.card-title` is a class, so h3 renders
                          byte-identically — and it also matches projects.astro,
@@ -208,16 +247,16 @@ import HeroCanvas from '../components/HeroCanvas.tsx';
                          name was the concatenation of everything inside it:
                          measured 295 / 113 / 141 characters. `aria-labelledby`
                          pointing at the tile's own title makes the name the
-                         title; the rest of the tile still reads as content. -->
+                         title; the rest of the tile still reads as content. */}
                     <div class="project-grid">
                         <a class="card project-card project-feature reveal spotlight" aria-labelledby="pc-kaching-title" href="/projects#cs-finance-title">
                             <span class="project-index" aria-hidden="true">01</span>
-                            <!-- Not aria-hidden any more: these three chips are
+                            {/* Not aria-hidden any more: these three chips are
                                  the only place the tile states what the project
                                  actually does, so hiding them was information
                                  loss, not decoration. The link name is now
                                  pinned by aria-labelledby, which is what the
-                                 aria-hidden was really being used for. -->
+                                 aria-hidden was really being used for. */}
                             <ul class="feature-chips">
                                 <li>Runs 100% locally</li>
                                 <li>Multi-format parsing</li>
@@ -232,16 +271,16 @@ import HeroCanvas from '../components/HeroCanvas.tsx';
                         <a class="card project-card project-card--tall reveal spotlight" aria-labelledby="pc-site-title" href="/projects#cs-site-title">
                             <span class="project-index" aria-hidden="true">02</span>
                             <h3 id="pc-site-title" class="card-title">This Website</h3>
-                            <p class="project-tech">HTML/CSS/JS</p>
-                            <p>Hand-written, no framework, reduced-motion aware. You're looking at it.</p>
+                            <p class="project-tech">Astro · Canvas · GSAP</p>
+                            <p>Hand-written CSS, one React island for the playable green, reduced-motion aware. You're looking at it.</p>
                             <span class="card-cta">Read case study <span aria-hidden="true">→</span></span>
                         </a>
 
-                        <!-- The mosaic's fourth tile: pure type + procedural
+                        {/* The mosaic's fourth tile: pure type + procedural
                              hatch, no imagery. It exists to break the run of
                              three near-identical cards with a surface that
                              isn't a card, and to carry the biggest numeral on
-                             the page against its 11px mono label. -->
+                             the page against its 11px mono label. */}
                         <div class="bento-plate reveal">
                             <span class="bento-plate-k">On the record</span>
                             <span class="bento-plate-n">05</span>
@@ -260,13 +299,13 @@ import HeroCanvas from '../components/HeroCanvas.tsx';
             </div>
         </section>
 
-        <!-- WORK -->
-        <!-- The one inverted band on the site. `#work` is the substantive middle
+        {/* WORK */}
+        {/* The one inverted band on the site. `#work` is the substantive middle
              of the scroll, so making it a dark plate gives the page a centre of
              gravity and turns the light sections above and below into a
              deliberate frame rather than an unbroken sheet. All the colour
              inversion lives in `.band--dark` in styles.css (local custom-property
-             overrides — no filters), so the content markup is untouched. -->
+             overrides — no filters), so the content markup is untouched. */}
         <section id="work" class="band band--dark" aria-labelledby="work-title">
             <div class="band-inner" data-rail="03 / Work">
                 <div class="section-head">
@@ -297,8 +336,8 @@ import HeroCanvas from '../components/HeroCanvas.tsx';
 
                     <h3 class="subhead reveal">Experience</h3>
                     <div class="timeline">
-                        <!-- Read-progress rail: scrubs from 0 to full as the
-                             timeline scrolls past. Rests filled with motion off. -->
+                        {/* Read-progress rail: scrubs from 0 to full as the
+                             timeline scrolls past. Rests filled with motion off. */}
                         <span class="timeline-rail" aria-hidden="true"></span>
                         <article class="exp-item reveal" aria-labelledby="exp-sde2-title">
                             <div class="exp-head">
@@ -330,14 +369,18 @@ import HeroCanvas from '../components/HeroCanvas.tsx';
                         </article>
                     </div>
 
-                    <p class="resume-line reveal"><a href="./25_Woo_Resume_Software.pdf" class="btn-resume" target="_blank" rel="noopener">Download Résumé <span aria-hidden="true">↗</span></a></p>
+                    {resumeExists ? (
+                        <p class="resume-line reveal"><a href={RESUME_PATH} class="btn-resume" target="_blank" rel="noopener">Download Résumé <span aria-hidden="true">↗</span></a></p>
+                    ) : (
+                        <p class="resume-line reveal"><a href={`mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('Résumé request')}`} class="btn-resume">Résumé on request <span aria-hidden="true">↗</span></a></p>
+                    )}
                 </div>
             </div>
         </section>
 
-        <!-- CONNECT -->
+        {/* CONNECT */}
         <section id="connect" class="band band--shapes" aria-labelledby="connect-title">
-            <!-- Signal / node-graph abstraction — "reach out" in line-art -->
+            {/* Signal / node-graph abstraction — "reach out" in line-art */}
             <svg class="shape-field shape-field--connect" viewBox="0 0 240 240" fill="none" aria-hidden="true">
                 <g class="shape-drift">
                     <circle class="shape-ring" cx="120" cy="120" r="34" />
@@ -379,15 +422,19 @@ import HeroCanvas from '../components/HeroCanvas.tsx';
 
                         <div class="connect-col contact-form reveal">
                             <h3 id="contact-form-title" class="subhead subhead-flush">Or Send a Message</h3>
-                            <!-- `aria-labelledby`: an unnamed <form> is exposed as
+                            {/* `aria-labelledby`: an unnamed <form> is exposed as
                                  a bare "form" landmark with nothing to
                                  distinguish it. `autocomplete` on the name and
                                  email fields is WCAG 1.3.5 Identify Input Purpose
                                  (AA) — both were missing, so assistive tech and
                                  password managers had no programmatic purpose to
                                  work from. "message" has no standard token, so it
-                                 is deliberately left off rather than invented. -->
-                            <form action="https://formspree.io/f/YOUR_FORM_ID" method="POST" aria-labelledby="contact-form-title">
+                                 is deliberately left off rather than invented. */}
+                            <form id="contact-form" action={formConfigured ? FORM_ENDPOINT : `mailto:${CONTACT_EMAIL}`} method="POST"
+                                  enctype={formConfigured ? undefined : 'text/plain'}
+                                  data-endpoint={formConfigured ? FORM_ENDPOINT : ''}
+                                  data-mailto={CONTACT_EMAIL}
+                                  aria-labelledby="contact-form-title">
                                 <div class="field">
                                     <label for="name">Name</label>
                                     <input type="text" id="name" name="name" placeholder="Your name" autocomplete="name" required>
@@ -401,7 +448,77 @@ import HeroCanvas from '../components/HeroCanvas.tsx';
                                     <textarea id="message" name="message" placeholder="What's on your mind?" rows="5" required></textarea>
                                 </div>
                                 <button type="submit">Send</button>
+                                {/* Status region. `aria-live="polite"` + `role="status"`: a
+                                    submit that reported nothing was indistinguishable from a
+                                    submit that did nothing, and a sighted user at least saw a
+                                    page navigation. Empty until there is something to say, so
+                                    it never announces on load. */}
+                                <p class="form-status" id="contact-status" role="status" aria-live="polite"></p>
                             </form>
+                            {!formConfigured && (
+                                <p class="form-note">No form backend wired up yet — Send will open your mail app with the message ready to go.</p>
+                            )}
+                            {/* Inline, not in script.js: this is page-specific behaviour for one
+                                form, and script.js is the shared site layer.
+
+                                WHY THIS EXISTS. With a real endpoint, a plain POST navigates
+                                away from the site to Formspree's own page; intercepting it keeps
+                                the visitor here and lets the status region do the talking.
+                                Without one, the no-JS fallback is `action="mailto:"` +
+                                `enctype="text/plain"`, which browsers handle inconsistently — so
+                                when JS is available we build the mailto ourselves, which is
+                                predictable. Either way the message is never destroyed, which is
+                                what the placeholder endpoint used to do. */}
+                            <script is:inline>
+                                (function () {
+                                    var form = document.getElementById('contact-form');
+                                    if (!form) return;
+                                    var status = document.getElementById('contact-status');
+                                    var endpoint = form.getAttribute('data-endpoint') || '';
+                                    var mailto = form.getAttribute('data-mailto') || '';
+
+                                    function say(msg, bad) {
+                                        if (!status) return;
+                                        status.textContent = msg;
+                                        status.classList.toggle('is-error', !!bad);
+                                    }
+
+                                    form.addEventListener('submit', function (ev) {
+                                        if (!form.checkValidity()) return;   // let the UA report it
+                                        ev.preventDefault();
+                                        var name = (form.elements.name && form.elements.name.value) || '';
+                                        var email = (form.elements.email && form.elements.email.value) || '';
+                                        var message = (form.elements.message && form.elements.message.value) || '';
+
+                                        if (!endpoint) {
+                                            var subject = 'Website message from ' + (name || 'a visitor');
+                                            var body = message + '\n\n— ' + name + ' (' + email + ')';
+                                            say('Opening your mail app…');
+                                            window.location.href = 'mailto:' + mailto +
+                                                '?subject=' + encodeURIComponent(subject) +
+                                                '&body=' + encodeURIComponent(body);
+                                            return;
+                                        }
+
+                                        var btn = form.querySelector('button[type="submit"]');
+                                        if (btn) btn.disabled = true;
+                                        say('Sending…');
+                                        fetch(endpoint, {
+                                            method: 'POST',
+                                            headers: { Accept: 'application/json' },
+                                            body: new FormData(form)
+                                        }).then(function (res) {
+                                            if (!res.ok) throw new Error('HTTP ' + res.status);
+                                            form.reset();
+                                            say('Thanks — message sent. I’ll get back to you.');
+                                        }).catch(function () {
+                                            say('That didn’t send. Email ' + mailto + ' instead.', true);
+                                        }).then(function () {
+                                            if (btn) btn.disabled = false;
+                                        });
+                                    });
+                                })();
+                            </script>
                         </div>
                     </div>
 

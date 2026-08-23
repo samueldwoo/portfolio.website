@@ -1034,7 +1034,29 @@ export default function HeroCanvas() {
        scrolls normally. `pointer-events: auto` is explicit because the wrapper
        above it is `pointer-events: none`. */
     const handle = document.createElement('div');
-    handle.setAttribute('aria-hidden', 'true');
+    /* FOCUSABLE, AND NOT aria-hidden — this is the keyboard's only way in.
+       The handle used to be `aria-hidden="true"` with no tabindex, which made
+       the green pointer-only: drag or nothing. That was defensible while it was
+       pure decoration, but the site now advertises it ("you can putt on it") and
+       the same case study claims the site is keyboard-navigable, so the two
+       statements have to be made consistent. Keyboard operation is WCAG 2.1.1
+       (Level A) for anything that counts as functionality.
+
+       WHAT THIS DOES **NOT** SATISFY, so nobody records a pass it hasn't earned:
+       2.5.7 Dragging Movements (AA) asks for a SINGLE-POINTER alternative to a
+       drag, and a keyboard is not a pointer — so aiming is still drag-only for a
+       pointer user who cannot drag. (An earlier draft of this comment cited
+       "2.5.8", which is Target Size Minimum and is a different, comfortably
+       passing thing.) The honest options are a tap-to-aim / tap-to-set-power
+       path, or an "essential" argument on the grounds that the drag IS the golf
+       swing. Neither has been done; it is an open item, not a solved one.
+       2.5.8 itself passes: the handle is 60px on fine pointers, 88px on coarse.
+       The <canvas> itself stays aria-hidden: it is a picture, and everything a
+       non-sighted player needs is announced through the live region below. */
+    handle.className = 'hero-ball-handle';
+    handle.tabIndex = 0;
+    handle.setAttribute('aria-label', 'Putting green. Aim and putt the ball.');
+    handle.setAttribute('aria-describedby', 'green-keys');
     const HANDLE_R = coarse ? 44 : 30;
     handle.style.cssText =
       'position:absolute;width:' + HANDLE_R * 2 + 'px;height:' + HANDLE_R * 2 + 'px;' +
@@ -1050,6 +1072,130 @@ export default function HeroCanvas() {
       handle.style.top = ballY + 'px';
       handle.style.display = phase === 'rolling' ? 'none' : 'block';
     };
+
+    /* ---------------- Keyboard putting ----------------
+       Two sibling elements, both created here rather than in the JSX so they
+       cannot exist for a visitor whose JS never ran (the same reasoning the
+       handle already used):
+         #green-keys  the instructions, referenced by aria-describedby. Visible
+                      only while the handle has focus, so it teaches the controls
+                      at the moment they become usable and costs nothing before.
+         #green-live  a polite live region. Aim and power are drawn on a canvas,
+                      i.e. invisible to AT, so without this a keyboard player
+                      gets no feedback at all and cannot tell aiming from rolling.
+       Keyboard state is kept as angle + power, then converted into the SAME
+       `pullX/pullY` vector the drag produces, so aiming renders identically and
+       `launch()` is reached by one path only. */
+    const keys = document.createElement('p');
+    keys.id = 'green-keys';
+    keys.className = 'hero-green-keys';
+    keys.textContent =
+      'Arrow left and right to aim, up and down for power, Enter to putt, R to re-tee.';
+    wrap.appendChild(keys);
+
+    const live = document.createElement('p');
+    live.id = 'green-live';
+    live.className = 'visually-hidden';   // styles.css:177, the existing utility
+    live.setAttribute('role', 'status');
+    live.setAttribute('aria-live', 'polite');
+    wrap.appendChild(live);
+
+    let kbAngle = 0;
+    let kbPower = 0.6;
+    let kbActive = false;
+
+    const say = (msg: string) => { live.textContent = msg; };
+
+    /** Aim starts pointing at the cup, so the first key press is a nudge off a
+     *  sensible line rather than a hunt for one. */
+    const resetAim = () => {
+      kbAngle = Math.atan2(cupY - ballY, cupX - ballX);
+      kbPower = 0.6;
+    };
+
+    const applyAim = () => {
+      const len = kbPower * maxPull();
+      pullX = Math.cos(kbAngle) * len;
+      pullY = Math.sin(kbAngle) * len;
+      phase = 'aiming';
+      if (!running) render(clock, Math.max(intro, 0.001));
+    };
+
+    /** Compass bearing, because "0.87 radians" helps nobody.
+     *  `((a % TAU) + TAU) % TAU` and not `(a + TAU) % TAU`: kbAngle accumulates
+     *  without bound as you hold an arrow key, and JS's `%` keeps the sign of
+     *  the dividend — so once the angle passed -TAU the single-add version
+     *  produced a negative index and the live region announced "undefined". */
+    const bearing = () => {
+      const names = ['right', 'down-right', 'down', 'down-left', 'left', 'up-left', 'up', 'up-right'];
+      const norm = ((kbAngle % TAU) + TAU) % TAU;
+      return names[Math.round(norm / (TAU / 8)) % 8];
+    };
+
+    handle.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (phase === 'rolling') return;
+      const step = e.shiftKey ? Math.PI / 180 : (Math.PI / 180) * 5;
+      let handled = true;
+
+      switch (e.key) {
+        case 'ArrowLeft':  if (!kbActive) { resetAim(); kbActive = true; } kbAngle -= step; break;
+        case 'ArrowRight': if (!kbActive) { resetAim(); kbActive = true; } kbAngle += step; break;
+        case 'ArrowUp':
+          if (!kbActive) { resetAim(); kbActive = true; }
+          kbPower = Math.min(1, kbPower + (e.shiftKey ? 0.02 : 0.08));
+          break;
+        case 'ArrowDown':
+          if (!kbActive) { resetAim(); kbActive = true; }
+          kbPower = Math.max(0.08, kbPower - (e.shiftKey ? 0.02 : 0.08));
+          break;
+        case 'Enter':
+        case ' ':
+          // Before the early return, not after: Space scrolls the page by
+          // default, so without this the putt fired AND the green scrolled out
+          // from under it — the same class of bug the handle's static
+          // `touch-action: none` exists to prevent for touch.
+          e.preventDefault();
+          if (!kbActive) { resetAim(); kbActive = true; applyAim(); }
+          kbActive = false;
+          say('Putt away, ' + bearing() + ' at ' + Math.round(kbPower * 100) + ' per cent power.');
+          launch(kbPower);
+          return;
+        case 'r':
+        case 'R':
+          kbActive = false;
+          resetBall(true);
+          resetAim();
+          if (!running) render(clock, Math.max(intro, 0.001));
+          say('New hole. Ball re-teed.');
+          return;
+        default:
+          handled = false;
+      }
+
+      if (!handled) return;
+      // Arrow keys scroll the page by default, and the whole point here is that
+      // the green must not move while you aim at it.
+      e.preventDefault();
+      applyAim();
+      say('Aiming ' + bearing() + ', ' + Math.round(kbPower * 100) + ' per cent power.');
+    });
+
+    handle.addEventListener('focus', () => {
+      wrap.classList.add('is-green-focus');
+      resetAim();
+      say('Putting green. Arrow keys to aim and set power, Enter to putt.');
+    });
+    handle.addEventListener('blur', () => {
+      wrap.classList.remove('is-green-focus');
+      // Drop a half-finished keyboard aim rather than leaving the ball armed.
+      if (kbActive && phase === 'aiming') {
+        kbActive = false;
+        pullX = 0;
+        pullY = 0;
+        phase = 'idle';
+        if (!running) render(clock, Math.max(intro, 0.001));
+      }
+    });
 
 
     const onDown = (e: PointerEvent) => {
@@ -1090,6 +1236,14 @@ export default function HeroCanvas() {
         pullY = 0;
         return;
       }
+      launch(power);
+    };
+
+    /** Fire the putt from the current pull vector. Shared by pointer and
+     *  keyboard so there is exactly one place that converts aim + power into
+     *  velocity — a second copy would drift, and the offline solvability sweep
+     *  only models this one. */
+    function launch(power: number) {
       const len = Math.sqrt(pullX * pullX + pullY * pullY) || 1;
       velX = (pullX / len) * power * MAX_SPEED;
       velY = (pullY / len) * power * MAX_SPEED;
@@ -1101,7 +1255,7 @@ export default function HeroCanvas() {
       rollTime = 0;
       putts += 1;
       start(); // make sure the loop is running to animate the roll
-    };
+    }
 
     /** Re-tee after a sunk putt so it can be replayed. */
     /** Optional: tap anywhere on the green to skip the celebration and re-tee
@@ -1928,12 +2082,27 @@ export default function HeroCanvas() {
       handle.removeEventListener('pointercancel', onUp);
       handle.removeEventListener('pointermove', onDragMove);
       handle.remove();
+      // Same lifetime as the handle: all three are appended by this effect, so
+      // all three come out with it or a remount leaves orphans behind (and a
+      // duplicate #green-keys / #green-live id, which would break the
+      // aria-describedby wiring).
+      keys.remove();
+      live.remove();
       delete w.__puttTest;
     };
   }, []);
 
+  /* The WRAPPER is no longer aria-hidden; the CANVAS still is.
+     aria-hidden on the wrapper hid everything inside it, including the ball
+     handle — and a focusable element inside an aria-hidden subtree is a defect
+     in its own right (axe calls it aria-hidden-focus): it is reachable by Tab
+     but has no accessible name, so a screen-reader user lands on nothing.
+     Keeping it on the <canvas> is correct and sufficient: the canvas is a
+     picture with no text alternative to give, while the handle, its
+     instructions and the live region — all appended by the effect, so they
+     exist only when JS ran — are the accessible interface to the same thing. */
   return (
-    <div className="hero-canvas-wrap" ref={wrapRef} aria-hidden="true">
+    <div className="hero-canvas-wrap" ref={wrapRef}>
       <canvas className="hero-canvas" ref={canvasRef} aria-hidden="true" />
     </div>
   );

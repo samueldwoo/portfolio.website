@@ -81,6 +81,68 @@
 }
 
 /* ==========================================================================
+   0a. Skip link — the reveal must not depend on a transition TICKING
+   --------------------------------------------------------------------------
+   The base rule lives in styles.css (`.skip-link { position: fixed; top: -60px;
+   transition: top .2s ease }` + `.skip-link:focus { top: 12px }`) and stays
+   there. Only the focused state is restated here, for the same reason the no-JS
+   nav row is restated in section 12 rather than patched in styles.css: the skip
+   link is navigation chrome and this is the file that owns it.
+
+   THE BUG. `top` is not a compositor property, so that 200ms transition only
+   advances on frames the MAIN THREAD produces. On `/` the main thread is busy
+   for the first seconds after load — HeroCanvas hydrates as a `client:load`
+   React island and starts a canvas rAF loop, on top of GSAP + SplitText +
+   anime.js init.
+
+   Measured on the built site in headless Chrome, Tab pressed 1.0s after load:
+   the page produced ONE frame in the following 2 SECONDS, the transition sat at
+   playState "running" the whole time, and computed `top` never left -60px. The
+   skip link was focused (`:focus` true, ring drawn) and simultaneously 60px
+   ABOVE the viewport — invisible for the entire window.
+
+   Read that absolute number with care: the run happened while the machine was
+   at a load average around 300 (concurrent build/test agents), which inflates
+   any stall. The finding does NOT rest on it. What it rests on is the
+   CONTROLLED COMPARISON, same machine, same load, same minute:
+
+     tab@1.0s   /            1 frame / 2000ms    top stuck at -60px
+     tab@1.0s   /projects/   242 frames          top reaches 12px in <201ms
+     tab@2.5s   /            176 frames, but a 558ms worst-case frame gap
+     tab@6.0s   /            243 frames          top reaches 12px in <201ms
+
+   The variable is the PAGE and the moment, not the harness: only `/`, and only
+   in its first seconds, fails to tick this transition.
+
+   tools/a11y_chrome.py reaches the same verdict through its own settle-polled
+   check — `[FAIL] skip link is on screen when focused  top=-60 135x44`, on `/`
+   and only `/` — but INTERMITTENTLY. It failed that way at load ~300 and passed
+   252/252 on the same build at load ~21. That intermittency is the point, not a
+   reason to discount it: the check is measuring how much main-thread headroom
+   the first second of the home page happens to have, which is not something the
+   page controls and not something a reader's machine guarantees. A focus
+   indicator whose visibility depends on frame budget is a focus indicator that
+   is sometimes absent. Removing the dependency is cheaper than arguing about
+   how often it bites.
+
+   That window is exactly when the skip link is used: it is the first tab stop,
+   and the reason to press it is that you have just arrived. A focus indicator
+   that is off-screen is WCAG 2.4.7 (Level AA) failing, and 2.4.11 with it.
+
+   THE FIX. Give the focused state no transition, so the position is settled by
+   style resolution — which is synchronous with focus — instead of by frames
+   that may not come. The slide is kept on the way OUT: on blur the element
+   picks the base rule's `transition: top .2s ease` back up, and a keyboard
+   affordance sliding away unhurriedly costs nobody anything.
+   `:focus`, not `:focus-visible`, to match the rule in styles.css exactly — a
+   narrower selector here would leave the original in charge for some focus
+   sources and reintroduce the stall for those. */
+.skip-link:focus {
+    top: 12px;
+    transition: none;
+}
+
+/* ==========================================================================
    1. The bar
    ========================================================================== */
 .topbar {

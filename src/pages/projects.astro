@@ -11,13 +11,15 @@ import SiteFoot from '../components/SiteFoot.astro';
 >
     <main class="content">
 
-        <!-- PROJECTS HERO -->
+        {/* PROJECTS HERO */}
         <section id="projects" class="band band-projects-hero" aria-labelledby="projects-title">
             <div class="band-inner">
-                <!-- Line-draw motif echoing the home hero — shapes the right-side space -->
+                {/* Line-draw motif echoing the home hero's sage stroke register
+                     — shapes the right-side space. (The home hero itself is a
+                     canvas now; this is the last hand-drawn one.) */}
                 <svg class="projects-motif" viewBox="0 0 400 300" fill="none" aria-hidden="true">
-                    <!-- Inner <g> is the GSAP parallax handle; anime.js still draws
-                         the .motif-draw strokes. Two libraries, two properties. -->
+                    {/* Inner <g> is the GSAP parallax handle; anime.js still draws
+                         the .motif-draw strokes. Two libraries, two properties. */}
                     <g class="motif-parallax">
                         <path class="motif-draw" d="M60 150 C 120 60, 200 60, 220 150 C 240 240, 320 240, 340 150" />
                         <path class="motif-draw" d="M40 210 L 360 210" />
@@ -27,19 +29,23 @@ import SiteFoot from '../components/SiteFoot.astro';
                 </svg>
                 <p class="kicker reveal reveal-clip">Projects</p>
                 <h1 id="projects-title" class="section-title reveal reveal-clip">Things I'm building</h1>
-                <p class="section-intro reveal">A running list of what I'm working on outside of work — some shipped, some barely past a napkin sketch. A couple have write-ups on how they came together; the rest are still cooking.</p>
+                <p class="section-intro reveal">A running list of what I'm building, mostly outside of work — some shipped, some barely past a napkin sketch. A couple have write-ups on how they came together; the rest are still cooking.</p>
             </div>
         </section>
 
-        <!-- CASE STUDY 01 — Finance dashboard -->
+        {/* CASE STUDY 01 — Finance dashboard */}
         <section class="band case-study" aria-labelledby="cs-finance-title">
             <div class="band-inner">
-                <!-- Marginalia read-progress rail. Purely decorative (aria-hidden),
+                {/* Marginalia read-progress rail. Purely decorative (aria-hidden),
                      lives in the band's own left padding at wide widths and is
-                     display:none below 1100px, so it can never cause overflow.
-                     gsap-motion.js pins it and scrubs the fill; its CSS resting
-                     state is a fully-drawn rail, so no-JS / reduced-motion reads
-                     as finished artwork rather than an empty track. -->
+                     display:none below 1280px, so it can never cause overflow.
+                     `position: sticky` in styles.css is what holds it beside the
+                     prose; gsap-motion.js only scrubs the fill (its §5c explains
+                     why ScrollTrigger's pin:true was rejected — a pin-spacer in
+                     the flow is a layout-shift risk this page does not need).
+                     Its CSS resting state is a fully-drawn rail, so no-JS /
+                     reduced-motion reads as finished artwork rather than an
+                     empty track. */}
                 <aside class="case-rail" aria-hidden="true">
                     <span class="case-rail-track"><span class="case-rail-fill"></span><span class="case-rail-head"></span></span>
                 </aside>
@@ -88,14 +94,14 @@ import SiteFoot from '../components/SiteFoot.astro';
             </div>
         </section>
 
-        <!-- CASE STUDY 02 — Portfolio site -->
-        <!-- Inverted. Two consecutive case studies in the same register read
+        {/* CASE STUDY 02 — Portfolio site */}
+        {/* Inverted. Two consecutive case studies in the same register read
              as one long slab; alternating the plate turns them into two
              distinct spreads and gives this page the same
              light / dark / inset rhythm as the home page. `.band--dark`
              redefines the design tokens for its own subtree, so the
              case-rail, the meta strip and the prose all follow with no
-             markup change. -->
+             markup change. */}
         <section class="band case-study band--dark" aria-labelledby="cs-site-title">
             <div class="band-inner">
                 <aside class="case-rail" aria-hidden="true">
@@ -111,24 +117,24 @@ import SiteFoot from '../components/SiteFoot.astro';
 
                 <ul class="case-meta reveal">
                     <li><span class="case-meta-k">Role</span><span class="case-meta-v">Solo — design &amp; build</span></li>
-                    <li><span class="case-meta-k">Stack</span><span class="case-meta-v">Hand-written HTML · CSS · JS</span></li>
+                    <li><span class="case-meta-k">Stack</span><span class="case-meta-v">Astro · One React island · Hand-written CSS</span></li>
                     <li><span class="case-meta-k">Status</span><span class="case-meta-v">Live — you're on it</span></li>
                 </ul>
 
                 <div class="case-body">
                     <div class="case-block reveal gsap-reveal">
                         <h3 class="case-sub">Why I built it</h3>
-                        <p>Most of my day is spent deep in robotics middleware where nobody sees the interface. A UI I built for visualizing robot navigation reminded me how much I like the front-end side of things, so I wanted a small space that was entirely mine to design — no framework, no product manager, no ticket.</p>
+                        <p>Most of my day is spent deep in robotics middleware where nobody sees the interface. A UI I built for visualizing robot navigation reminded me how much I like the front-end side of things, so I wanted a small space that was entirely mine to design — no spec, no product manager, no ticket.</p>
                     </div>
 
                     <div class="case-block reveal gsap-reveal">
                         <h3 class="case-sub">How it's built</h3>
-                        <p>Deliberately from scratch. No React, no build step, no component library — just hand-written HTML, CSS, and a single small JS file, with one vendored animation library. I wanted to actually understand every line rather than lean on a starter template, so the whole thing is a few files you could read in a sitting.</p>
+                        <p>It started as three hand-written HTML files and outgrew them — the head, the nav and the atmosphere layer were triplicated verbatim across all three, until the copy-paste was the bug rather than the point. So there's a build step now: Astro, static output, one layout, components as .astro files, and plain prerendered HTML by the time it reaches you. The CSS never moved — still hand-written, still served as-is, split across five sheets by domain (layout, nav, scroll, motion, and the original one the rest grew out of) so each has a single owner, with no scoping and no class hashing. There's exactly one React island, for the one thing here that genuinely needs state: the contour drawing behind my name on the home page is a putting green, and you can putt on it. Animation is GSAP and anime.js under four JS files of my own — one of those replaces Motion with a reimplementation of the four APIs the site actually used, which took a 136KB vendor bundle off the page.</p>
                     </div>
 
                     <div class="case-block reveal gsap-reveal">
                         <h3 class="case-sub">The details I cared about</h3>
-                        <p>The motion is all there to serve the content, not show off — scroll reveals, a signature line-draw in the hero, a soft spotlight that tracks your cursor — and every bit of it is switched off cleanly when a visitor prefers reduced motion. I held it to real accessibility standards: keyboard-navigable, AA color contrast, focus states you can actually see. The look leans on a calm sage palette because I wanted it to feel like a gallery, not a landing page.</p>
+                        <p>The motion is all there to serve the content, not show off — scroll reveals, a hero that pins and parallaxes as you scroll past it, a soft spotlight that tracks your cursor — and every bit of it is switched off cleanly when a visitor prefers reduced motion. The green isn't decoration pretending to be a game, either: the ball reads the gradient of the same height field the contour lines are drawn from, so reading the break genuinely works, and an offline sweep of every aim and power is what tells me the holes it generates are sinkable in one putt. I held it to real accessibility standards: keyboard-navigable, AA color contrast measured off the rendered pixels rather than the DOM, focus states you can actually see. The look leans on a calm sage palette because I wanted it to feel like a gallery, not a landing page.</p>
                     </div>
 
                     <div class="case-block reveal gsap-reveal">
@@ -138,7 +144,8 @@ import SiteFoot from '../components/SiteFoot.astro';
                 </div>
 
                 <ul class="bubble-list case-tags reveal" aria-label="Highlights">
-                    <li class="bubble">No framework</li>
+                    <li class="bubble">Playable hero green</li>
+                    <li class="bubble">One React island</li>
                     <li class="bubble">Reduced-motion aware</li>
                     <li class="bubble">WCAG AA contrast</li>
                     <li class="bubble">Hand-written CSS</li>
@@ -146,12 +153,12 @@ import SiteFoot from '../components/SiteFoot.astro';
             </div>
         </section>
 
-        <!-- STILL COOKING (teasers) -->
-        <!-- Inset plate, closing the page the way the home page's projects
+        {/* STILL COOKING (teasers) */}
+        {/* Inset plate, closing the page the way the home page's projects
              band does — the teasers sit on their own sheet rather than
-             bleeding to the viewport edge. -->
+             bleeding to the viewport edge. */}
         <section class="band band--shapes band--plate" aria-labelledby="cooking-title">
-            <!-- Line-art "simmering pot" abstraction for the still-cooking band -->
+            {/* Line-art "simmering pot" abstraction for the still-cooking band */}
             <svg class="shape-field shape-field--cooking" viewBox="0 0 240 240" fill="none" aria-hidden="true">
                 <g class="shape-drift">
                     <path class="shape-line" d="M56 128 L 184 128 L 172 208 L 68 208 Z" />
@@ -166,7 +173,7 @@ import SiteFoot from '../components/SiteFoot.astro';
                 <div class="section-head">
                     <p class="kicker reveal reveal-clip">Also on the bench</p>
                     <h2 id="cooking-title" class="section-title reveal reveal-clip">Still cooking</h2>
-                    <p class="section-intro reveal">Ideas I'm poking at. No write-ups yet — check back.</p>
+                    <p class="section-intro reveal">Ideas I'm poking at, and a couple of older things I never wrote up. Check back.</p>
                 </div>
 
                 <div class="section-body">

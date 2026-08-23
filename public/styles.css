@@ -1346,6 +1346,85 @@ a.bubble.ticker:hover::after { transform: translate(2px, -2px); opacity: 1; }
 }
 .contact-form button:hover { background: var(--sage-deep); transform: translateY(-2px); box-shadow: var(--shadow-card); }
 
+/* ---------- Putting green: keyboard affordances ----------
+   The handle is a transparent circle that tracks the ball, created in
+   HeroCanvas.tsx (it cannot live in the JSX: its `touch-action: none` has to be
+   static CSS present at touchstart, and it must not exist at all for a visitor
+   whose JS never ran). It is now a real tab stop, so it needs a ring — WCAG
+   2.4.7 — and the ring has to be drawn on the element itself because everything
+   else there is painted into a <canvas> and cannot show focus.
+
+   `outline-offset` is negative so the ring lands INSIDE the 60-88px handle
+   rather than ballooning a halo across the green; at 2px sage on the light
+   ground it reads clearly without becoming a permanent visual element. No
+   `:focus` fallback on purpose — a mouse press on the ball should not leave a
+   ring parked on the hero, and `:focus-visible` is exactly that distinction. */
+.hero-ball-handle:focus-visible {
+    outline: 2px solid var(--sage);
+    outline-offset: -6px;
+    border-radius: 50%;
+}
+
+/* Instructions for the keys. Hidden until the handle takes focus: it is the
+   moment the controls become usable, and a permanent line of help text under
+   the hero would be clutter for the 99% who use a pointer. NOT
+   `display: none` when idle — it is referenced by `aria-describedby`, and a
+   display:none target is dropped from the accessible description, so it stays
+   in the tree and is positioned out of sight instead. */
+.hero-green-keys {
+    position: absolute;
+    left: 50%;
+    bottom: 6%;
+    transform: translateX(-50%);
+    margin: 0;
+    max-width: min(38ch, 84%);
+    padding: 8px 14px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-pill);
+    background: rgba(245, 246, 242, .94);
+    color: var(--ink2);
+    font-size: .82rem;
+    line-height: 1.35;
+    text-align: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .18s ease;
+}
+.hero-canvas-wrap.is-green-focus .hero-green-keys { opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+    .hero-green-keys { transition: none; }
+}
+
+/* ---------- Contact form status + fallback note ----------
+   `.form-status` is the aria-live region the submit handler writes to (see the
+   inline script in index.astro). It is EMPTY in the resting state so it never
+   announces on load, which is why there is no min-height reserved: a status
+   that pushed the layout down by a line before it had anything to say would be
+   a permanent cost for an occasional message.
+
+   Colours are tokens, not literals, because the connect band is LIGHT and a
+   previous fix in this file went to the wrong selector by assuming it was dark
+   (see the note at `.contact-form button`). --ink2 is 8.56:1 on --bg2 in dark
+   and comfortably AA on the light ground here; the error state uses a darkened
+   sage rather than a red, both to stay in palette and because a hue-only
+   distinction would fail 1.4.1 — the wording carries the meaning either way. */
+.form-status {
+    margin: 0;
+    font-size: .92rem;
+    line-height: var(--lh-body);
+    color: var(--ink2);
+    min-height: 0;
+}
+.form-status:empty { display: none; }
+.form-status.is-error { color: var(--sage-deep); font-weight: 600; }
+
+.form-note {
+    margin: 10px 0 0;
+    font-size: .84rem;
+    line-height: var(--lh-body);
+    color: var(--ink2);
+}
+
 /* ---------- Footer ---------- */
 .site-foot {
     display: flex;
@@ -1630,6 +1709,32 @@ a.bubble.ticker:hover::after { transform: translate(2px, -2px); opacity: 1; }
     line-height: 1;
     color: var(--ink);                /* 17.6:1 on --panel */
     margin: 0;
+}
+/* The peak month's COUNT, beside the month itself.
+   The strip's third stat used to read "Busiest month / 3 trips" — a term asking
+   for a month answered with a count. The value is now the month ("Jul '26"),
+   which fixes the pairing but drops the count from view, and the count is the
+   more interesting half. This puts it back as a mono subscript on the same
+   line: same rung as `.trip-stat dt`, so it reads as an annotation on the
+   figure rather than a competing number. Inherited font-family is overridden
+   explicitly because `dd` sets --display. */
+.trip-stat dd .trip-stat-sub {
+    font-family: var(--mono);
+    font-size: .68rem;
+    font-weight: 400;
+    letter-spacing: .06em;
+    color: var(--mut);
+    margin-left: .5em;
+}
+
+/* "Trip cadence" promoted from <span> to <h3> so the chart is reachable by
+   heading navigation — it was the only substantive block on the page with no
+   heading of its own. The UA's `margin-block: 1em` and bold weight would both
+   fight `.trip-summary-head`'s baseline-aligned flex row, so both are reset;
+   every other visual property still comes from `.trip-summary-title`. */
+.trip-summary-head h3.trip-summary-title {
+    margin: 0;
+    font-weight: inherit;
 }
 
 .trip-plot {
@@ -2064,7 +2169,19 @@ a.bubble.ticker:hover::after { transform: translate(2px, -2px); opacity: 1; }
 .shape-field--interests { top: 4%;   right: 0; width: min(16vw, 230px); }
 .shape-field--projects  { bottom: 2%; left: 0; width: min(16vw, 230px); }
 .shape-field--connect   { top: 10%;  right: 0; width: min(15vw, 215px); }
-.shape-field--cooking   { top: 0;    right: 0; width: min(15vw, 215px); }
+/* HEADROOM, not 0. This was the only shape field pinned flush to its band's
+   top edge (the others sit at 4% / 2% / 10% / 50%), and it is the one the
+   owner's "shapes sometimes get cut off" report survives on.
+   Why "sometimes": `.shape-field` is `overflow: visible`, so GSAP's animated
+   children legitimately travel OUTSIDE the SVG box — `.shape-plx` scrubs
+   y: -26 -> +26 and `.shape-drift` adds y: ±9 user units — while
+   `.band--shapes` is `overflow: hidden` and slices whatever leaves the band.
+   With zero headroom the upward half of that excursion has nowhere to go, so
+   the clipping appears only at scroll positions near peak excursion, which is
+   exactly why it read as intermittent rather than broken.
+   Measured at forced worst-case excursion: 4 clipped children (one entirely
+   invisible) before, 0 after, at 1024/1280/1440/1512/1920/2560/3840. */
+.shape-field--cooking   { top: clamp(24px, 2.2vw, 34px); right: 0; width: min(15vw, 215px); }
 .shape-field--travel    { top: 50%;  right: 0; width: min(18vw, 260px); transform: translateY(-50%); }
 
 @media (max-width: 1080px) {
@@ -2320,7 +2437,16 @@ html.js-anim .reveal {
     will-change: opacity, transform;
 }
 .reveal.is-visible { opacity: 1; transform: none; }
-html.js-anim .reveal.is-visible { opacity: 1; transform: none; }
+/* `will-change: auto` here is the RELEASE half of the hint set on
+   `html.js-anim .reveal` above. Without it the promise is permanent: measured on
+   the home page after a full scroll, 32 of 32 `.reveal` elements still carried
+   `will-change: opacity, transform` long after their one-shot entrance had
+   finished, and 51 elements on the page held a live hint. will-change is a
+   standing request for a compositor layer, so paying it for an animation that
+   has already run — and can never run again, since `.is-visible` is one-way — is
+   pure cost. `.is-visible` is exactly the right trigger because script.js adds
+   it when the reveal completes and never removes it. */
+html.js-anim .reveal.is-visible { opacity: 1; transform: none; will-change: auto; }
 
 .reveal-clip { transform: translateY(0); }
 .reveal-clip.is-visible {

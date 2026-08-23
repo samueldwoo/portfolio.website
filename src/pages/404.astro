@@ -1,0 +1,124 @@
+---
+/**
+ * 404.astro — the not-found page.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THIS FILE EXISTS
+ *
+ * Before it, a 404 on the live site served ASTRO'S BUILT-IN error page.
+ * Measured, not assumed:
+ *
+ *     $ curl -sI https://www.samueldwoo.com/nope-does-not-exist
+ *     HTTP/2 404 ... server: Vercel ... x-vercel-cache: MISS
+ *     $ curl -s  https://www.samueldwoo.com/nope-does-not-exist | head
+ *     <title>404: Not Found</title>
+ *     html { background: var(--black); color-scheme: dark; }
+ *     --black: #13151A;  --accent-light: #E0CCFA;
+ *
+ * A dark, purple-accented, monospace page with no nav, no footer and no way
+ * back, on a site that is otherwise light sage. It was also served by the
+ * SERVERLESS FUNCTION: .vercel/output/config.json ended with
+ * `{"src":"^/.*$","dest":"_render","status":404}`, so every mistyped URL and
+ * every stale inbound link paid a function invocation (and a cold start) to be
+ * told it was wrong.
+ *
+ * HOW ADDING THIS FILE CHANGES THE DEPLOY — read this before touching it.
+ *
+ * @astrojs/vercel picks the /404 route out of the manifest and branches on
+ * whether it is prerendered (node_modules/@astrojs/vercel/dist/index.js:354-367):
+ *
+ *     dest: fourOhFourRoute.isPrerendered ? "/404.html" : ... NODE_PATH
+ *
+ * This page prerenders (the project is `output: 'static'` and this file does not
+ * opt out), so the catch-all becomes `dest: "/404.html"` and the page is served
+ * as a STATIC FILE at the CDN edge with a correct 404 status — no function, no
+ * cold start. Astro emits it as `404.html` and not `404/index.html` even under
+ * `build.format: 'directory'`, because /404 is in Astro's STATUS_CODE_PAGES set
+ * (node_modules/astro/dist/core/build/common.js:4).
+ *
+ * If you ever add `export const prerender = false` here, that reverts to the
+ * function path. Don't, unless a 404 genuinely needs request data.
+ *
+ * NO `.reveal` CLASSES ON THIS PAGE, AND THAT IS DELIBERATE.
+ *
+ * `html.js-anim .reveal:not(.is-visible)` pins content to opacity 0 until
+ * script.js reveals it. script.js does query `.reveal` globally rather than
+ * inside `.band`, so it *would* pick these up — but an error page is the single
+ * worst place on the site to make content visible only if a 467KB script chain
+ * loaded and ran. Somebody landing here has already had one thing fail. So every
+ * element is visible from first paint and the page is legible with JS off,
+ * scripts blocked, or the CDN having a bad day.
+ *
+ * WHAT IT REUSES, AND WHY NOTHING NEW WAS ADDED
+ *
+ * Every class here already exists in public/styles.css and is already exercised
+ * by another page, so this page cannot be the reason a stylesheet changes:
+ *   .content .band .band-inner   layout scaffolding (styles.css:411-425)
+ *   .kicker .section-title
+ *   .section-intro               the type ramp (styles.css:602-638)
+ *   .resume-line .btn-resume     the site's ONE primary sage pill
+ *                                (styles.css:1254-1270). The class name says
+ *                                "resume" because the résumé button is where it
+ *                                was first needed; it is a generic filled pill
+ *                                and reusing it beats inventing a second one in
+ *                                a stylesheet this page is not allowed to touch.
+ *   .foot-link                   sage inline link, 44px tap target
+ *                                (styles.css:1417-1424). Required, not
+ *                                decorative: `a { color: inherit;
+ *                                text-decoration: none }` (styles.css:139) means
+ *                                an unclassed <a> is indistinguishable from
+ *                                body text.
+ * No new stylesheet and no new script is referenced. <Base> supplies exactly
+ * the same five sheets and eight scripts as every other page.
+ *
+ * `page="error"` + `noindex` are Base.astro's error-page path: cross-page nav
+ * hrefs, no active nav link, `robots: noindex, follow`, and no canonical.
+ * `follow` rather than `nofollow` on purpose — the links out of here are the
+ * three real pages and a crawler should absolutely take them.
+ */
+import Base from '../layouts/Base.astro';
+import SiteFoot from '../components/SiteFoot.astro';
+---
+
+<Base
+    title="Page not found — Samuel Woo"
+    description="That page isn't here. Links back to the rest of Samuel Woo's site."
+    page="error"
+    skipTarget="notfound"
+    noindex
+>
+    <main class="content">
+        <section id="notfound" class="band" aria-labelledby="notfound-title">
+            <div class="band-inner">
+                <p class="kicker">Error 404</p>
+                <h1 id="notfound-title" class="section-title">This page isn't here</h1>
+                <p class="section-intro">
+                    Either the address has a typo in it or I moved something and
+                    didn't leave a forwarding note. Both are fixable from here.
+                </p>
+
+                {/* The primary way out. Root-absolute for the same reason every
+                     path in Base.astro is: URLs are directory-format, so a `./`
+                     or bare relative href resolves one level deep on any page
+                     but `/`. */}
+                <p class="resume-line">
+                    <a href="/" class="btn-resume">Back to the home page <span aria-hidden="true">&#8599;</span></a>
+                </p>
+
+                {/* Not a dead end: every other destination the site has, plus a
+                     way to tell me the link is broken. These are the same three
+                     pages the nav and the command palette offer, so there is no
+                     second list to keep correct. */}
+                <p style="margin-top: 28px;">
+                    <a href="/projects" class="foot-link">Projects</a>
+                    <span aria-hidden="true" style="color: var(--line2); padding: 0 10px;">&middot;</span>
+                    <a href="/travel" class="foot-link">Travel</a>
+                    <span aria-hidden="true" style="color: var(--line2); padding: 0 10px;">&middot;</span>
+                    <a href="mailto:samuel.dw.woo@gmail.com?subject=Broken%20link%20on%20samueldwoo.com" class="foot-link">Report a broken link</a>
+                </p>
+
+                <SiteFoot right="built" />
+            </div>
+        </section>
+    </main>
+</Base>

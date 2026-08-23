@@ -35,7 +35,8 @@ const keys = trips.map((t) => t.month).sort();
 const [firstY, firstM] = keys[0].split('-').map(Number);
 const [lastY, lastM] = keys[keys.length - 1].split('-').map(Number);
 
-const months: { key: string; year: number; m: number; count: number }[] = [];
+type Mo = { key: string; year: number; m: number; count: number };
+const months: Mo[] = [];
 for (let y = firstY, m = firstM; y < lastY || (y === lastY && m <= lastM); ) {
     const key = `${y}-${String(m).padStart(2, '0')}`;
     months.push({ key, year: y, m, count: trips.filter((t) => t.month === key).length });
@@ -45,7 +46,82 @@ for (let y = firstY, m = firstM; y < lastY || (y === lastY && m <= lastM); ) {
 
 const peak = Math.max(...months.map((mo) => mo.count));
 const destinations = new Set(trips.map((t) => t.dest)).size;
-const spanLabel = `${MONTH_ABBR[firstM - 1]} ${firstY} – ${MONTH_ABBR[lastM - 1]} ${lastY}`;
+// A one-month span would otherwise read "Mar 2026 – Mar 2026".
+const spanLabel = firstY === lastY && firstM === lastM
+    ? `${MONTH_ABBR[firstM - 1]} ${firstY}`
+    : `${MONTH_ABBR[firstM - 1]} ${firstY} – ${MONTH_ABBR[lastM - 1]} ${lastY}`;
+
+// "Jul ’26" is the plot's own column-label form, reused so the strip and the
+// axis below it agree; "Jul 2026" is the form for prose and speech.
+const shortLabel = (mo: Mo) => `${MONTH_ABBR[mo.m - 1]} ’${String(mo.year).slice(2)}`;
+const longLabel = (mo: Mo) => `${MONTH_ABBR[mo.m - 1]} ${mo.year}`;
+// Everything below is generated prose, so it has to survive n === 1 without
+// saying "1 trips across 1 months", and a 3-way tie without "A and B and C".
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+const listAnd = (items: string[]) => items.length < 3
+    ? items.join(' and ')
+    : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+
+/* BUSIEST MONTH. This term used to render `<dt>Busiest month</dt><dd>3
+   trips</dd>` — the label asked for a MONTH and the value answered with a
+   COUNT, so the pairing a <dl> exists to assert was simply false. The month
+   is derived now, never typed, and two cases the old line could not have
+   survived are handled:
+     - a TIE. Add one May 2026 trip and May ties Jul at 3; the term
+       pluralises and every peak month is named.
+     - a record where NO month repeats, which has no "busiest" month to
+       point at. The term then falls back to the count it can honestly
+       report, so the pairing stays true instead of naming an arbitrary
+       first-of-eleven.
+   The count still travels with the value for screen readers; sighted readers
+   read it off the tallest column directly below, which is what the plot is
+   for. */
+const peakMonths = months.filter((mo) => mo.count === peak);
+const peakNamed = peak > 1;
+const peakTerm = !peakNamed
+    ? 'Most in a month'
+    : peakMonths.length === 1 ? 'Busiest month' : 'Busiest months';
+const peakValue = peakNamed ? peakMonths.map(shortLabel).join(', ') : String(peak);
+/* The count, VISIBLE rather than screen-reader-only. Naming the month fixed the
+   term/value mismatch but took the count off the page, and the count is the
+   more interesting half of "busiest month". Shown as a mono subscript
+   (`.trip-stat-sub`, styles.css) so it annotates the month instead of competing
+   with it — and because it is now real text, one string serves sighted and
+   screen-reader users alike, with no risk of the two drifting apart.
+   Empty when the term is already "Most in a month", where the value IS the
+   count and repeating it would read as "1 1 trip". */
+const peakSub = peakNamed
+    ? `${plural(peak, 'trip')}${peakMonths.length > 1 ? ' each' : ''}`
+    : '';
+
+/* TEXT ALTERNATIVE for the plot (WCAG 1.1.1). Every column states its own
+   month and count, but arrowing through eleven list items does not hand a
+   non-sighted reader the SHAPE — and where the quiet stretches fall is the
+   entire reason this strip exists, since the wall above is ordered by feel
+   and not by date. One derived sentence does, and it stays true if the array
+   changes. */
+const quiet = months.filter((mo) => mo.count === 0).length;
+let longestGap: Mo[] = [];
+let run: Mo[] = [];
+for (const mo of months) {
+    // Rebuilt, never mutated, so `longestGap` keeps a stable snapshot.
+    run = mo.count === 0 ? [...run, mo] : [];
+    if (run.length > longestGap.length) longestGap = run;
+}
+const gapSentence = longestGap.length === 0
+    ? 'Every month in that span had at least one trip.'
+    : longestGap.length === 1
+        ? `The longest quiet stretch was a single month, ${longLabel(longestGap[0])}.`
+        : `The longest quiet stretch was ${plural(longestGap.length, 'month')}, ${longLabel(longestGap[0])} to ${longLabel(longestGap[longestGap.length - 1])}.`;
+const plotSummary = [
+    `${plural(trips.length, 'trip')} to ${plural(destinations, 'destination')} across ${plural(months.length, 'month')}, ${spanLabel.replace(' – ', ' to ')}.`,
+    peakNamed
+        ? `${listAnd(peakMonths.map(longLabel))} ${peakMonths.length === 1 ? 'was' : 'were'} the busiest at ${plural(peak, 'trip')}${peakMonths.length > 1 ? ' each' : ''}.`
+        : 'No month had more than one trip.',
+    quiet > 0 ? `${quiet} of those months had no trips.` : null,
+    gapSentence,
+    'Month-by-month counts follow.',
+].filter(Boolean).join(' ');
 ---
 
 <Base
@@ -65,10 +141,10 @@ const spanLabel = `${MONTH_ABBR[firstM - 1]} ${firstY} – ${MONTH_ABBR[lastM - 
 
     <main class="content">
 
-        <!-- TRAVEL HERO -->
+        {/* TRAVEL HERO */}
         <section id="travel" class="band band-travel-hero band--shapes" aria-labelledby="travel-title">
-            <!-- Flight-path line art: the arc draws itself in, then a sage dot
-                 flies it on a loop. Static (arc drawn, dot parked) with motion off. -->
+            {/* Flight-path line art: the arc draws itself in, then a sage dot
+                 flies it on a loop. Static (arc drawn, dot parked) with motion off. */}
             <svg class="shape-field shape-field--travel" viewBox="0 0 320 220" fill="none" aria-hidden="true">
                 <g class="shape-drift">
                     <circle class="shape-ring" cx="160" cy="150" r="104" />
@@ -87,14 +163,14 @@ const spanLabel = `${MONTH_ABBR[firstM - 1]} ${firstY} – ${MONTH_ABBR[lastM - 
             </div>
         </section>
 
-        <!-- BOARDING PASS WALL -->
-        <!-- Inverted, which is the whole point of the wall: the passes are
+        {/* BOARDING PASS WALL */}
+        {/* Inverted, which is the whole point of the wall: the passes are
              saturated airline colours, and on the light sheet they read as
              eleven bright rectangles floating in white space. On the dark
              plate they read as a departures board — the plate does the job a
              gallery wall does. `.band--dark` redefines tokens for its
              subtree; each `.pass` carries its own `--pass-bg`/`--pass-ink`,
-             so no pass colour or contrast moves. -->
+             so no pass colour or contrast moves. */}
         <section class="band band-flush-top band--dark" aria-labelledby="wall-title">
             <div class="band-inner" data-rail="02 / Boarding passes">
                 {/* HEADING STRUCTURE. Audited, this page had exactly ONE heading
@@ -109,16 +185,24 @@ const spanLabel = `${MONTH_ABBR[firstM - 1]} ${firstY} – ${MONTH_ABBR[lastM - 
                     free-floating `aria-label` that duplicated it. */}
                 <h2 id="wall-title" class="visually-hidden">Boarding passes</h2>
 
-                <!-- Trip cadence. The wall below is ordered by feel, not by
+                {/* Trip cadence. The wall below is ordered by feel, not by
                      date, so the one fact it genuinely hides is WHEN the trips
                      clustered. Count is encoded by the NUMBER of stacked marks
-                     (and mirrored in each column's aria-label), never by hue —
-                     the sage fill is decorative reinforcement only. Quiet
+                     and restated as hidden TEXT in every column, never by hue —
+                     the sage fill is decorative reinforcement only. Empty
+                     months are told apart by tick HEIGHT, not colour. Quiet
                      months are kept on the axis as bare baseline ticks rather
-                     than dropped, so the gaps read as gaps. -->
+                     than dropped, so the gaps read as gaps, and a derived
+                     one-sentence summary above the plot states that shape for
+                     anyone who cannot see it. */}
                 <figure class="trip-summary reveal">
                     <figcaption class="trip-summary-head">
-                        <span class="trip-summary-title">Trip cadence</span>
+                        {/* A real <h3>, not a styled <span>: the cadence chart was
+                            the only substantive block on this page with no heading,
+                            so it could not be reached by heading navigation. The UA's
+                            default margin and bold weight are reset in styles.css so
+                            the baseline-aligned flex row is unchanged. */}
+                        <h3 class="trip-summary-title">Trip cadence</h3>
                         <span class="trip-summary-span">{spanLabel}</span>
                     </figcaption>
 
@@ -132,52 +216,106 @@ const spanLabel = `${MONTH_ABBR[firstM - 1]} ${firstY} – ${MONTH_ABBR[lastM - 
                             <dd>{destinations}</dd>
                         </div>
                         <div class="trip-stat">
-                            <dt>Busiest month</dt>
-                            <dd>{peak} trips</dd>
+                            <dt>{peakTerm}</dt>
+                            <dd>{peakValue}{peakSub && <span class="trip-stat-sub">{peakSub}</span>}</dd>
                         </div>
                     </dl>
 
-                    <ul class="trip-plot" style={`--trip-peak:${peak}`}>
+                    <p class="visually-hidden">{plotSummary}</p>
+
+                    {/* The list carries an accessible name of its own: the
+                        figure's name comes from its <figcaption>, which says
+                        "Trip cadence" and a date range but never says what the
+                        eleven items ARE. */}
+                    <ul class="trip-plot" style={`--trip-peak:${peak}`} aria-label="Trips per month">
                         {months.map((mo) => (
-                            <li
-                                class:list={['trip-col', { 'is-empty': mo.count === 0 }]}
-                                aria-label={`${MONTH_ABBR[mo.m - 1]} ${mo.year}: ${mo.count} ${mo.count === 1 ? 'trip' : 'trips'}`}
-                            >
+                            <li class:list={['trip-col', { 'is-empty': mo.count === 0 }]}>
                                 <span class="trip-marks" aria-hidden="true">
                                     {Array.from({ length: mo.count }).map(() => (
                                         <span class="trip-mark"></span>
                                     ))}
                                 </span>
                                 <span class="trip-col-tick" aria-hidden="true"></span>
-                                <!-- Full 3-letter month. A single initial would
-                                     render three indistinguishable "J"s
-                                     (Jan/Jun/Jul) and two "M"s (Mar/May) on
-                                     this exact span; the year is appended only
-                                     where it turns over, to mark the boundary
-                                     without repeating itself 11 times. -->
+                                {/* Full 3-letter month. A single initial would
+                                    render three indistinguishable "J"s
+                                    (Jan/Jun/Jul) and two "M"s (Mar/May) on
+                                    this exact span; the year is appended only
+                                    where it turns over, to mark the boundary
+                                    without repeating itself 11 times.
+
+                                    An expression comment, not an HTML one: this
+                                    note sits INSIDE `months.map()`, and Astro
+                                    ships HTML comments verbatim. Measured in the
+                                    built page — the HTML form appeared 11
+                                    times, ~4.3 KB of duplicated developer note
+                                    in a 37 KB document. The expression form is
+                                    stripped at build.
+                                    (Do not write the comment-closing sequence
+                                    inside one of these, even in backticks — it
+                                    terminates the comment early and the build
+                                    fails with "Unexpected token". That is
+                                    exactly how this line broke once.) */}
                                 <span class="trip-col-label" aria-hidden="true">
                                     {mo.m === 1 || mo.key === months[0].key
-                                        ? `${MONTH_ABBR[mo.m - 1]} ’${String(mo.year).slice(2)}`
+                                        ? shortLabel(mo)
                                         : MONTH_ABBR[mo.m - 1]}
+                                </span>
+                                {/* REAL TEXT, not an `aria-label` on the <li>.
+                                    ARIA permits naming a `listitem`, but every
+                                    visible child here is aria-hidden, so the
+                                    item's only accessible text WAS that label —
+                                    and VoiceOver is unreliable about honouring
+                                    author names on list items, which left the
+                                    column liable to being announced as empty.
+                                    Hidden text is announced by every screen
+                                    reader in every mode. `.visually-hidden` is
+                                    `position:absolute`, so it is not a flex
+                                    item and takes no share of `.trip-col`'s
+                                    6px gap — the column's layout is unchanged. */}
+                                <span class="visually-hidden">
+                                    {longLabel(mo)}: {mo.count} {mo.count === 1 ? 'trip' : 'trips'}
                                 </span>
                             </li>
                         ))}
                     </ul>
                 </figure>
 
-                <!-- 12-column mosaic (layout.css §12): the two long-haul
-                     passes span six columns across the top row, then three
-                     rows of three. gsap-motion.js staggers the wall with
-                     `grid: 'auto'`, which measures the real laid-out
-                     geometry, so the diagonal entrance adapts to this
-                     mosaic (and to the 2-up / 1-up collapses) on its own. -->
+                {/* 12-column grid (layout.css §12). This comment used to
+                     claim "the two long-haul passes span six columns across
+                     the top row, then three rows of three" — it does not
+                     happen and never did. Every pass gets `grid-column: span
+                     4` at >=1080px with no per-pass override anywhere (no
+                     `.pass--wide`, and the `:nth-child` ladder sets only
+                     `rotate`/`translate`), so the wall is a uniform 3-up:
+                     rows of 3, 3, 3, 2. Measured in the built page at
+                     1440px — all 11 passes `span 4`, ~299px wide each, four
+                     row offsets. It collapses to 2-up at 760–1079px and
+                     1-up below 760px. Uniform is the point: every stub is
+                     the same size, which is a hard requirement.
+                     gsap-motion.js staggers the wall with `grid: 'auto'`,
+                     measuring the real laid-out geometry, so the diagonal
+                     entrance adapts to each collapse on its own. */}
                 <div class="pass-wall">
 
-                    <!-- 01 Tokyo -->
+                    {/* 01 Tokyo */}
                     <article class="pass pass--zipair reveal gsap-reveal" aria-labelledby="pass-1-route">
                         <div class="pass-main">
                             <div class="pass-head">
-                                <span class="pass-logoband"><img class="pass-logo pass-logo--white" src="/assets/airlines/zipair-t-c.png" alt="Zip Air" width="254" height="60" loading="eager" decoding="async"></span>
+                                {/* The wordmark in this file reads "ZIPAIR", one
+                                     word, and that is the airline's name; the alt
+                                     said "Zip Air". These logos are IMAGES OF
+                                     TEXT, so the alt has to be the words in the
+                                     image.
+                                     `loading` is lazy like the other ten, not
+                                     eager. Eager was justified as "the first
+                                     visible row", but measured in the built page
+                                     at 1440x757 the wall starts at y=910 — the
+                                     whole wall, this pass included, is below the
+                                     fold, so eager only put a 14.6 KB PNG on the
+                                     hero's critical path. gsap-motion.js §9
+                                     already refreshes ScrollTrigger per image
+                                     load, so late-decoding logos are handled. */}
+                                <span class="pass-logoband"><img class="pass-logo pass-logo--white" src="/assets/airlines/zipair-t-c.png" alt="ZIPAIR" width="254" height="60" loading="lazy" decoding="async"></span>
                                 <span class="pass-date"><span class="pass-k">Date</span>Sep 2025</span>
                             </div>
                             <div class="pass-cities" id="pass-1-route"><span>San Jose</span><span class="visually-hidden">to</span><span>Tokyo</span></div>
@@ -197,7 +335,7 @@ const spanLabel = `${MONTH_ABBR[firstM - 1]} ${firstY} – ${MONTH_ABBR[lastM - 
                         </div>
                     </article>
 
-                    <!-- 02 Seoul -->
+                    {/* 02 Seoul */}
                     <article class="pass pass--korean reveal gsap-reveal" aria-labelledby="pass-2-route">
                         <div class="pass-main">
                             <div class="pass-head">
@@ -221,7 +359,7 @@ const spanLabel = `${MONTH_ABBR[firstM - 1]} ${firstY} – ${MONTH_ABBR[lastM - 
                         </div>
                     </article>
 
-                    <!-- 03 Mexico City -->
+                    {/* 03 Mexico City */}
                     <article class="pass pass--aeromexico reveal gsap-reveal" aria-labelledby="pass-3-route">
                         <div class="pass-main">
                             <div class="pass-head">
@@ -245,7 +383,7 @@ const spanLabel = `${MONTH_ABBR[firstM - 1]} ${firstY} – ${MONTH_ABBR[lastM - 
                         </div>
                     </article>
 
-                    <!-- 04 Hawaii -->
+                    {/* 04 Hawaii */}
                     <article class="pass pass--hawaiian reveal gsap-reveal" aria-labelledby="pass-4-route">
                         <div class="pass-main">
                             <div class="pass-head">
@@ -269,7 +407,7 @@ const spanLabel = `${MONTH_ABBR[firstM - 1]} ${firstY} – ${MONTH_ABBR[lastM - 
                         </div>
                     </article>
 
-                    <!-- 05 New York -->
+                    {/* 05 New York */}
                     <article class="pass pass--jetblue reveal gsap-reveal" aria-labelledby="pass-5-route">
                         <div class="pass-main">
                             <div class="pass-head">
@@ -293,7 +431,7 @@ const spanLabel = `${MONTH_ABBR[firstM - 1]} ${firstY} – ${MONTH_ABBR[lastM - 
                         </div>
                     </article>
 
-                    <!-- 06 Vancouver -->
+                    {/* 06 Vancouver */}
                     <article class="pass pass--aircanada reveal gsap-reveal" aria-labelledby="pass-6-route">
                         <div class="pass-main">
                             <div class="pass-head">
@@ -317,7 +455,7 @@ const spanLabel = `${MONTH_ABBR[firstM - 1]} ${firstY} – ${MONTH_ABBR[lastM - 
                         </div>
                     </article>
 
-                    <!-- 07 Seattle -->
+                    {/* 07 Seattle */}
                     <article class="pass pass--alaska reveal gsap-reveal" aria-labelledby="pass-7-route">
                         <div class="pass-main">
                             <div class="pass-head">
@@ -341,7 +479,7 @@ const spanLabel = `${MONTH_ABBR[firstM - 1]} ${firstY} – ${MONTH_ABBR[lastM - 
                         </div>
                     </article>
 
-                    <!-- 08 Detroit -->
+                    {/* 08 Detroit */}
                     <article class="pass pass--alaska reveal gsap-reveal" aria-labelledby="pass-8-route">
                         <div class="pass-main">
                             <div class="pass-head">
@@ -365,7 +503,7 @@ const spanLabel = `${MONTH_ABBR[firstM - 1]} ${firstY} – ${MONTH_ABBR[lastM - 
                         </div>
                     </article>
 
-                    <!-- 09 San Diego (May 2026) -->
+                    {/* 09 San Diego (May 2026) */}
                     <article class="pass pass--frontier reveal gsap-reveal" aria-labelledby="pass-9-route">
                         <div class="pass-main">
                             <div class="pass-head">
@@ -389,7 +527,7 @@ const spanLabel = `${MONTH_ABBR[firstM - 1]} ${firstY} – ${MONTH_ABBR[lastM - 
                         </div>
                     </article>
 
-                    <!-- 10 San Diego (Dec 2025) -->
+                    {/* 10 San Diego (Dec 2025) */}
                     <article class="pass pass--alaska reveal gsap-reveal" aria-labelledby="pass-10-route">
                         <div class="pass-main">
                             <div class="pass-head">
@@ -413,7 +551,7 @@ const spanLabel = `${MONTH_ABBR[firstM - 1]} ${firstY} – ${MONTH_ABBR[lastM - 
                         </div>
                     </article>
 
-                    <!-- 11 Tahoe (road trip) -->
+                    {/* 11 Tahoe (road trip) */}
                     <article class="pass pass--roadtrip reveal gsap-reveal" aria-labelledby="pass-11-route">
                         <div class="pass-main">
                             <div class="pass-head">

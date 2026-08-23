@@ -4,7 +4,9 @@
    Everything that reacts to a cursor or a finger: spring hover/press
    physics, magnetism, the cursor companion, the perceived page
    transition, the travelling focus halo and form feedback. Built on
-   Motion (motion.dev) 13.1.1, vendored as public/motion.min.js — its
+   Motion's vanilla API, formerly the vendored motion.min.js bundle and now
+   public/motion-shim.js (a ~5KB-brotli reimplementation of the four entry
+   points this file uses, built on GSAP). Its
    `dist/motion.js` is a UMD bundle, so it loads from a plain <script>
    and hangs the whole vanilla API off `window.Motion`. No bundler, no
    npm dep.

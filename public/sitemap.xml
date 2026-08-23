@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  sitemap.xml — HAND-WRITTEN, and it has to be maintained by hand.
+
+  WHY IT IS NOT GENERATED. The generated option is @astrojs/sitemap, which is
+  NOT installed: it appears in neither `dependencies` nor `devDependencies` in
+  package.json, and `integrations: [react()]` in astro.config.mjs is the whole
+  integration list. Adding it would mean a new npm dependency and an edit to
+  astro.config.mjs. For a site with three public URLs that is a poor trade, so
+  this file is written out instead.
+
+  THE COST, STATED PLAINLY: adding a fourth public page means editing this file,
+  and nothing will fail if you forget — the new page just never gets submitted.
+  If the public page count ever stops being "three things I can hold in my
+  head", install @astrojs/sitemap and delete this file. That integration also
+  needs `site:` set in astro.config.mjs, which is not set today.
+
+  PUBLIC PAGES ONLY. The site has non-public routes; none of them belong here,
+  and they are deliberately not named in this file. A sitemap is a
+  machine-readable invitation to index, and — exactly like a robots.txt Disallow
+  line — anything listed in it is published to whoever fetches it. This file is
+  world-readable, so the list of what to exclude lives in the repo, not here.
+
+  URL FORM. Slashless, www host, https — byte-identical to the <link
+  rel="canonical"> that src/layouts/Base.astro emits on each of these pages. A
+  sitemap that disagrees with the page's own canonical tag is a contradiction
+  Google resolves by ignoring the sitemap. Measured: both /projects and
+  /projects/ return 200 in production with no redirect, and the legacy
+  `.html` redirects in astro.config.mjs target the slashless form.
+
+  NO <lastmod>, <changefreq> OR <priority>. Google ignores changefreq and
+  priority outright, and it discounts a lastmod it decides it cannot trust — a
+  hardcoded date that silently ages is worse than no date at all. Add lastmod
+  only if something starts deriving it from real git commit times.
+-->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://www.samueldwoo.com/</loc>
+  </url>
+  <url>
+    <loc>https://www.samueldwoo.com/projects</loc>
+  </url>
+  <url>
+    <loc>https://www.samueldwoo.com/travel</loc>
+  </url>
+</urlset>

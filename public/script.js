@@ -42,6 +42,46 @@
     document.documentElement.classList.add("anim-live");
     if (!animate) document.documentElement.classList.remove("js-anim");
 
+    /* ---------- Reduced motion flipped MID-SESSION ----------
+       `reduceMotion` above is a SNAPSHOT taken at parse time. Every gate in
+       this file reads it, so a reader who turns the preference on after the
+       page has loaded — the macOS "Reduce motion" switch, or a browser devtools
+       emulation — keeps every indefinite animation this file started. The CSS
+       side is covered (each sheet has a `prefers-reduced-motion` block, and
+       scroll.css §4 exists specifically for the mid-session case), but a CSS
+       media query cannot stop a JS timer or an anime.js `loop: true`.
+
+       Two things here run FOREVER rather than merely resting somewhere wrong,
+       which is what makes them worth a live listener: the ambient `.bg-shape`
+       drift (`loop: true`) and the hero subtitle's setInterval. Both register a
+       stop below.
+
+       Reassigning `reduceMotion` is deliberate and does useful work beyond the
+       two callbacks: `goToSection` stops smooth-scrolling, `closeDrawer` and
+       `closePalette` take their immediate path, and `updateChrome` stops
+       condensing the bar — all of them read the flag at CALL time. */
+    var reduceStops = [];
+    function onReduceMotion(fn) { reduceStops.push(fn); }
+    (function () {
+        var q = window.matchMedia("(prefers-reduced-motion: reduce)");
+        var handler = function (ev) {
+            if (!ev.matches) return;
+            reduceMotion = true;
+            /* Copy first: a callback is free to register nothing, but iterating
+               the live array while clearing it is how this kind of thing skips
+               half its work. */
+            var stops = reduceStops.slice();
+            reduceStops.length = 0;
+            stops.forEach(function (fn) {
+                try { fn(); } catch (err) { /* one bad stop must not block the rest */ }
+            });
+        };
+        /* addListener is the pre-2021 Safari spelling; still worth the branch
+           because matchMedia here is otherwise unguarded. */
+        if (q.addEventListener) q.addEventListener("change", handler);
+        else if (q.addListener) q.addListener(handler);
+    })();
+
     /* ---------- Footer year ---------- */
     var yearEl = document.getElementById("year");
     if (yearEl) yearEl.textContent = String(new Date().getFullYear());
@@ -421,6 +461,40 @@
         root.style.setProperty("--nav-sb", "0px");
     }
 
+    /* ---------- Focus restoration that VERIFIES it landed ----------
+       `el.focus()` on an element the layout has removed is a silent no-op:
+       nothing throws, and `document.activeElement` is left on <body>. Both
+       dialogs restore focus to their opener by calling focus() and trusting it,
+       and for the drawer that opener is `.nav-toggle`, which nav.css sets to
+       `display: none` above 760px.
+
+       Measured on the built site at 1440px: with the drawer open, Escape closed
+       it and left `document.activeElement` on BODY — `returned: false`. At
+       390px the same sequence returned focus to `#nav-toggle` correctly.
+
+       The path a real reader takes to that state is a RESIZE, not a click: the
+       drawer is opened at a narrow width, then the window is widened or the
+       phone rotated past 761px, and the matchMedia handler further down calls
+       `closeDrawer(true)` — closing the drawer while its opener is being
+       display:none'd in the same frame. Focus lands on <body>, so the next Tab
+       starts again from the skip link and the reader's place in the document is
+       gone. That is WCAG 2.4.3 Focus Order, and 2.4.7 for the moment in
+       between where there is no focus indicator anywhere.
+
+       So: try each candidate in turn and CHECK, rather than assuming.
+       `getClientRects().length` screens out display:none cheaply; the
+       activeElement comparison afterwards is what actually catches everything
+       else (visibility:hidden, inert, a disabled control). */
+    function restoreFocus(candidates) {
+        for (var i = 0; i < candidates.length; i++) {
+            var el = candidates[i];
+            if (!el || !el.getClientRects || !el.getClientRects().length) continue;
+            try { el.focus(); } catch (err) { continue; }
+            if (document.activeElement === el) return el;
+        }
+        return null;
+    }
+
     /* showModal() already prevents focus reaching the page behind a dialog,
        but Chrome's own wrap point routes through <body> for one keypress —
        measured on both dialogs — which reads as "the focus ring vanished".
@@ -487,8 +561,19 @@
             drawer.classList.remove("is-closing");
             unlockScroll();
             // The platform restores focus to the opener, but only if focus was
-            // still inside the dialog when it closed.
-            if (document.activeElement === document.body && navToggle) navToggle.focus();
+            // still inside the dialog when it closed. And the opener itself is
+            // display:none above 760px, so it is tried FIRST and verified rather
+            // than trusted — see restoreFocus(). `.nav-cmd` is the fallback
+            // because it is the one control present at every width; the bar's
+            // first link and the wordmark cover the no-palette build after it.
+            if (document.activeElement === document.body) {
+                restoreFocus([
+                    navToggle,
+                    navCmd,
+                    navTrack ? navTrack.querySelector(".nav-link, .nav-cta") : null,
+                    document.querySelector(".brand")
+                ]);
+            }
         });
         // Clicks that land on the backdrop are dispatched at the dialog itself.
         drawer.addEventListener("click", function (e) {
@@ -784,8 +869,18 @@
                still inside the dialog at close time — the same gap the drawer
                already covers. Without this, closing the palette from a row that
                had been removed by a re-render dropped the ring to <body>. */
-            var opener = document.getElementById("nav-cmd");
-            if (document.activeElement === document.body && opener) opener.focus();
+            /* Same verify-don't-trust rule as the drawer. `#nav-cmd` is visible
+               at every width so this is belt-and-braces here, but it is hidden
+               outright when <dialog> is unsupported, and a restore that silently
+               did nothing is exactly the bug the drawer had. */
+            if (document.activeElement === document.body) {
+                restoreFocus([
+                    document.getElementById("nav-cmd"),
+                    document.getElementById("drawer-search"),
+                    navTrack ? navTrack.querySelector(".nav-link, .nav-cta") : null,
+                    document.querySelector(".brand")
+                ]);
+            }
         });
         palette.addEventListener("click", function (e) {
             if (e.target === palette) { closePalette(); return; }
@@ -1172,7 +1267,37 @@
         setTimeout(rescueStragglers, 2200);
     }
 
-    /* ---------- Hero name + signature motif entrance (on load) ---------- */
+    /* ---------- Hero name + signature motif entrance (on load) ----------
+
+       THE PER-LETTER SPLIT DESTROYED THE <h1>'s ACCESSIBLE NAME.
+       Chrome's name computation inserts a boundary between inline elements, so
+       once "Samuel" / "Woo" became nine separate `<span class="hero-char">`
+       nodes the <h1> was exposed as the string "S a m u e l W o o" — read out
+       letter by letter. It does not stop at the heading either: the hero band
+       is `<section id="home" aria-labelledby="home-title">` and `home-title`
+       IS this <h1>, so the landmark inherited the same name. Measured in
+       Chrome's OWN accessibility tree (CDP Accessibility.getFullAXTree, not
+       recomputed from attributes): on `/` the landmark inventory came back
+       `region("S a m u e l W o o")` alongside the correctly-named
+       region("Interests") / region("Projects") / region("Work") /
+       region("Connect"). A screen-reader reader arriving at the home page
+       therefore heard the site's owner spelled out, twice.
+
+       Base.astro already solved exactly this for the brand wordmark in the top
+       bar — "Letters are wrapped in aria-hidden and the accessible name comes
+       from aria-label, so screen readers hear 'Samuel Woo — home', not
+       's a m'" — and this is the same treatment applied to the runtime split:
+       the glyphs become aria-hidden decoration and the real string is restated
+       once, for AT only, using styles.css's existing `.visually-hidden`
+       utility (which is clip-path + 1x1, deliberately NOT display:none, so the
+       text stays in the a11y tree and stays available for name computation).
+
+       Only the animated path is touched. With reduced motion on, or anime.js
+       absent, `animate` is false, the split never happens and the <h1> keeps
+       its authored text node — that path was always correct and stays so.
+       aria-label is NOT used on the wrapper: these are plain <span>s with no
+       role, and aria-label on a generic element is not required to be honoured.
+       A real text node is. */
     if (animate) {
         var heroLines = document.querySelectorAll(".hero-name .hero-line");
         heroLines.forEach(function (line) {
@@ -1180,14 +1305,27 @@
             var host = accent || line;
             var text = host.textContent;
             host.textContent = "";
+
+            /* The name, once, for AT. First child so it reads in source order. */
+            var sr = document.createElement("span");
+            sr.className = "visually-hidden";
+            sr.textContent = text;
+            host.appendChild(sr);
+
+            /* The glyphs, as decoration. anime.js targets
+               `.hero-name .hero-char` — a DESCENDANT selector, so it still
+               matches through this wrapper. */
+            var glyphs = document.createElement("span");
+            glyphs.setAttribute("aria-hidden", "true");
             for (var i = 0; i < text.length; i++) {
                 var ch = document.createElement("span");
                 ch.className = "hero-char";
                 ch.style.display = "inline-block";
                 ch.style.willChange = "transform, opacity";
                 ch.textContent = text[i];
-                host.appendChild(ch);
+                glyphs.appendChild(ch);
             }
+            host.appendChild(glyphs);
         });
         window.anime({
             targets: ".hero-name .hero-char",
@@ -1281,22 +1419,71 @@
             if (!drift) return;
             if (document.hidden) drift.pause(); else drift.play();
         });
+        /* `loop: true` — the only tween in this file with no end. A preference
+           flipped mid-session has to stop it; see the registry at the top. */
+        onReduceMotion(function () { if (drift) drift.pause(); });
     }
 
-    /* ---------- Rotating hero subtitle ---------- */
+    /* ---------- Rotating hero subtitle ----------
+       WCAG 2.2.2 Pause, Stop, Hide (Level A): moving or blinking information
+       that starts automatically, runs for more than five seconds and sits
+       alongside other content needs a mechanism to pause, stop or hide it.
+
+       What this actually did, measured on the built site with reduced motion
+       OFF (the default almost everyone gets): `setInterval` registered at
+       4000ms, and `.fade-out` toggled onto `#rotating-subtitle` at t=2763ms,
+       6779ms and 10796ms — a 4016ms period — held ~502ms each time. Combined
+       with styles.css's `.hero-subtitle { transition: opacity .3s ease }` and
+       `.hero-subtitle.fade-out { opacity: 0 }`, the hero's one-line summary
+       faded out and back in every four seconds, indefinitely, and there was no
+       pause control anywhere in the band (measured: zero buttons or inputs in
+       the hero band, no aria-live on the element).
+
+       And it was blinking for NOTHING. `subtitles` has exactly one entry, so
+       `idx2 = (idx2 + 1) % 1` is always 0 and the line it re-assigns is the
+       line already there. The text never changed. The animation carried no
+       information at all — it was a four-second flicker on the first sentence a
+       reader tries to read.
+
+       So the fix is to not run it: with one entry there is nothing to rotate,
+       and removing the motion removes the 2.2.2 obligation outright rather than
+       satisfying it with a control nobody needs.
+
+       IF `subtitles` EVER GROWS PAST ONE ENTRY, THIS NEEDS A VISIBLE PAUSE
+       CONTROL BEFORE IT SHIPS. The `length > 1` guard is what keeps that
+       decision from being made by accident: adding a second string turns the
+       rotation back on, and a rotation without a pause button is a Level A
+       failure. The control belongs next to the subtitle in the hero, which is
+       styles.css / layout.css territory, not this file's.
+
+       Reduced motion, for the record: the load-time gate below was already
+       correct, and `.reveal { opacity: 1 !important }` in styles.css's
+       reduced-motion block outranks `.hero-subtitle.fade-out { opacity: 0 }`
+       (the element carries `class="hero-subtitle reveal"`), so even a
+       mid-session flip never showed a visible fade. The timer kept running
+       though — invisible work on a page that had just been asked to calm down —
+       so it registers a stop as well. */
     var subtitles = [
         "software engineer, part-time robot wrangler"
     ];
     var subtitleEl = document.getElementById("rotating-subtitle");
-    if (subtitleEl && !reduceMotion) {
+    if (subtitleEl && subtitles.length > 1 && !reduceMotion) {
         var idx2 = 0;
-        setInterval(function () {
+        var subFade = null;
+        var subTimer = setInterval(function () {
             subtitleEl.classList.add("fade-out");
-            setTimeout(function () {
+            subFade = setTimeout(function () {
+                subFade = null;
                 idx2 = (idx2 + 1) % subtitles.length;
                 subtitleEl.textContent = subtitles[idx2];
                 subtitleEl.classList.remove("fade-out");
             }, 300);
         }, 4000);
+        onReduceMotion(function () {
+            clearInterval(subTimer);
+            if (subFade) { clearTimeout(subFade); subFade = null; }
+            /* Never leave the line parked mid-fade. */
+            subtitleEl.classList.remove("fade-out");
+        });
     }
 })();

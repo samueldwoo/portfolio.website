@@ -12,8 +12,13 @@
  *                          aria-current
  *   skipTarget           — the skip-link's #id ('home' | 'projects' | 'travel')
  *
- * The `head` slot lets a page append extra <head> tags (travel.html loads a
- * second Google Fonts stylesheet for the airline wordmarks).
+ * The `head` slot lets a page append extra <head> tags. NOTE: no page uses it
+ * at present — this comment used to claim travel.html loaded a second Google
+ * Fonts stylesheet for the airline wordmarks, and that stopped being true when
+ * the wordmarks became the committed PNGs in /assets/airlines/. Verified: the
+ * built travel page carries exactly one fonts <link>, the shared one below, and
+ * `grep 'slot="head"' src/pages/*.astro` matches nothing. The slot stays because
+ * it is the only way for one page to add a tag without widening Props.
  *
  * ---------------------------------------------------------------------------
  * NAVIGATION (see public/css/nav.css for the full rationale)
@@ -43,11 +48,129 @@
 interface Props {
   title: string;
   description: string;
-  page: 'home' | 'projects' | 'travel';
+  /* 'error' is the 404 page. It deliberately reuses the existing nav logic
+     rather than adding a branch: 'error' is not 'home', so every section link
+     becomes a cross-page `/#hash` (correct — the sections are on the home page,
+     not here), and it is neither 'projects' nor 'travel', so no link gets
+     is-active / data-nav-page. script.js survives that: placeMarker() bails on
+     `if (!active) { marker.classList.remove("is-shown"); return; }`
+     (public/script.js:252), so the travelling pill simply hides. */
+  page: 'home' | 'projects' | 'travel' | 'error';
   skipTarget: string;
+  /* Error pages only. Emits `robots: noindex, follow` AND suppresses
+     <link rel="canonical">. A 404 must not self-canonicalise (it would invite
+     indexing of an error) and must not canonicalise to `/` (that tells Google
+     the error page IS the home page). Omission is the only correct answer. */
+  noindex?: boolean;
 }
 
-const { title, description, page, skipTarget } = Astro.props;
+const { title, description, page, skipTarget, noindex = false } = Astro.props;
+
+/* ---------------------------------------------------------------------------
+   CANONICAL ORIGIN — hardcoded, and that is not laziness.
+
+   The idiomatic source is `Astro.site`, which comes from `site:` in
+   astro.config.mjs. That file is off-limits to this change, and `Astro.site` is
+   therefore `undefined`; reading it would silently produce `undefined/projects`
+   in every canonical and og:url on the site. A literal cannot fail that way.
+
+   TRAILING SLASH. Measured against production rather than assumed, because both
+   forms currently answer 200 and that is itself the duplicate-content problem
+   canonical exists to solve:
+
+     GET https://www.samueldwoo.com/projects   -> 200
+     GET https://www.samueldwoo.com/projects/  -> 200   (no redirect either way)
+     GET https://www.samueldwoo.com/projects.html -> 301 -> /projects
+     GET https://samueldwoo.com/              -> 307 -> https://www.samueldwoo.com/
+
+   The SLASHLESS form wins, on two pieces of the site's own evidence: the legacy
+   `.html` redirects in astro.config.mjs already target `/projects` (so Vercel is
+   on record normalising to it), and every internal link — Base.astro's
+   `pageLinks`, the nav, SiteFoot — is written `/projects`. Canonicalising to
+   `/projects/` would have pointed every page at a URL nothing on the site links
+   to. Home stays `/`, since '' is not a URL.
+
+   The `.replace()` normalises whichever form Astro hands us at prerender time,
+   so this is correct under `build.format: 'directory'` and would stay correct if
+   that ever changed. --------------------------------------------------------- */
+const SITE = 'https://www.samueldwoo.com';
+const canonical = `${SITE}${Astro.url.pathname.replace(/\/+$/, '') || '/'}`;
+
+/* ---------------------------------------------------------------------------
+   OG IMAGE — deliberately absent, and this is the switch to turn it on.
+
+   There is NO photographic imagery on this site by design, and there is no
+   generated card either, so there is nothing honest to point og:image at. A tag
+   naming a file that 404s is strictly worse than no tag: the scraper logs a
+   fetch failure and the card degrades unpredictably per platform, whereas the
+   absence of the tag is a defined state every platform handles.
+
+   To add one later: drop a 1200x630 PNG or JPEG at public/og.png and set
+   OG_IMAGE below to '/og.png'. Both tags and the correct twitter:card type
+   follow automatically. It MUST be PNG or JPEG — Facebook, X, LinkedIn and
+   Slack all refuse SVG for og:image, so the site's inline-SVG favicon trick
+   cannot be reused here. Set the real pixel dimensions if they differ. --- */
+const OG_IMAGE: string | null = null;
+const OG_IMAGE_W = 1200;
+const OG_IMAGE_H = 630;
+const OG_IMAGE_ALT = 'Samuel Woo — software engineer';
+
+/* Person + WebSite, emitted on the HOME PAGE ONLY. One entity page is what
+   Google asks for; repeating the graph on /projects and /travel adds nothing and
+   multiplies the places a stale fact can hide.
+
+   EVERY claim below is sourced from this repo's own rendered content, and
+   nothing else is asserted:
+     jobTitle   src/pages/index.astro:339 "Software Development Engineer II"
+     worksFor   src/pages/index.astro:342 "Amazon Lab126" (and :314 "SDE II at
+                Amazon Lab126")
+     alumniOf   src/pages/index.astro:362 "UC San Diego, Jacobs School of
+                Engineering"
+     knowsAbout src/pages/index.astro:314 — the data pipeline / C++ / sensor
+                work and the camera stack
+     sameAs     the two profile links already in this file's own drawer foot.
+                github.com/samueldwoo is HTTP-verified (200, <title>
+                "samueldwoo (Sam) · GitHub"). The LinkedIn URL is the owner's own
+                assertion carried verbatim from the existing markup — it answers
+                200 but behind a reCAPTCHA wall, so it cannot be independently
+                confirmed and is NOT claimed to be.
+
+   Deliberately NOT present: no `image` (there is no photo), no `award`, no
+   `birthDate`, no `address`, and no WebSite `potentialAction`/SearchAction —
+   the Cmd-K palette is client-side only and there is no `?q=` results URL for a
+   SearchAction to name, so declaring one would be a fabrication. */
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'Person',
+      '@id': `${SITE}/#person`,
+      name: 'Samuel Woo',
+      alternateName: 'Sam',
+      url: `${SITE}/`,
+      jobTitle: 'Software Development Engineer II',
+      worksFor: { '@type': 'Organization', name: 'Amazon Lab126' },
+      alumniOf: {
+        '@type': 'CollegeOrUniversity',
+        name: 'University of California San Diego',
+      },
+      knowsAbout: ['Robotics', 'Embedded systems', 'C++'],
+      sameAs: [
+        'https://github.com/samueldwoo',
+        'https://linkedin.com/in/samueldwwoo',
+      ],
+    },
+    {
+      '@type': 'WebSite',
+      '@id': `${SITE}/#website`,
+      url: `${SITE}/`,
+      name: 'Samuel Woo',
+      inLanguage: 'en',
+      author: { '@id': `${SITE}/#person` },
+      publisher: { '@id': `${SITE}/#person` },
+    },
+  ],
+};
 
 // On the home page the section links are same-page hashes and carry data-nav
 // so script.js's scroll-spy can claim them. From the sub-pages they point back
@@ -85,13 +208,76 @@ const pageLinks = [
     <meta name="description" content={description}>
     <title>{title}</title>
 
-    <!-- Nav capability flag. Inline and in <head> on purpose: nav.css's
+    {/* Browser UI tint on mobile. #f5f6f2 is `--bg` verbatim — declared at
+         public/styles.css:11 and applied by `background: var(--bg)` on <body>
+         at :132. A meta tag cannot read a custom property, so the hex is
+         duplicated here on purpose; keep the two in step. (Note styles.css:470
+         REDECLARES --bg to #1b2216 inside the one inverted `#work` band. That is
+         a scoped override, not the page background, and must not be used here.)
+         NOTE: no `rel="manifest"` and no apple-touch-icon. /manifest.webmanifest
+         exists but belongs to the PRIVATE wing ("[us]", scope "/stronger/"), and
+         /assets/us/icons/apple-touch-icon.png is that wing's black icon — either
+         one linked from here would be both off-brand and a signpost. The public
+         site has no manifest and no raster icon by design. */}
+    <meta name="theme-color" content="#f5f6f2">
+
+    {/* Canonical. Both `/projects` and `/projects/` answer 200 in production
+         with no redirect between them (measured), which is duplicate content
+         under two URLs; this is what resolves it. Absolute, www host, slashless
+         — see the note on SITE in the frontmatter for why that form.
+         Suppressed on the 404, where any self-reference is wrong. */}
+    {!noindex && <link rel="canonical" href={canonical} />}
+    {noindex && <meta name="robots" content="noindex, follow" />}
+
+    {/* ===================================================================
+         Open Graph / Twitter.
+
+         og:url is the CANONICAL url, not the requested one, so a share of
+         `/projects/` and a share of `/projects` collapse to one object rather
+         than accumulating two sets of engagement counts.
+
+         There is no og:image — see OG_IMAGE in the frontmatter. Consequence,
+         stated plainly rather than papered over: on X, LinkedIn, Facebook,
+         Slack, Discord and iMessage these pages render a TEXT-ONLY card (title +
+         description + domain), and on some surfaces a blank or grey thumbnail
+         box beside it. That is the honest cost of having no imagery on the site.
+         twitter:card is `summary` while there is no image and flips to
+         `summary_large_image` when one lands, because declaring
+         summary_large_image with nothing to put in it is a promise X cannot
+         keep. twitter:title / twitter:description are intentionally omitted: X
+         documents og:title / og:description as the fallback, and duplicating
+         them is two more tags that can drift out of step with the props.
+         =================================================================== */}
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Samuel Woo">
+    <meta property="og:locale" content="en_US">
+    <meta property="og:title" content={title}>
+    <meta property="og:description" content={description}>
+    <meta property="og:url" content={canonical}>
+    {OG_IMAGE && (
+      <>
+        <meta property="og:image" content={`${SITE}${OG_IMAGE}`} />
+        <meta property="og:image:width" content={String(OG_IMAGE_W)} />
+        <meta property="og:image:height" content={String(OG_IMAGE_H)} />
+        <meta property="og:image:alt" content={OG_IMAGE_ALT} />
+      </>
+    )}
+    <meta name="twitter:card" content={OG_IMAGE ? 'summary_large_image' : 'summary'}>
+
+    {/* Person + WebSite, home page only. See the jsonLd note in the frontmatter
+        for the provenance of every claim; set:html because Astro must not escape
+        JSON-LD. */}
+    {isHome && (
+      <script type="application/ld+json" is:inline set:html={JSON.stringify(jsonLd)} />
+    )}
+
+    {/* Nav capability flag. Inline and in <head> on purpose: nav.css's
          no-JS fallback keeps the full link row on screen at mobile widths
          (because the drawer needs showModal() to open at all), and that
-         fallback must not flash before script.js runs at the end of body. -->
+         fallback must not flash before script.js runs at the end of body. */}
     <script is:inline>document.documentElement.classList.add('nav-js');</script>
 
-    <!-- Animation capability flag, set BEFORE first paint for the same reason
+    {/* Animation capability flag, set BEFORE first paint for the same reason
          nav-js is: `html.js-anim .reveal` carries the invisible from-state, so
          setting it late would paint the finished page and then hide it.
 
@@ -101,7 +287,7 @@ const pageLinks = [
          script.js adds `anim-live` as soon as it runs (whether it goes on to
          animate or to reveal everything immediately), so if that has not
          happened by the deadline the from-state is withdrawn and the content
-         simply appears. Failure degrades to "no animation", never to "no page". -->
+         simply appears. Failure degrades to "no animation", never to "no page". */}
     <script is:inline>
       (function () {
         var d = document.documentElement;
@@ -112,16 +298,16 @@ const pageLinks = [
       })();
     </script>
 
-    <!-- Inline SVG favicon: sage "S" monogram on a light canvas -->
+    {/* Inline SVG favicon: sage "S" monogram on a light canvas */}
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23eceee6'/%3E%3Ctext x='16' y='23' font-family='Verdana,Geneva,sans-serif' font-size='20' font-weight='700' text-anchor='middle' fill='%235f7a4f'%3ES%3C/text%3E%3C/svg%3E">
 
-    <!-- Google Fonts: Space Grotesk (display), Inter (body/UI), DM Mono (labels) -->
+    {/* Google Fonts: Space Grotesk (display), Inter (body/UI), DM Mono (labels) */}
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
     <slot name="head" />
 
-    <!-- ASSET PATHS ARE ROOT-ABSOLUTE ("/styles.css"), NOT RELATIVE. Do not
+    {/* ASSET PATHS ARE ROOT-ABSOLUTE ("/styles.css"), NOT RELATIVE. Do not
          "tidy" the leading slash away.
 
          These were relative while astro.config set `build.format: 'file'`, which
@@ -137,34 +323,34 @@ const pageLinks = [
 
          The redirects in astro.config.mjs do NOT cover this. They rewrite an
          incoming PAGE url; they cannot touch a relative ASSET url inside the
-         HTML that gets served. -->
-    <!-- The hand-written stylesheet, served verbatim from public/ as one
+         HTML that gets served. */}
+    {/* The hand-written stylesheet, served verbatim from public/ as one
          global sheet. Deliberately NOT imported through Astro/Vite: no
-         scoping, no splitting, no hashing — same file, same cascade. -->
+         scoping, no splitting, no hashing — same file, same cascade. */}
     <link rel="stylesheet" href="/styles.css">
 
-    <!-- Domain-split overhaul layer, loaded in cascade order AFTER styles.css
+    {/* Domain-split overhaul layer, loaded in cascade order AFTER styles.css
          so each file wins on equal specificity. One file per domain because
          styles.css is ~2400 lines and is the repo's worst merge-conflict
          surface — the split is what lets navigation, scroll, layout and
          micro-interaction work proceed in parallel without rewriting the same
-         hunks. Each file documents what it owns; keep edits inside your file. -->
+         hunks. Each file documents what it owns; keep edits inside your file. */}
     <link rel="stylesheet" href="/css/layout.css">
     <link rel="stylesheet" href="/css/nav.css">
     <link rel="stylesheet" href="/css/scroll.css">
     <link rel="stylesheet" href="/css/motion.css">
 </head>
 <body>
-    <!-- Fixed background atmosphere: faint sage radial wash + abstract shapes -->
+    {/* Fixed background atmosphere: faint sage radial wash + abstract shapes */}
     <div class="atmosphere" aria-hidden="true">
         <div class="glow glow-sage"></div>
         <div class="glow glow-olive"></div>
     </div>
     <a class="skip-link" href={`#${skipTarget}`}>Skip to content</a>
 
-    <!-- Fixed top navigation bar. Always visible: it condenses on the way
+    {/* Fixed top navigation bar. Always visible: it condenses on the way
          down but never translates away, never fades and never needs to be
-         hunted for. -->
+         hunted for. */}
     {/* No aria-label here. <header> at body level IS the `banner` landmark, so
         aria-label="Primary" named the BANNER "Primary" — measured: Chrome's AX
         tree reported `banner(Primary)`, i.e. a screen reader announced "Primary
@@ -274,13 +460,13 @@ const pageLinks = [
 
     <slot />
 
-    <!-- ===================================================================
+    {/* ===================================================================
          Mobile drawer. A native <dialog>, so the focus trap, Escape and the
          top layer are the platform's job, not ours. Rows carry
          `.drawer-stagger`; nav.css animates them from a `from`-only keyframe
          so the resting state is the finished state and reduced motion simply
          shows the finished list.
-         =================================================================== -->
+         =================================================================== */}
     <dialog id="nav-drawer" class="nav-dialog drawer" aria-label="Menu">
         <div class="drawer-panel">
             <div class="drawer-head">
@@ -330,13 +516,13 @@ const pageLinks = [
         </div>
     </dialog>
 
-    <!-- ===================================================================
+    {/* ===================================================================
          Command palette (Cmd/Ctrl-K, or `/`). Not a <form>: Enter has to open
          the highlighted result, and a `method="dialog"` form would swallow it
          to close the dialog instead. The input is a combobox pointing at the
          listbox below it, so the highlighted row is announced as you arrow
          through it without moving DOM focus off the text field.
-         =================================================================== -->
+         =================================================================== */}
     <dialog id="cmdk" class="nav-dialog cmdk" aria-label="Jump to a section or page">
         <div class="cmdk-panel">
             <div class="cmdk-head">
@@ -389,7 +575,7 @@ const pageLinks = [
         </div>
     </dialog>
 
-    <!-- Vendored libs + the two hand-written motion files, in the exact order
+    {/* Vendored libs + the two hand-written motion files, in the exact order
          the static pages used them. `is:inline` keeps Astro/Vite from
          bundling, hashing or reordering any of it — these are byte-identical
          <script src> tags pointing at public/.
@@ -413,7 +599,7 @@ const pageLinks = [
 
          motion-ux.js runs LAST: its nav-indicator watches the `is-active`
          class that script.js's scroll-spy sets, so the spy must have run
-         and placed the initial active link first. -->
+         and placed the initial active link first. */}
     <script is:inline src="/gsap.min.js"></script>
     <script is:inline src="/ScrollTrigger.min.js"></script>
     <script is:inline src="/SplitText.min.js"></script>

@@ -135,10 +135,53 @@ html.gsap-on .band-home {
 
    (The two full-height straight verticals that made this worst are gone — see
    the note in gsap-motion.js §4a.) */
+/* ---- OFFSETS ARE NON-NEGATIVE ON PURPOSE — do not put them back ----
+   These were `left: -9%; bottom: -14%`, which hung the plane off the band's
+   lower-left corner. `html.gsap-on .band-home` sets `overflow: clip` (above), so
+   everything outside the band was CUT — and both of this plane's curves have
+   their terminals in exactly that corner (`M12 196` and `M46 214` in a
+   0 0 300 220 viewBox), so the clip severed both curve ends rather than trimming
+   empty SVG box.
+
+   This is the same defect styles.css already fixed for `.shape-field`, and its
+   note there states the rule this plane was violating: a soft radial wash may
+   bleed off-screen invisibly (which is why `.glow` still does), but these are
+   HARD STROKES, and a severed stroke reads as a rendering fault rather than as
+   bleed. `.shape-field` was fixed at 7-25% clipped; this plane was worse.
+
+   MEASURED, real stroke ink (not the SVG box) against the clip, at TRUE REST —
+   inline transform confirmed identity, i.e. the first thing a visitor sees:
+
+       viewport    cut off left   cut off bottom
+        900x900        60.1px         115.6px
+       1024x900        68.4px         114.1px
+       1440x900       104.8px         113.6px
+       1920x900       148.0px         113.6px
+       2560x900       205.6px         113.6px
+       3840x900       320.8px         113.6px
+
+   After: 0px on every edge at every one of those widths, verified at rest AND at
+   peak pin progress. The bottom cut used to vanish mid-pin (the plane travels
+   `y: -0.26 * innerHeight`, so scrolling lifted the ink back into the band) —
+   which is precisely why it had to be measured at rest. A probe that scrolls
+   first reports cutBottom 0 and calls this clean.
+
+   WHY 0 AND NOT A SMALLER NEGATIVE. The offsets resolve against the BAND, but
+   the ink's inset from its own box edge is a fraction of the BOX, which is capped
+   at 620px. So the two scale apart: any fixed negative percentage that just fits
+   at 1440 cuts deeper at 2560 and deeper again at 3840. 0 is the only value that
+   holds at every width.
+
+   The plane moves right/up by the offsets it no longer has, so more of it sits
+   behind the copy. That is already this plane's accepted design: it is z-index 0
+   and `.home-inner > *` is z-index 1 (styles.css:679), so the copy always paints
+   on top — see the z-index note above, where being BEHIND the copy was chosen
+   deliberately and readability won the tie. Measured worst overlap with hero text
+   after the change: ~2934px^2, against `.explore-cue`, at ~.18 effective alpha. */
 .hero-fg {
     position: absolute;
-    left: -9%;
-    bottom: -14%;
+    left: 0;
+    bottom: 0;
     width: min(58%, 620px);
     height: auto;
     z-index: 0;
@@ -158,12 +201,43 @@ html.gsap-on .band-home {
 
 /* Decoration is the first thing to go when space is tight — same rule the
    `.shape-field` layer already follows. */
-/* Below 820px the hero pin does not run (gsap-motion.js §4a — the narrow hero is
-   deliberately taller than a viewport to make room for the putting green), so
-   this plane would have no parallax to justify it and would just be static ink
-   near the copy. Hide it at the same breakpoint the pin stands down, so there is
-   no orphaned decoration. */
-@media (max-width: 819px) {
+/* Where the hero pin does not run, this plane has no parallax to justify it and
+   would just be static ink near the copy. Hide it at exactly the breakpoint the
+   pin stands down, so there is no orphaned decoration.
+
+   THIS QUERY IS THE COMPLEMENT OF THE PIN'S OWN QUERY. gsap-motion.js §4a is
+   `mmHero.add("(min-height: 560px) and (min-width: 900px)")`, so the pin runs
+   only when BOTH hold, and this plane must be hidden when EITHER fails — hence a
+   comma (OR), not a single max-width.
+
+   IT USED TO BE `@media (max-width: 819px)` ALONE, which was wrong twice over,
+   and the comment above it claimed it matched the pin. It did not:
+
+     * WRONG WIDTH. The pin's gate is 900px, not 820px, and gsap-motion.js §4a
+       spells out why in its own comment ("900px, NOT 820px: it must match
+       HeroCanvas.tsx's own `narrow = cssW < 900` and layout.css's
+       `max-width: 899px` band reservation"). That left 820-899px showing the
+       plane with no pin behind it.
+     * MISSING THE HEIGHT TERM ENTIRELY. The pin also opts out below 560px tall,
+       so every short viewport — landscape phones, split-screen, a short desktop
+       window — was an orphan at ANY width.
+
+   Both cases were also where the clipping was worst, because a short band clips
+   more of a plane whose height does not shrink with it. Measured before, real
+   stroke ink cut off (left / bottom), all with the pin provably not running:
+
+        820x900   54.8 / 118.7      <- width orphan
+        880x900   58.8 / 120.9      <- width orphan
+        844x390   56.4 / 110.2      <- landscape phone
+        926x428   61.8 /  81.0      <- landscape phone
+       1024x480   68.4 /  84.7      <- short desktop window
+       1440x480  104.8 /  97.9      <- short desktop window
+
+   Verified after: hidden at all six, still shown at 900x900 and above where the
+   pin does run. `.98` on both terms so the boundary values 900 and 560 — the
+   first widths/heights at which the pin DOES run — cannot be caught by both
+   queries at once. */
+@media (max-width: 899.98px), (max-height: 559.98px) {
     .hero-fg { display: none; }
 }
 
