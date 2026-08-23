@@ -189,6 +189,26 @@ export const POST: APIRoute = async ({ request, cookies, url, clientAddress, red
      rather than "he posts as her". */
   writeCookie(cookies, url, 'whoami', sign(secret, 'whoami', TTL.whoami), TTL.whoami);
 
+  /* AND a session cookie, so the passcode is ONE step instead of two.
+  
+     Every page in the wing self-guards on `session` specifically — deliberately,
+     so a routing mistake degrades to "empty page" rather than "everything is
+     public". The side effect was that an admin cookie alone got redirected off
+     all five of her pages, so Sam had to pass the QUIZ and then also enter the
+     passcode, on every device, just to be recognised as himself. Verified before
+     this: admin-only was a 302 on /vault, /today, /room, /letters and /day.
+  
+     Minting it here is not a loosening. The passcode is a STRONGER credential
+     than the quiz — one high-entropy secret checked against a digest, versus
+     three answers about him — so anyone who can present it has already cleared a
+     higher bar than the gate asks. The pages' `session` check is unchanged and
+     still the only thing that decides whether they render.
+  
+     The three cookies keep their own lifetimes on purpose: 12h to post, 30 days
+     of access, 180 days of identity. See Purpose in session.ts for why identity
+     outliving privilege is the whole point. */
+  writeCookie(cookies, url, 'session', sign(secret, 'session', TTL.session), TTL.session);
+
   return answer(true, 200, null, { redirect: DJ });
 };
 

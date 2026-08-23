@@ -684,12 +684,23 @@ const habit = rhythmLine(rhythm);
             </section>
 
             <div class="dj-foot">
-                {/* Reaching her page needs a SESSION token, not this admin one —
-                    today.astro re-checks for `session` specifically, exactly like
-                    the vault hub does. So this link only works once I have also
-                    been through the gate. That is the correct trade: it keeps one
-                    rule ("the vault is hers") instead of two. */}
-                <a href="/samdrea/vault/today">her page &rarr; (needs the gate too)</a>
+                {/* NO LONGER "needs the gate too", and the label used to say so.
+                    Every page in the wing self-guards on `session` specifically —
+                    deliberately, so a routing mistake degrades to "empty page"
+                    rather than "everything is public". The side effect was that
+                    this admin token alone was redirected off all five of her
+                    pages, so logging in here left me one passcode in and still
+                    locked out, needing to answer the quiz as well on every device.
+
+                    /api/us/admin now mints a session alongside the admin and
+                    whoami tokens: the passcode is a stronger credential than three
+                    answers about me, so presenting it has already cleared a higher
+                    bar than the gate asks. The pages' `session` check is unchanged.
+
+                    Points at the HUB rather than at /today, because the hub is the
+                    front door and carries the two clocks, the countdown, presence
+                    and the four rooms. */}
+                <a href="/samdrea/vault">the vault &rarr;</a>
                 <form class="studio-out" method="post" action="/api/us/out"><button class="studio-out-btn" type="submit">sign out of everything</button></form>
             </div>
     <script is:inline>
