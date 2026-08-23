@@ -28,7 +28,7 @@
  */
 
 import { defineMiddleware } from 'astro:middleware';
-import { readCookie, verify } from './lib/us/session';
+import { TTL, readCookie, sign, verify, writeCookie } from './lib/us/session';
 import { SESSION_SECRET } from './lib/us/config';
 
 /** The wing's base path. Renaming this also means renaming src/pages/samdrea/. */
@@ -100,6 +100,8 @@ export const onRequest = defineMiddleware(async (ctx, next) => {
     // accepts either, so my own admin session is not locked out of her rooms.
     const valid = needsAdmin ? read('admin') : (read('session') ?? read('admin'));
 
+    if (valid) renew(ctx);
+
     if (!valid) {
       /* A SCRIPT gets a status code; a PERSON gets sent to the front door — and
          "is this an API path" was the wrong way to tell them apart.
@@ -160,6 +162,53 @@ export const onRequest = defineMiddleware(async (ctx, next) => {
 
   return withPrivacyHeaders(await next());
 });
+
+/**
+ * SLIDING RENEWAL, so an active session never expires under her.
+ *
+ * ---------------------------------------------------------------------------
+ * WITHOUT THIS, THE 30 DAYS RAN FROM THE QUIZ AND NOTHING RESET IT
+ *
+ * `session` is minted with TTL.session (30 days) by /api/us/gate, and only there.
+ * So somebody who opened the app EVERY DAY was still thrown back to the gate on day
+ * 31, having done nothing wrong — and in an installed app, which has its own cookie
+ * jar, that means retyping three answers with no browser chrome to explain why.
+ *
+ * A fixed expiry is right for a credential that should be re-proved periodically.
+ * This is not that: it is one of two people opening a gift. The expiry exists so an
+ * abandoned session on a lost phone does not live forever, and sliding it preserves
+ * that exactly — the clock now runs from LAST USE rather than from first login.
+ *
+ * ---------------------------------------------------------------------------
+ * ONLY PAST THE HALFWAY POINT
+ *
+ * Re-signing on every request would put a Set-Cookie on every response in the wing
+ * for no benefit. Renewing only once the token is over half-spent means at most one
+ * write per fifteen days of use, and the guarantee is the same: any visit inside the
+ * window pushes the expiry back out to a full 30 days.
+ *
+ * `whoami` gets the same treatment for the same reason — if IDENTITY expired while
+ * the session lived, Sam would silently become Andrea, which is the bug the cookie
+ * split exists to prevent.
+ */
+function renew(ctx: Parameters<Parameters<typeof defineMiddleware>[0]>[0]): void {
+  const secret = SESSION_SECRET();
+  if (!secret) return;
+  const nowSec = Math.floor(Date.now() / 1000);
+
+  for (const purpose of ['session', 'whoami'] as const) {
+    const token = readCookie(ctx.cookies, purpose, ctx.url);
+    if (!token) continue;
+    const payload = verify(secret, purpose, token);
+    if (!payload) continue;
+
+    const ttl = TTL[purpose];
+    const spent = nowSec - payload.iat;
+    if (spent < ttl / 2) continue;
+
+    writeCookie(ctx.cookies, ctx.url, purpose, sign(secret, purpose, ttl), ttl);
+  }
+}
 
 /**
  * Applied to every response from the wing, authorized or not.
