@@ -93,14 +93,26 @@
         gsap.set(el, o);
     }
 
-    /* Current value, preferring our own spring state so a re-target
-       mid-flight continues from where the spring actually is rather than
-       from whatever the last committed frame said. */
+    /* Current value, preferring our own spring state so a re-target mid-flight
+       continues from where the spring actually is rather than from whatever the
+       last committed frame said.
+
+       `st.init` IS LOAD-BEARING — do not simplify this to `if (st) return
+       st.value`. That was the original form and it produced a very visible bug:
+       spring() calls springState(create = true) to get a record BEFORE it asks
+       readCurrent() what the element's current value is, so readCurrent found
+       the record it had just created — freshly zeroed — and returned 0. Every
+       element's FIRST spring therefore started from 0 instead of from its real
+       value, and on `scale` that meant a card collapsed to nothing and grew
+       back: measured scale 0.0729 rising through 0.3551 over the first 800ms of
+       a hover. It looked like the entrance animation replaying on first hover,
+       and it self-healed afterwards because by then the record held a real
+       number. `init` distinguishes "we have tracked this property" from "a
+       record exists for it". */
     function readCurrent(el, prop) {
         var st = springState(el, prop, false);
-        if (st) return st.value;
-        var got = gsap.getProperty(el, prop);
-        return toNumber(got);
+        if (st && st.init) return st.value;
+        return toNumber(gsap.getProperty(el, prop));
     }
 
     /* ---------- per-element spring registry ---------- */
@@ -114,7 +126,8 @@
         }
         var st = bag[prop];
         if (!st && create) {
-            st = bag[prop] = { value: 0, velocity: 0, target: 0, active: false };
+            // init: false — `value` is a placeholder, NOT a reading. See readCurrent().
+            st = bag[prop] = { value: 0, velocity: 0, target: 0, active: false, init: false };
         }
         return st || null;
     }
@@ -181,9 +194,11 @@
         if (from !== null && from !== undefined) {
             st.value = from;
             st.velocity = 0;              // an explicit from-keyframe resets
+            st.init = true;
             write(el, prop, st.value);
         } else if (!st.active) {
             st.value = readCurrent(el, prop);
+            st.init = true;
         }
         st.target = to;
 
@@ -308,6 +323,7 @@
                     var st = springState(el, prop, true);
                     st.value = toNumber(val);
                     st.velocity = 0;
+                    st.init = true;
                     st.active = false;
                     write(el, prop, st.value);
                 });
@@ -376,6 +392,7 @@
                        it, not from a stale cached value. */
                     var st2 = springState(el, prop, true);
                     st2.value = to;
+                    st2.init = true;
                     st2.velocity = 0;
                     st2.active = false;
                     var t2 = gsap.to(el, vars);
