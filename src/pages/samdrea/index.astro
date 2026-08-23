@@ -155,7 +155,21 @@ const showPlaceholderWarning = import.meta.env.DEV && gateNeedsReview();
     <link rel="manifest" href="/manifest.webmanifest">
     <link rel="apple-touch-icon" href="/assets/us/icons/apple-touch-icon.png">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    {/* `default`, NOT `black-translucent` — and this page is the ONLY one in the
+        wing where that is right.
+
+        black-translucent does two things: it draws page content UNDER the status
+        bar, and it renders the clock, battery and signal glyphs in WHITE. Every
+        other page here is on pure black, so white glyphs over the content is
+        exactly what you want. THIS page is `background: #fff`. White glyphs on a
+        white page means the status bar is invisible — on the very first screen the
+        installed app ever shows her.
+
+        `default` also stops content being drawn under the bar, so the question can
+        no longer be clipped by a notch either. The safe-area padding in us.css
+        becomes a no-op here, which is correct rather than wasted: it is written as
+        max(existing, env(...)), so a zero inset just leaves the original value. */}
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="[us]">
     <meta name="theme-color" content="#000000">
     <link rel="stylesheet" href="/css/us.css">
