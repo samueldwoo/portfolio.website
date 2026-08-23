@@ -41,6 +41,76 @@ const resumeExists = fs.existsSync(
 const CONTACT_EMAIL = 'samuel.dw.woo@gmail.com';
 const FORM_ENDPOINT = 'https://formspree.io/f/YOUR_FORM_ID';
 const formConfigured = !FORM_ENDPOINT.includes('YOUR_FORM_ID');
+
+/**
+ * THE SHELF — books read edge-on, spine width driven by real page count.
+ *
+ * Same rule the rest of this site follows: if it looks like data, it IS data.
+ * The boarding passes are real trips, the hero's contour lines plot the actual
+ * height field the ball rolls on, and a spine here is as wide as the book is
+ * thick. Nothing is styled to look plausible.
+ *
+ * `pages` came from the Open Library search API, not from memory. Two of them
+ * — Ranger's Apprentice 5 and 6 — have NO page count in Open Library (checked
+ * every edition it lists), so they carry `pagesKnown: false`: the spine falls
+ * back to the series median of the four that ARE known (261/278/266/272 -> 269)
+ * and the hover detail omits a count rather than printing an invented one.
+ *
+ * `trim` is an approximation and is labelled as one: a series shares a physical
+ * trim, and the six middle-grade paperbacks are genuinely shorter than the four
+ * trade paperbacks. Two heights, not ten — I did not measure ten books.
+ *
+ * OWNER: `status` is my reading of "books I've been reading", not something I
+ * can know. Correct it freely — 'reading' | 'reread' | 'finished'. If you
+ * abandon one, add 'abandoned'; the shelf already styles it, and it is the most
+ * interesting state on here because nobody publishes it.
+ */
+type Book = {
+  title: string;
+  /** What the SPINE says, when the full title cannot physically fit on one.
+   *  Real spines abbreviate for exactly this reason. The full `title` still
+   *  goes in the visually-hidden text and the `title` attribute, so nothing is
+   *  lost — only the painted glyphs are shorter. */
+  short?: string;
+  author: string;
+  pages: number;
+  pagesKnown?: boolean;
+  status: 'reading' | 'reread' | 'finished' | 'abandoned';
+  series?: string;
+  trim?: 'mg' | 'trade';
+};
+
+const SERIES_MEDIAN = 269;   // median of the four Ranger's books with real counts
+
+const books: Book[] = [
+  { title: 'The Ruins of Gorlan',      author: 'John Flanagan', pages: 261, status: 'reread', series: 'ra', trim: 'mg' },
+  { title: 'The Burning Bridge',       author: 'John Flanagan', pages: 278, status: 'reread', series: 'ra', trim: 'mg' },
+  { title: 'The Icebound Land',        author: 'John Flanagan', pages: 266, status: 'reread', series: 'ra', trim: 'mg' },
+  { title: 'The Battle for Skandia',   author: 'John Flanagan', pages: 272, status: 'reread', series: 'ra', trim: 'mg' },
+  { title: 'The Sorcerer of the North', author: 'John Flanagan', pages: SERIES_MEDIAN, pagesKnown: false, status: 'reread', series: 'ra', trim: 'mg' },
+  { title: 'The Siege of Macindaw',    author: 'John Flanagan', pages: SERIES_MEDIAN, pagesKnown: false, status: 'reading', series: 'ra', trim: 'mg' },
+  { title: 'The Let Them Theory',      author: 'Mel Robbins',   pages: 284, status: 'reading', trim: 'trade' },
+  { title: 'A Tale for the Time Being', author: 'Ruth Ozeki',   pages: 438, status: 'reading', trim: 'trade' },
+  { title: 'The Courage to Be Disliked', author: 'Kishimi & Koga', pages: 280, status: 'reading', trim: 'trade' },
+  { title: '101 Essays That Will Change The Way You Think', short: '101 Essays', author: 'Brianna Wiest', pages: 440, status: 'reading', trim: 'trade' },
+];
+
+/* Spine width: pages / 10, in px. A linear mapping rather than a normalised
+   one, so the shelf stays honest if a 900-page book is ever added — it would
+   simply be twice as thick as a 450-page one, which is the truth. Clamped only
+   at the bottom, where a very thin book would otherwise lose its title. */
+const spineWidth = (b: Book) => Math.max(22, Math.round(b.pages / 10));
+
+const shelfPages = books.reduce((n, b) => n + (b.pagesKnown === false ? 0 : b.pages), 0);
+const seriesCount = books.filter((b) => b.series === 'ra').length;
+const readingNow = books.filter((b) => b.status === 'reading').length;
+
+const STATUS_WORD: Record<Book['status'], string> = {
+  reading: 'currently reading',
+  reread: 'rereading',
+  finished: 'finished',
+  abandoned: 'gave up on',
+};
 ---
 
 <Base
@@ -192,6 +262,66 @@ const formConfigured = !FORM_ENDPOINT.includes('YOUR_FORM_ID');
             </div>
         </section>
 
+        {/* READING */}
+        {/* A shelf seen edge-on, which is how a shelf actually looks: you read
+             spines, not covers. Placed here so the scroll keeps its tonal
+             alternation — hero (light) / interests (dark) / THIS (light) /
+             projects (inset plate) / work (dark) / connect (light).
+
+             It needs no nav edit. script.js harvests the section model from the
+             page's own `.band` elements, so this band earns a rail tick, a
+             drawer row, a palette result and a scroll-spy entry on its own; the
+             topbar link row is the curated short list and deliberately stays
+             five items. */}
+        <section id="reading" class="band" aria-labelledby="reading-title">
+            <div class="band-inner" data-rail="02 / Reading">
+                <div class="section-head">
+                    <h2 id="reading-title" class="section-title reveal reveal-clip">Reading</h2>
+                    <p class="section-intro reveal">Mostly rereading the books I loved at twelve, plus whatever I have talked myself into this month. Each spine is as wide as the book is thick.</p>
+                </div>
+
+                <div class="section-body">
+                    <figure class="shelf-figure reveal">
+                        <ul class="shelf" aria-label={`Bookshelf, ${books.length} books`}>
+                            {books.map((b) => (
+                                <li
+                                    class:list={['book', `book--${b.status}`, b.trim ? `book--${b.trim}` : null,
+                                                 b.series ? `book--series-${b.series}` : null]}
+                                    style={`--spine:${spineWidth(b)}px`}
+                                >
+                                    {/* The title is REAL vertical text, not an image and not a
+                                        label on a decorative box: `writing-mode: vertical-rl`
+                                        turns it on its side the way a printed spine is, and it
+                                        stays selectable and readable by a screen reader in DOM
+                                        order with no extra tab stop. */}
+                                    <span class="book-spine" title={b.title}>
+                                        <span class="book-title">{b.short ?? b.title}</span>
+                                    </span>
+                                    {/* Everything the spine cannot fit. A 26px-wide spine has
+                                        room for a short title and nothing else, so the author,
+                                        the reading state and the page count live here — real
+                                        text in the a11y tree, no extra tab stop. The full title
+                                        is repeated when the spine shows an abbreviation. */}
+                                    <span class="visually-hidden">
+                                        {b.short ? `${b.title}. ` : ''}{b.author}
+                                        {' — '}{STATUS_WORD[b.status]}
+                                        {b.pagesKnown === false ? '' : `, ${b.pages} pages`}.
+                                    </span>
+                                </li>
+                            ))}
+                        </ul>
+
+                        <figcaption class="shelf-caption">
+                            <span class="shelf-series" aria-hidden="true">Ranger's Apprentice 1–{seriesCount}</span>
+                            <span class="shelf-stats">
+                                {books.length} books · {readingNow} on the go · ~{shelfPages.toLocaleString('en-US')} pages of shelf
+                            </span>
+                        </figcaption>
+                    </figure>
+                </div>
+            </div>
+        </section>
+
         {/* PROJECTS */}
         {/* The one INSET band on the page: `band--plate` gives the section
              its own margins, hairline and rounded corners so it reads as a
@@ -199,7 +329,7 @@ const formConfigured = !FORM_ENDPOINT.includes('YOUR_FORM_ID');
              sits between the two dark plates, which is what makes the
              bleed/inset alternation legible. */}
         <section id="projects" class="band band--plate" aria-labelledby="projects-title">
-            <div class="band-inner" data-rail="02 / Projects">
+            <div class="band-inner" data-rail="03 / Projects">
                 <div class="section-head">
                     <h2 id="projects-title" class="section-title reveal reveal-clip">Projects</h2>
                     <p class="section-intro reveal">A couple I've written up, plus one still on the bench.</p>
@@ -282,7 +412,7 @@ const formConfigured = !FORM_ENDPOINT.includes('YOUR_FORM_ID');
              inversion lives in `.band--dark` in styles.css (local custom-property
              overrides — no filters), so the content markup is untouched. */}
         <section id="work" class="band band--dark" aria-labelledby="work-title">
-            <div class="band-inner" data-rail="03 / Work">
+            <div class="band-inner" data-rail="04 / Work">
                 <div class="section-head">
                     <h2 id="work-title" class="section-title reveal reveal-clip">Work</h2>
                     <p class="section-intro reveal">The professional stuff, if you're into that.</p>
@@ -355,7 +485,7 @@ const formConfigured = !FORM_ENDPOINT.includes('YOUR_FORM_ID');
 
         {/* CONNECT */}
         <section id="connect" class="band" aria-labelledby="connect-title">
-            <div class="band-inner" data-rail="04 / Connect">
+            <div class="band-inner" data-rail="05 / Connect">
                 <div class="section-head">
                     <h2 id="connect-title" class="section-title reveal reveal-clip">Connect</h2>
                     <p class="section-intro reveal">Always happy to talk robotics, food, or whatever you're building. Don't be a stranger.</p>

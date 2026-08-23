@@ -1394,6 +1394,173 @@ a.bubble.ticker:hover::after { transform: translate(2px, -2px); opacity: 1; }
     .hero-green-keys { transition: none; }
 }
 
+/* ============================================================
+   THE SHELF — books read edge-on
+   ------------------------------------------------------------
+   A real shelf shows you spines, so this one does too. Every visual channel
+   carries a fact rather than a texture:
+
+     spine WIDTH   the book's actual page count (index.astro: pages / 10)
+     spine HEIGHT  its trim — a series shares one, trade paperbacks are taller
+     TITLE         real text, rotated by `writing-mode`, not an image
+     tint          reading state
+
+   No wood, no gradients pretending to be a bookcase, no cover images. The site
+   has no photography anywhere by choice, and a fake wood grain would be the
+   first decoration here that means nothing — which is exactly what the shape
+   fields were removed for.
+
+   THE HOVER IS A DOCK, AND IT IS CSS-ONLY. Taking one book off a shelf makes
+   its neighbours lean into the gap; that reads as physical in a way a lone
+   scale-up does not. react-bits' `Dock` is the reference for the feel (its
+   magnify-the-neighbours behaviour), but the roster's own note says those
+   components are inspiration and the logic gets written by hand — and here the
+   hand-written version needs no JS at all. `:hover + .book` reaches the book
+   after, `:has(+ .book:hover)` the book before. Both are already used in this
+   file, so the support floor does not move.
+   ============================================================ */
+.shelf-figure { margin: 0; }
+
+.shelf {
+    list-style: none;
+    display: flex;
+    align-items: flex-end;
+    gap: 3px;
+    padding: 0 0 12px;
+    margin: 0;
+    /* The shelf itself: one hairline the books stand on, plus a soft contact
+       shadow so they read as resting ON it rather than floating above it. */
+    border-bottom: 2px solid var(--line2);
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+    /* A shelf is a horizontal run, and on a phone it must be allowed to be one
+       — this is an opt-in scroll container, never the document (scroll.css's
+       standing rule). */
+    -webkit-overflow-scrolling: touch;
+}
+
+.book {
+    position: relative;
+    flex: 0 0 auto;
+    width: var(--spine, 28px);
+    height: 210px;
+    border: 1px solid var(--line2);
+    border-bottom: none;
+    border-radius: 3px 3px 0 0;
+    background: var(--panel);
+    box-shadow: inset -2px 0 0 rgba(31, 42, 24, .05);
+    transition: transform .26s cubic-bezier(.2, .8, .2, 1),
+                box-shadow .26s ease, background .26s ease;
+    transform-origin: 50% 100%;
+    cursor: default;
+}
+/* Middle-grade paperbacks are genuinely shorter than trade paperbacks. Two
+   heights only — see the note in index.astro: I did not measure ten books. */
+.book--mg    { height: 186px; }
+.book--trade { height: 224px; }
+
+/* The TITLE GETS THE WHOLE SPINE. First attempt put the author on here too, as
+   a flex sibling — and because `writing-mode: vertical-rl` turns the inline axis
+   vertical, `display: flex` laid them out along the SPINE's length and the
+   author ate the height the title needed. Measured: 9 of 10 titles clipped, the
+   worst getting 77px of the 119px it wanted, so the shelf showed fragments.
+   The author moved to the visually-hidden text, which is where a 26px-wide
+   spine's overflow belongs anyway. */
+.book-spine {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    /* This is what makes it a spine and not a coloured bar. */
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    padding: 12px 0;
+    overflow: hidden;
+}
+.book-title {
+    font-family: var(--display);
+    font-size: .74rem;
+    font-weight: 600;
+    letter-spacing: -.005em;
+    color: var(--ink);
+    max-block-size: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ---- Reading state. Tint AND a marker, never tint alone (1.4.1): the
+        visually-hidden text in the markup states the status in words, so the
+        colour is reinforcement, not the only channel. ---- */
+.book--reading  { background: var(--sage-soft); }
+.book--reading::after {
+    /* A bookmark ribbon poking out of the top. */
+    content: "";
+    position: absolute;
+    top: -7px; left: 50%;
+    width: 5px; height: 14px;
+    transform: translateX(-50%);
+    background: var(--sage);
+    border-radius: 2px 2px 0 0;
+}
+.book--reread { background: linear-gradient(180deg, var(--panel) 62%, var(--sage-soft)); }
+.book--finished { background: var(--panel2); }
+.book--abandoned {
+    background: repeating-linear-gradient(
+        135deg, var(--panel), var(--panel) 5px, var(--panel2) 5px, var(--panel2) 10px);
+}
+.book--abandoned .book-title { color: var(--mut); }
+
+/* ---- The dock ---- */
+.book:hover {
+    transform: translateY(-14px) rotate(-1.5deg);
+    box-shadow: var(--shadow-lift);
+    z-index: 2;
+}
+.book:hover + .book        { transform: rotate(2deg) translateY(-2px); }
+.book:has(+ .book:hover)   { transform: rotate(-2deg) translateY(-2px); }
+
+/* The series reads as one run, which is what a series looks like on a real
+   shelf: same publisher, same trim, sitting together. A sage hairline under
+   just those six ties them without adding a second visual language. */
+.book--series-ra { box-shadow: inset -2px 0 0 rgba(89, 114, 74, .10); }
+
+.shelf-caption {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 6px 18px;
+    margin-top: 12px;
+}
+.shelf-series,
+.shelf-stats {
+    font-family: var(--mono);
+    font-size: .68rem;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--mut);
+}
+.shelf-series { color: var(--sage-deep); }
+
+@media (prefers-reduced-motion: reduce) {
+    .book, .book:hover, .book:hover + .book, .book:has(+ .book:hover) {
+        transition: none;
+        transform: none;
+    }
+    /* The lift is the only hover affordance, so with motion off give the
+       shadow on its own — otherwise hovering reports nothing at all. */
+    .book:hover { box-shadow: var(--shadow-lift); }
+}
+
+@media (max-width: 700px) {
+    .book { height: 178px; }
+    .book--mg { height: 158px; }
+    .book--trade { height: 190px; }
+    .book-title { font-size: .72rem; }
+}
+
 /* ---------- Contact form status + fallback note ----------
    `.form-status` is the aria-live region the submit handler writes to (see the
    inline script in index.astro). It is EMPTY in the resting state so it never
