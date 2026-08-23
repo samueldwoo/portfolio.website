@@ -95,6 +95,7 @@ import {
   StoreError,
   emptyPair,
   getExchange,
+  isTimeZone,
   isWingDate,
   putSong,
   wingDate,
@@ -654,6 +655,7 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
   let note = '';
   let artist = '';
   let date = wingDate();
+  let tz = '';
   try {
     const fields: Record<string, unknown> = wantsJson
       ? ((await request.json()) as Record<string, unknown>)
@@ -662,6 +664,22 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
     rawUrl = typeof fields.url === 'string' ? fields.url : '';
     note = cleanText(fields.note, MAX_NOTE);
     artist = cleanText(fields.artist, MAX_ARTIST);
+
+    /* WHERE HE WAS WHEN HE POSTED IT, from a hidden field the page fills in with
+       Intl.DateTimeFormat().resolvedOptions().timeZone.
+
+       DROPPED SILENTLY WHEN IT IS ABSENT OR JUNK, never a 400. It is not something
+       he typed and there is nothing he could do about it being wrong, so refusing
+       the whole song over it would be punishing him for his browser: with
+       JavaScript off the field arrives empty, which is the ordinary
+       no-JavaScript path this endpoint is required to keep working. An empty
+       value means "we do not know", and the page falls back to HIS_TZ.
+
+       NOT cleanText(): that is for prose. This is validated as an identifier —
+       isTimeZone() bounds the length, checks the shape and then asks Intl whether
+       it will actually accept the name, because the value's whole future is being
+       handed to Intl. See its header in kv.ts. */
+    tz = isTimeZone(fields.tz) ? fields.tz.trim() : '';
 
     // An explicit date is allowed so I can backfill a morning I missed, but it is
     // validated like any other key material and it may not be in the future: a
@@ -696,6 +714,12 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
     art: meta.art,
     note,
     postedAt: Date.now(),
+    /* Stored '' rather than defaulted to HIS_TZ here, on purpose. '' is the honest
+       record of "his device did not tell us", it is what every song already on the
+       shelf says, and it means the constant is consulted in exactly ONE place — the
+       render — so a JavaScript-off post from today and a post from last month behave
+       identically, and correcting the constant retroactively fixes both. */
+    tz,
     album: meta.album,
     year: meta.year,
     durationMs: meta.durationMs,

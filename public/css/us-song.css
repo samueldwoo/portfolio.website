@@ -75,10 +75,10 @@
    typed four words must still render two equal halves.
 
    `align-items: start` because the two cards are genuinely
-   different heights: his carries the reaction buttons, hers
-   carries the posting form. Stretching them to match would put
-   dead space inside the shorter one, which reads worse than two
-   honest heights.
+   different heights: one carries the reaction bar, the other the
+   posting form, and which is which depends on who is reading.
+   Stretching them to match would put dead space inside the shorter
+   one, which reads worse than two honest heights.
 
    ONE COLUMN FIRST. The 2-up only arrives at --pair-2up (940px),
    which on a phone means the day is read top to bottom — and the
@@ -457,11 +457,16 @@
 /* ============================================================
    REACTIONS
 
-   Five sibling <form>s, each one button. Not one form with five
+   Sibling <form>s, each one button. Not one form with several
    buttons, because then which button was pressed depends on
    `formaction` or on a name/value pair that a keyboard Enter
    press resolves differently — and not <div>s with click
    handlers, because those are not buttons.
+
+   THREE of them now, plus one per emoji already given by hand, plus
+   the free-choice input below them. It was a fixed five with a
+   two-word caption under each glyph; the captions are gone and the
+   vocabulary is open. See .react.
 
    Every one of them works with JavaScript disabled: submit,
    303, page re-renders from the store. The script on the page
@@ -474,16 +479,25 @@
    item, sometimes outside the formatting context entirely — and
    the fix for that is to not put it in one. */
 .react-bar {
-    /* Sits inside HIS card, after his player, because a reaction
-       is given to a specific song and a bar floating between two
-       cards could not say which one. The card's grid gap owns the
-       spacing above it. */
+    /* Sits inside a card, after its player, because a reaction is
+       given to a specific song and a bar floating between two cards
+       could not say which one. The card's grid gap owns the spacing
+       above it.
+
+       ON EITHER CARD NOW, not only his. It used to be "inside HIS
+       card" and that was the bug: signed in as him the only bar on
+       the page was on his own song, which the endpoint refuses. The
+       bar goes on the OTHER one's card, both ways. Nothing in this
+       rule was side-specific, which is why nothing here changed. */
     margin: 0;
     padding: 0;
     border: 0;
     /* min-inline-size: fieldset defaults to min-content, which
        stops its contents from shrinking on a narrow phone. */
     min-inline-size: 0;
+    /* Also applied to the read-only <div> variant on your own card,
+       which is a plain block and needs the same spacing. */
+    display: block;
 }
 
 .react-legend {
@@ -502,28 +516,49 @@
     gap: 10px;
 }
 
+/* SQUARE NOW, AND NOT STRETCHED.
+
+   It was `flex: 1 1 88px`, sized for five buttons that each carried
+   a two-word caption under the glyph. The captions are gone (see
+   .react below), so an 88px basis would give three very wide,
+   mostly-empty boxes and then re-flow the whole row every time a
+   fourth reaction was added by hand. Fixed-size chips stay put
+   under a thumb between renders, which matters more here than
+   filling the line. */
 .react-form {
-    /* flex-basis 88px wraps to 3+2 on a 375px phone rather than
-       squeezing five targets below the 44px floor. */
-    flex: 1 1 88px;
+    flex: 0 0 auto;
     margin: 0;
     display: flex;
 }
 
+/* THE CAPTION IS GONE FROM THE SCREEN AND NOT FROM THE PAGE.
+
+   `.react-label` used to sit under every glyph in 0.58rem
+   uppercase mono — "on repeat", "okay, ow". The owner asked for
+   the descriptions to go, so the rule is deleted rather than
+   hidden: a display:none label is still a thing to maintain, and
+   the words that actually matter now live in the button's
+   aria-label, where a screen reader gets them and the eye does
+   not. Do NOT reintroduce a visible label here; do NOT remove the
+   aria-label in the markup, or all three buttons announce as
+   "button".
+
+   56px square: the 44px minimum plus room, because this is tapped
+   one-handed on a phone in bed. */
 .react {
-    flex: 1 1 auto;
+    flex: 0 0 auto;
     /* Anchor for the pressed-state corner notch below. */
     position: relative;
-    /* 56px, comfortably past the 44px minimum, because this is
-       tapped one-handed. */
+    min-width: 56px;
     min-height: 56px;
     display: flex;
-    flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 4px;
-    padding: 8px 6px;
+    padding: 8px;
     background: var(--machine);
+    /* 3.44:1 against the card's --machine ground — over the 3:1
+       WCAG 1.4.11 asks of a control boundary. See --concrete-2 in
+       us.css, which was raised for exactly this role. */
     border: 1px solid var(--concrete-2);
     border-radius: 2px;
     color: var(--concrete-4);
@@ -533,19 +568,11 @@
 }
 
 .react-emoji {
-    font-size: 1.35rem;
+    font-size: 1.5rem;
     line-height: 1;
     /* Emoji are colour by nature and that is fine — they are not
        the photograph, and the alternative (a monochrome glyph
        set) would be a worse joke. */
-}
-
-.react-label {
-    font-size: 0.58rem;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    text-align: center;
-    line-height: 1.2;
 }
 
 .react:hover {
@@ -573,10 +600,6 @@
                 0 0 18px -6px rgba(62, 123, 255, 0.55);
 }
 
-.react[aria-pressed="true"] .react-label {
-    color: var(--blue-glow);
-}
-
 /* The non-colour signal: a small corner notch, present only
    when pressed. */
 .react[aria-pressed="true"]::after {
@@ -588,11 +611,162 @@
     background: var(--blue-glow);
 }
 
-/* In flight. The label is swapped by the script too, so this is
-   not the only cue. */
+/* In flight. The live region is written by the script too, so this
+   is not the only cue. */
 .react[data-busy] {
     cursor: progress;
     border-color: var(--blue-brand);
+}
+
+/* ============================================================
+   OR ANY EMOJI AT ALL
+
+   Three one-tap buttons cover the common case; this covers the
+   rest. It is ONE TEXT INPUT and not a picker grid, for two
+   reasons: the phone already has an emoji keyboard and the picker
+   would be a scripted control, whereas this is a <form> that works
+   with JavaScript switched off like everything else in the wing.
+
+   The 44px/16px floors are not negotiable here either. Below 16px
+   iOS Safari zooms the viewport on focus and she has to pinch back
+   out, which is a real bug and not a style choice — the same note
+   is on .dj-input.
+
+   Sits INSIDE the same fieldset as the chips, after them, because
+   it is one question ("did you hear it?") with a fast answer and a
+   free one, not two separate controls.
+   ============================================================ */
+
+.react-any {
+    display: grid;
+    gap: 7px;
+    margin: 12px 0 0;
+    /* Never wider than a phone's comfortable reach, even when the
+       card is half of a 940px pair. */
+    max-width: 320px;
+}
+
+/* 9.50:1 on the card's --machine ground. */
+.react-any-label {
+    font-family: var(--us-mono);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--concrete-5);
+}
+
+.react-any-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: stretch;
+}
+
+.react-any-input {
+    flex: 0 1 132px;
+    box-sizing: border-box;
+    min-height: 48px;
+    padding: 10px 12px;
+    background: var(--void);
+    /* 3.44:1 on --machine, 21:1 for the text inside it. */
+    border: 1px solid var(--concrete-2);
+    border-radius: 2px;
+    color: var(--chalk);
+    font-family: var(--us-mono);
+    /* 16px floor. Do not reduce. Emoji render larger than the
+       nominal size, so this is generous in practice. */
+    font-size: 16px;
+    line-height: 1.4;
+    text-align: center;
+}
+
+.react-any-input:focus-visible {
+    outline: 2px solid var(--blue-light);
+    outline-offset: 1px;
+    border-color: var(--blue-light);
+}
+
+/* Deliberately quieter than .dj-submit, which is brand blue because
+   it is a page's primary action. This one sits beside three chips
+   that do the same job faster, so it is a secondary control and
+   says so. 11.53:1 for the word, 3.44:1 for the boundary against
+   the card. */
+.react-any-submit {
+    flex: 0 0 auto;
+    min-width: 64px;
+    min-height: 48px;
+    padding: 10px 16px;
+    background: var(--machine-2);
+    border: 1px solid var(--concrete-2);
+    border-radius: 2px;
+    color: var(--chalk-dim);
+    font-family: var(--us-mono);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    cursor: pointer;
+    transition: border-color 160ms ease, color 160ms ease;
+}
+
+.react-any-submit:hover {
+    border-color: var(--concrete-4);
+    color: var(--chalk);
+}
+
+.react-any-submit:focus-visible {
+    outline: 2px solid var(--blue-light);
+    outline-offset: 2px;
+}
+
+/* 4.96:1 on --machine. */
+.react-any-hint {
+    margin: 0;
+    font-family: var(--us-mono);
+    font-size: 0.68rem;
+    line-height: 1.5;
+    color: var(--concrete-3);
+}
+
+/* ============================================================
+   WHAT THEY SAID — the read-only view, on YOUR OWN card
+
+   You cannot react to your own song, so on your own card the same
+   emoji are a receipt rather than a control. Not buttons, not
+   focusable, no aria-pressed: there is nothing to press.
+
+   This is the half of the feature that was previously invisible
+   from one of the two sides — reactions only existed on his song
+   and only her page rendered them, so he could never see one and
+   she could never receive one. Distinct from .said on /samdrea/dj,
+   which pairs each glyph with VISIBLE words; here the words are
+   sr-only, because the whole point of this revision is that the
+   descriptions are gone from the screen.
+
+   Blue boundary at 4.72:1 on --machine: these are things that
+   HAPPENED, which is the same meaning [aria-pressed="true"] carries
+   on the chips opposite.
+   ============================================================ */
+
+.react-given {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.react-given-item {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 6px 10px;
+    background: var(--machine-2);
+    border: 1px solid var(--blue-light);
+    border-radius: 2px;
+    line-height: 1;
 }
 
 /* Screen-reader-only live region for the reaction result. Not
@@ -782,9 +956,9 @@ a.mini:focus-visible {
     white-space: nowrap;
 }
 
-/* Her reactions on an old day, as small glyphs, on HIS track —
-   which is the track they were given to. Decorative duplicates
-   of the words already in that link's aria-label. */
+/* The reactions on an old day, as small glyphs, on the track they
+   were given to — EITHER track now, not only his. Decorative
+   duplicates of the words already in that link's aria-label. */
 .mini-reacts {
     display: block;
     margin: 4px 0 0;
@@ -1270,6 +1444,7 @@ a.mini:focus-visible {
    ============================================================ */
 @media (prefers-reduced-motion: reduce) {
     .react,
+    .react-any-submit,
     .mini,
     .dj-submit {
         transition: none;

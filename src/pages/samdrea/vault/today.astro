@@ -56,6 +56,26 @@
  * posting a scripted one; this way the enhancement is genuinely optional.
  *
  * ---------------------------------------------------------------------------
+ * REACTIONS GO BOTH WAYS, AND ONLY ONTO THE OTHER ONE'S CARD
+ *
+ * This used to be a bar of five captioned buttons hardcoded onto HIS card, whoever
+ * was reading. Two faults, reported from a phone in one sentence: signed in as him
+ * the only bar on the page was on his own song (which the endpoint refuses), and her
+ * song could not be reacted to at all.
+ *
+ * Now every card that has a track shows one of two things, and never both:
+ *
+ *   * THE BAR — three one-tap emoji plus a free-choice input — on the OTHER one's
+ *     card. `Slot.canReact`, which is per-slot and viewer-relative.
+ *   * WHAT THEY SAID — the same emoji, read only, no buttons — on YOUR OWN card.
+ *     You cannot react to your own song, so on your side they are a receipt.
+ *
+ * The prose captions ("on repeat", "okay, ow") are gone from the SCREEN and not from
+ * the page: they are the buttons' aria-label now. Three buttons whose visible
+ * content is aria-hidden decoration all announce as "button", so the words still have
+ * to exist somewhere. See Reaction.name in kv.ts.
+ *
+ * ---------------------------------------------------------------------------
  * THE ONE RULE
  *
  * The album art is the only warm, saturated thing on this page — on BOTH cards.
@@ -67,21 +87,32 @@
 import { HER_NAME, SESSION_SECRET } from '../../../lib/us/config';
 import { readCookie, verify } from '../../../lib/us/session';
 import { touch } from '../../../lib/us/presence';
-import { identify, type Who } from '../../../lib/us/together';
+/* HER_TZ / HIS_TZ are the two LOCATIONS, and they are imported here for the same
+   reason the clock strip on the hub imports them: a song's posted-at time is a fact
+   about the poster's evening, and WING_TZ is not a place either of them has ever
+   been. WING_TZ is still imported below — it is the CALENDAR, it still decides which
+   day a song files under, and the rollover probe at the bottom of this file still
+   asks it. The two are not interchangeable and this page now uses both, for the two
+   different jobs. */
+import { HER_TZ, HIS_TZ, identify, type Who } from '../../../lib/us/together';
 import {
-  REACTIONS,
+  MAX_REACTIONS_PER_DAY,
+  MAX_REACTION_UNITS,
   WING_TZ,
   agoLabel,
   durationLabel,
   emptyPair,
   getExchange,
   isWingDate,
+  reactionChips,
+  reactionName,
   resurface,
   storeTier,
   summarize,
   wingDate,
   wingDateLabel,
   type DayPair,
+  type ReactionChip,
   type Rhythm,
   type Side,
   type TrackRecord,
@@ -157,7 +188,14 @@ const todayPair = pairs.find((p) => p.date === today) ?? emptyPair(today);
    capped. */
 const archive = pairs.filter((p) => p.date !== today).slice(0, ARCHIVE_LIMIT);
 
-const currentReactions = new Set(todayPair.reactions);
+/* WHICH SIDE THE READER IS. Drives one thing and one thing only on this page: you
+   get the reaction bar on the OTHER card and never on your own.
+
+   Derived here rather than compared inline at three call sites, because `viewer`
+   speaks 'her'/'him' and a slot speaks 'hers'/'his' — two near-identical string
+   unions, and a `viewer === slot.side` typo between them compiles fine and inverts
+   the rule. One conversion, once. */
+const viewerSide: Side = viewer === 'him' ? 'his' : 'hers';
 
 /**
  * The numbers, derived in kv.ts rather than here.
@@ -189,16 +227,39 @@ const ERRORS: Record<string, string> = {
   'bad-request': "the server couldn't read that. try again?",
   'bad-date': 'that day is not a real day.',
   'future-date': "that day hasn't happened yet.",
-  /* Both of these were falling through to the generic sentence. Only a
-     hand-made request reaches them, but a wrong-but-specific answer is
-     cheaper to write than to diagnose later. */
-  'bad-reaction': "that isn't one of the five. tap one of the buttons instead?",
+  /* The reaction path's own four. The vocabulary is open now, so `bad-reaction`
+     ("that isn't one of the five") no longer describes anything that can happen —
+     it is replaced rather than kept, because a stale sentence is worse than a
+     generic one. Only a hand-made request reaches most of these, but a
+     wrong-but-specific answer is cheaper to write than to diagnose later. */
+  'bad-emoji': 'that needs to be one emoji on its own. one, and nothing else with it.',
+  /* THE REPORTED BUG, NAMED. Reachable from the UI only if the identity flipped in
+     another tab between render and submit, because the bar is not drawn on your own
+     card at all. Says whose it is rather than "forbidden". */
+  'own-song': "that one's yours. reactions go on the other one's song.",
+  'bad-side': "that didn't say which song it was for. tap one of the buttons instead?",
+  'too-many': `that song is holding all ${MAX_REACTIONS_PER_DAY} reactions it can. take one back first?`,
   'cross-site': 'that came from somewhere I do not recognise.',
   /* Only reachable if the identity switched between rendering the page and
      submitting it — e.g. flipped in another tab. Names the fix. */
   'not-your-half': 'that slot belongs to the other one of us. Yours is the other form.',
 };
 const errorText = errorCode ? (ERRORS[errorCode] ?? "that didn't go through. try again?") : '';
+
+/* AND THE SUCCESS CODES, which this page did not have.
+
+   /api/us/react 303s back here for BOTH outcomes, so with JavaScript switched off
+   a stored tap and a refused one produced the same page: the chip state changed, or
+   it didn't, and nothing said which. `?ok=` closes that. With the script on, the
+   aria-live region does this job and the redirect never happens.
+
+   Deliberately short. This is a confirmation, not an event log. */
+const okCode = Astro.url.searchParams.get('ok') ?? '';
+const OKS: Record<string, string> = {
+  reacted: "got it. that's on the song now.",
+  unreacted: 'taken back.',
+};
+const okText = okCode ? (OKS[okCode] ?? '') : '';
 
 /* The posting form's success path: /api/us/reply 303s back with ?sent=<date>.
    The query parameter keeps its old name because the endpoint does — see that
@@ -214,16 +275,91 @@ const errorText = errorCode ? (ERRORS[errorCode] ?? "that didn't go through. try
 const sentParam = Astro.url.searchParams.get('sent') ?? '';
 const sentDate = isWingDate(sentParam) ? sentParam : '';
 
-/** e.g. `7:42 am`. Only shown when we actually recorded a time. */
-function postedAtLabel(ms: number): string {
+/**
+ * `22:40` — the time on the POSTER'S OWN CLOCK. Empty when we never recorded one.
+ *
+ * ---------------------------------------------------------------------------
+ * IT USED TO SAY WING_TZ, AND WING_TZ IS NOBODY'S CLOCK
+ *
+ * This read `timeZone: WING_TZ` and printed `7:42 am`. WING_TZ is America/New_York,
+ * which is the wing's CALENDAR — it decides which day a song files under so that a
+ * song and a question agree about "today", and kv.ts explains at length why that
+ * must be exactly one fixed zone. It is not a LOCATION. Neither of them lives in
+ * New York, so every time on this page was wrong for both readers at once: his
+ * 22:40 in Los Angeles read as `1:40 am`, and her 09:15 in Paris read as
+ * `3:15 am`. Two people, nine hours apart, both being told about a third city.
+ *
+ * So the day heading still comes from the wing's calendar and the clock now comes
+ * from the poster. Those are different facts and the card says them in different
+ * words, one either side of the middle dot.
+ *
+ * ---------------------------------------------------------------------------
+ * WHICH ZONE, AND WHY THE FALLBACK IS A CONSTANT
+ *
+ * `tz` is captured from the poster's own device at post time (see the hidden field
+ * on the forms below), so this stays right the first time either of them travels.
+ * Every record written before that field existed has none, and so does every post
+ * made with JavaScript off — for those, HER_TZ / HIS_TZ, which are correct today
+ * and are the two lines together.ts already tells you to edit when she moves.
+ *
+ * ---------------------------------------------------------------------------
+ * SERVER-SIDE, AND h23
+ *
+ * Formatted here rather than in the browser, deliberately: a time rendered on the
+ * client would be rendered against whichever clock is holding the phone, so the two
+ * of them would read DIFFERENT strings for the same event and neither could quote it
+ * to the other. And `hourCycle: 'h23'` because the wing is 24-hour everywhere on
+ * purpose — see the comment on clocks() in together.ts. `en-GB` + h23 is the exact
+ * pair clockOf() uses on the day page; one pattern, not two.
+ *
+ * The try/catch is not decoration. `tz` reaches here from a form field, and
+ * Intl.DateTimeFormat throws RangeError on a name it does not know. kv.ts's
+ * isTimeZone() has already rejected those on the way in and again on the way out,
+ * so this is the third net — but a 500 on her vault over a decorative timestamp is
+ * not a trade worth making, and no time at all is the correct rendering of a time we
+ * cannot state.
+ */
+function postedAtLabel(ms: number, tz: string): string {
   if (!ms) return '';
-  return new Intl.DateTimeFormat('en-US', {
-    timeZone: WING_TZ,
-    hour: 'numeric',
-    minute: '2-digit',
-  })
-    .format(new Date(ms))
-    .toLowerCase();
+  try {
+    return new Intl.DateTimeFormat('en-GB', {
+      timeZone: tz,
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    }).format(new Date(ms));
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Where each of them is, when the record does not say. See together.ts, which calls
+ * these the two lines to edit when she moves — and which is also why a stored `tz`
+ * is better than either of them: it is right the moment either one travels, without
+ * a deploy.
+ */
+const fallbackTz: Record<Side, string> = { his: HIS_TZ, hers: HER_TZ };
+
+/**
+ * The whole stamp for one card: `22:40`, and `22:40 their time` when the card is not
+ * the reader's own.
+ *
+ * "THEIR TIME" ONLY ON THE OTHER PERSON'S CARD. Not a flourish — the alternative is
+ * the exact bug day.astro already had and had fixed, where her own frame read
+ * "04:11 their time" about herself. Nobody needs their own timezone named, and
+ * naming it makes the page sound like it is talking about somebody else. On the
+ * other card it is load-bearing: without it, two cards nine hours apart look like a
+ * page that cannot add up.
+ *
+ * ONE FUNCTION FOR BOTH SIDES, called from the one card template, for the same
+ * reason that template exists at all — a per-side copy is how one card ends up
+ * reading its clock differently from the other.
+ */
+function stampFor(side: Side, track: TrackRecord): string {
+  const at = postedAtLabel(track.postedAt, track.tz || fallbackTz[side]);
+  if (!at) return '';
+  return side === viewerSide ? at : `${at} their time`;
 }
 
 /**
@@ -240,12 +376,21 @@ function metaBits(track: TrackRecord): string[] {
   return [track.album ?? '', track.year ?? '', durationLabel(track.durationMs)].filter(Boolean);
 }
 
-/** Reaction glyphs for a day, plus the same thing in words for a screen reader. */
-function reactionGlyphs(keys: readonly string[]): { glyphs: string; words: string } {
-  const chosen = REACTIONS.filter((r) => keys.includes(r.key));
+/**
+ * Reaction glyphs for one side of a day, plus the same thing in words.
+ *
+ * The list is already normalized and capped by kv.ts — every entry has been through
+ * isReaction(), and this only joins them. `words` exists because the glyphs go
+ * inside an aria-hidden span: an emoji row a screen reader cannot read is a row it
+ * does not have, and reactionName() is the only place the naming rule lives.
+ *
+ * Rendered as TEXT by Astro at every call site, never with set:html. A stored emoji
+ * is user input; validated user input is still user input.
+ */
+function reactionGlyphs(list: readonly string[]): { glyphs: string; words: string } {
   return {
-    glyphs: chosen.map((r) => r.emoji).join(' '),
-    words: chosen.map((r) => r.label).join(', '),
+    glyphs: list.join(' '),
+    words: list.map(reactionName).join(', '),
   };
 }
 
@@ -280,6 +425,22 @@ interface Slot {
   openSub: string;
   /** Shown in place of a title Spotify would not give us. */
   unnamed: string;
+  /** The emoji already on THIS side's song today. Always an array. */
+  given: string[];
+  /**
+   * May the reader leave a reaction here?
+   *
+   * FALSE ON THEIR OWN CARD, and that is the fix rather than a nicety. The bug was
+   * a bar that only ever appeared on his song: signed in as him it was a row of
+   * buttons the endpoint refused, and her song could not be reacted to at all. So
+   * the bar is drawn on the OTHER one's card, both ways, and never on your own —
+   * where a reaction would be a receipt you wrote yourself.
+   */
+  canReact: boolean;
+  /** The buttons, when canReact. Built in kv.ts so the fold rules live once. */
+  chips: ReactionChip[];
+  /** Who left the reactions ON this card, in this page's voice. */
+  fromWord: string;
 }
 
 /* WHOSE SIDE IS WHOSE, FROM THE READER'S SIDE.
@@ -299,6 +460,15 @@ interface Slot {
    only meaningful if you know whose voice the page is in, and now there are two. */
 const theirWord = viewer === 'her' ? 'Sam' : (her || 'her');
 const mineIsHis = viewer === 'him';
+
+/* The word for each side, from the reader's side. Was computed inline twice in the
+   slots below and twice more in minisFor(); reactions needed it a fifth and sixth
+   time (whose reaction is on this card), which is one repetition too many for a
+   label that must never disagree with itself. */
+const whoWord: Record<Side, string> = {
+  his: mineIsHis ? 'you' : theirWord,
+  hers: mineIsHis ? theirWord : 'you',
+};
 
 /** A slot's empty-state sentences, told from the reader's side. */
 function emptyFor(isMine: boolean): { open: string; openSub: string } {
@@ -323,17 +493,40 @@ function emptyFor(isMine: boolean): { open: string; openSub: string } {
     : { open: `Nothing from ${theirWord} yet today.`, openSub: 'Not yet, anyway.' };
 }
 
+/**
+ * The reaction half of a slot. ONE function, called twice, for the same reason the
+ * card is one template rendered twice: a per-side copy of this logic is how one card
+ * ends up able to receive a reaction and the other does not, which is precisely the
+ * bug being fixed.
+ */
+function reactionsFor(side: Side, track: TrackRecord | null) {
+  const given = side === 'his' ? todayPair.reactions.onHis : todayPair.reactions.onHers;
+  // A reaction needs a track to be about. `canReact` also stays false while the
+  // store is unreachable, because the chips would be drawn from an empty pair and
+  // every one of them would claim to be off.
+  const canReact = Boolean(track) && side !== viewerSide && !storeUnreachable;
+  return {
+    given,
+    canReact,
+    chips: canReact ? reactionChips(given) : [],
+    // Reactions on a side were left by the OTHER side — that is what makes them
+    // mean something. See /api/us/react.
+    fromWord: whoWord[side === 'his' ? 'hers' : 'his'],
+  };
+}
+
 const slots: Slot[] = [
   {
     side: 'his',
-    who: mineIsHis ? 'you' : theirWord,
+    who: whoWord.his,
     track: todayPair.his,
     ...emptyFor(mineIsHis),
     unnamed: 'a song Spotify wouldn’t name',
+    ...reactionsFor('his', todayPair.his),
   },
   {
     side: 'hers',
-    who: mineIsHis ? theirWord : 'you',
+    who: whoWord.hers,
     track: todayPair.hers,
     /* BOTH SIDES HEDGE ON AN OUTAGE, and hers is the one that has to.
        When getExchange() throws, todayPair is emptyPair() — so an unhedged empty
@@ -345,6 +538,7 @@ const slots: Slot[] = [
        is a claim about her, made to her. */
     ...emptyFor(!mineIsHis),
     unnamed: 'a song Spotify wouldn’t name',
+    ...reactionsFor('hers', todayPair.hers),
   },
 ];
 
@@ -435,53 +629,48 @@ interface Mini {
   side: Side;
   who: string;
   track: TrackRecord;
-  /** The whole row's meaning, for one link. Escaped by Astro on render. */
-  label: string;
-  /** Her reactions, on the track they were given to. '' elsewhere. */
+  /** The reactions on THIS track. '' when there are none. */
   glyphs: string;
 }
 
+/**
+ * BOTH SIDES CAN CARRY GLYPHS NOW.
+ *
+ * Her half used to hardcode `glyphs: ''` with a comment explaining that a reaction
+ * on her own song "does not exist". It does now, and leaving that line would have
+ * been the quietest possible version of this bug: the write path working, the
+ * archive silently never showing it.
+ */
 function minisFor(pair: DayPair): Mini[] {
   const day = wingDateLabel(pair.date, { withYear: true });
   const out: Mini[] = [];
 
-  if (pair.his) {
-    const { glyphs, words } = reactionGlyphs(pair.reactions);
-    out.push({
-      side: 'his',
+  /** One mini. Identical for the two sides except for the data — see the header. */
+  const mini = (side: Side, track: TrackRecord, list: readonly string[]): Mini => {
+    const { glyphs, words } = reactionGlyphs(list);
+    return {
+      side,
       /* Viewer-relative, like today's slots above. This block had the same
          hardcoded labels and would have shown her an old song of Sam's
          captioned "me". */
-      who: mineIsHis ? 'you' : theirWord,
-      track: pair.his,
+      who: whoWord[side],
+      track,
       glyphs,
       label: [
         day,
-        `mine: ${pair.his.title || "a song I couldn’t name"}`,
-        words ? `you said: ${words}` : '',
+        `${whoWord[side]}: ${track.title || 'a song Spotify wouldn’t name'}`,
+        // Named by WHO LEFT IT, which is the other side. "you said" on a row of
+        // reactions she did not write would be the page mis-attributing a tap.
+        words ? `${whoWord[side === 'his' ? 'hers' : 'his']} said: ${words}` : '',
         'opens in Spotify',
       ]
         .filter(Boolean)
         .join('. '),
-    });
-  }
+    };
+  };
 
-  if (pair.hers) {
-    out.push({
-      side: 'hers',
-      who: mineIsHis ? theirWord : 'you',
-      track: pair.hers,
-      // Reactions are one-directional by design — /api/us/react takes her session
-      // and refuses my admin token, so a reaction on her own song does not exist.
-      // The cell is simply absent rather than rendered empty.
-      glyphs: '',
-      label: [
-        day,
-        `yours: ${pair.hers.title || "a song Spotify wouldn’t name"}`,
-        'opens in Spotify',
-      ].join('. '),
-    });
-  }
+  if (pair.his) out.push(mini('his', pair.his, pair.reactions.onHis));
+  if (pair.hers) out.push(mini('hers', pair.hers, pair.reactions.onHers));
 
   return out;
 }
@@ -543,7 +732,7 @@ function minisFor(pair: DayPair): Mini[] {
 <body class="studio">
 <div class="studio-wrap">
 
-    <p class="studio-kicker">line 01 &middot; one day, two songs</p>
+    <p class="studio-kicker">01 &middot; one day, two songs</p>
 
     <h1 class="us-mark">
         <span class="us-mark-bracket" aria-hidden="true">[</span>today<span
@@ -558,6 +747,13 @@ function minisFor(pair: DayPair): Mini[] {
         <p class="notice" data-kind="ok" role="status">
             posted &mdash; that's yours for {wingDateLabel(sentDate, { withYear: true })}. I'll see it.
         </p>
+    )}
+
+    {/* The no-JavaScript reaction path's confirmation. Only ever seen with the
+        script off, because the enhanced path never navigates. Suppressed when
+        there is an error, so the page never shows both at once. */}
+    {okText && !errorText && (
+        <p class="notice" data-kind="ok" role="status">{okText}</p>
     )}
 
     {storeUnreachable && (
@@ -666,11 +862,21 @@ function minisFor(pair: DayPair): Mini[] {
                                     and someone arriving at the second <article>
                                     by keyboard or screen reader should not have to
                                     remember which day this was. The time after it
-                                    is the part that actually differs. */}
+                                    is the part that actually differs.
+
+                                    TWO DIFFERENT CLOCKS, EITHER SIDE OF THE DOT.
+                                    The date is the WING's calendar day — the thing
+                                    that decides which page a song lands on. The
+                                    time is the POSTER's own wall clock. Reading
+                                    them as one phrase is a bit of a cheat and it
+                                    is the right cheat: "Sun 23 Aug · 22:40" is
+                                    how a person would say it, and the alternative
+                                    (naming New York) put a third city on a page
+                                    about two people. See stampFor(). */}
                                 <p class="song-day">
                                     {wingDateLabel(slot.track.date)}
-                                    {postedAtLabel(slot.track.postedAt) && (
-                                        <> &middot; {postedAtLabel(slot.track.postedAt)}</>
+                                    {stampFor(slot.side, slot.track) && (
+                                        <> &middot; {stampFor(slot.side, slot.track)}</>
                                     )}
                                 </p>
 
@@ -762,21 +968,37 @@ function minisFor(pair: DayPair): Mini[] {
                 )}
 
                 {/* --------------------------------------------------------
-                    REACTIONS — inside HIS card, on the song they belong to.
+                    REACTIONS — on the OTHER one's card, on the song they
+                    belong to.
 
-                    They used to sit under the one card on the page, where
-                    "did you hear it?" was unambiguous. With two songs it is
-                    not, so they live on the track they answer.
+                    WHAT THIS BLOCK USED TO BE, AND WHY IT WAS THE BUG.
 
-                    STILL ONE-DIRECTIONAL, and honestly so: /api/us/react
-                    takes her session and refuses my admin token, because a
-                    tap I could write as her would mean nothing. Her card has
-                    no reaction bar because no such thing exists, not because
-                    it is hidden. See that file's header for what making it
-                    mutual would actually take.
+                    It was gated `slot.side === 'his' && slot.track` and
+                    nothing else. So the bar appeared on HIS card whoever was
+                    reading: signed in as him it was a row of buttons the
+                    endpoint refused with a 403, and her song had no bar at
+                    all. Reported from a phone as "I can only react to Sam's
+                    songs, even if I'm logged in as Sam" — two faults in one
+                    sentence, and both of them this line.
 
-                    Five sibling forms, one button each. Not one form with
-                    five buttons: which button submitted a multi-button form
+                    Now the gate is `canReact`, which is per-slot and
+                    viewer-relative: the other one's card, never your own.
+                    See reactionsFor() above and /api/us/react's header for
+                    why your own song is refused rather than allowed.
+
+                    THE PROSE LABELS ARE GONE FROM THE SCREEN AND NOT FROM
+                    THE PAGE. Each button used to carry "on repeat" / "okay,
+                    ow" as visible text under the glyph, which is what the
+                    owner asked to lose. The words now live in aria-label
+                    only — because a button whose entire content is
+                    aria-hidden decoration announces as "button", and three
+                    of those in a row is a bar a screen reader cannot use.
+                    Invisible to the eye, present to a screen reader; that
+                    distinction is the whole reason `name` still exists in
+                    kv.ts.
+
+                    Sibling forms, one button each. Not one form with several
+                    buttons: which button submitted a multi-button form
                     depends on name/value pairs that a keyboard Enter
                     resolves differently across engines, and that is not a
                     thing worth being clever about.
@@ -786,35 +1008,135 @@ function minisFor(pair: DayPair): Mini[] {
                     told the desired end state rather than an action. That is
                     what makes the endpoint idempotent: a double-tap, a retry
                     and a resubmitted form all land on the same value.
+
+                    `side` is hidden here and CHECKED against the cookie at
+                    the endpoint. It is in the body because it is a fact about
+                    the page, not about the caller; editing it in devtools
+                    buys a 403 and nothing else.
                     -------------------------------------------------------- */}
-                {slot.side === 'his' && slot.track && (
+                {slot.canReact && (
                     <>
                         <fieldset class="react-bar">
                             <legend class="react-legend">did you hear it?</legend>
                             <div class="react-row">
-                                {REACTIONS.map((r) => {
-                                    const chosen = currentReactions.has(r.key);
-                                    return (
-                                        <form class="react-form" method="post" action="/api/us/react">
-                                            <input type="hidden" name="date" value={todayPair.date}>
-                                            <input type="hidden" name="reaction" value={r.key}>
-                                            <input type="hidden" name="on" value={chosen ? '0' : '1'}>
-                                            <button class="react" type="submit" aria-pressed={chosen ? 'true' : 'false'}>
-                                                <span class="react-emoji" aria-hidden="true">{r.emoji}</span>
-                                                <span class="react-label">{r.label}</span>
-                                            </button>
-                                        </form>
-                                    );
-                                })}
+                                {slot.chips.map((chip) => (
+                                    <form class="react-form" method="post" action="/api/us/react">
+                                        <input type="hidden" name="date" value={todayPair.date}>
+                                        <input type="hidden" name="side" value={slot.side}>
+                                        <input type="hidden" name="reaction" value={chip.emoji}>
+                                        <input type="hidden" name="on" value={chip.on ? '0' : '1'}>
+                                        {/* aria-label carries the name; aria-pressed
+                                            carries the state. The glyph is
+                                            aria-hidden because it is the same
+                                            information in a form the label already
+                                            says better. */}
+                                        <button
+                                            class="react"
+                                            type="submit"
+                                            aria-pressed={chip.on ? 'true' : 'false'}
+                                            aria-label={chip.name}
+                                            title={chip.name}
+                                        >
+                                            <span class="react-emoji" aria-hidden="true">{chip.emoji}</span>
+                                        </button>
+                                    </form>
+                                ))}
                             </div>
+
+                            {/* ------------------------------------------------
+                                ANY EMOJI AT ALL — a real form, not a picker.
+
+                                A full grid of every emoji is a lot of surface
+                                for a thing whose job is "say the one you
+                                meant", and every version of it needs
+                                JavaScript. The phone already HAS an emoji
+                                picker: it is the key next to the space bar. So
+                                this is one text input, and it works with
+                                scripting off because it is a form.
+
+                                DELIBERATELY NOT `maxlength` ALONE. The cap
+                                here is a courtesy so the field cannot be
+                                filled with a paragraph; the actual rule is
+                                isReaction() on the server, which requires
+                                exactly one grapheme cluster and requires it to
+                                be an emoji. Nothing about this input is
+                                trusted — see /api/us/react.
+
+                                No hidden `on`: absent means true at the
+                                endpoint (see readOn), so this form adds and
+                                the chips it creates are what take it back.
+                                ------------------------------------------------ */}
+                            <form class="react-any" method="post" action="/api/us/react">
+                                <input type="hidden" name="date" value={todayPair.date}>
+                                <input type="hidden" name="side" value={slot.side}>
+                                <label class="react-any-label" for={`react-any-${slot.side}`}>
+                                    or any emoji
+                                </label>
+                                <div class="react-any-row">
+                                    <input
+                                        class="react-any-input"
+                                        id={`react-any-${slot.side}`}
+                                        name="reaction"
+                                        type="text"
+                                        autocomplete="off"
+                                        autocapitalize="none"
+                                        autocorrect="off"
+                                        spellcheck="false"
+                                        maxlength={MAX_REACTION_UNITS}
+                                        size="2"
+                                        aria-describedby={`react-any-hint-${slot.side}`}
+                                        required
+                                    >
+                                    <button class="react-any-submit" type="submit">add</button>
+                                </div>
+                                <p class="react-any-hint" id={`react-any-hint-${slot.side}`}>
+                                    One emoji, from your keyboard&rsquo;s emoji key. Up to
+                                    {' '}{MAX_REACTIONS_PER_DAY} on one song.
+                                </p>
+                            </form>
                         </fieldset>
 
                         {/* Where the script announces the result of a tap.
                             Visually hidden because the button's own pressed
                             state is the visible feedback; this exists so that
-                            state change is also SPOKEN. */}
+                            state change is also SPOKEN.
+
+                            EXACTLY ONE OF THESE ON THE PAGE, and that is a
+                            property of `canReact` rather than a coincidence:
+                            you can react to one card and never to both, so the
+                            branch that renders this id runs once. */}
                         <p class="sr-only" id="react-status" role="status" aria-live="polite"></p>
                     </>
+                )}
+
+                {/* --------------------------------------------------------
+                    AND ON YOUR OWN CARD: WHAT THEY SAID, READ ONLY.
+
+                    Not buttons. You cannot react to your own song, so the
+                    same emoji that are a control on their card are a receipt
+                    on yours — which is the whole point of the feature and was
+                    previously impossible to see from one of the two sides.
+
+                    Absent entirely when there are none, rather than rendered
+                    as an empty row explaining its own emptiness.
+
+                    Every glyph is aria-hidden with the name beside it in an
+                    sr-only span, for the same reason as the buttons above: an
+                    emoji is not a label, and a list of them read aloud as
+                    nothing is a list that is not there.
+                    -------------------------------------------------------- */}
+                {slot.track && !slot.canReact && slot.given.length > 0 && (
+                    <div class="react-bar">
+                        <p class="react-legend">{slot.fromWord} said</p>
+                        <ul class="react-given">
+                            {slot.given.map((emoji) => (
+                                <li class="react-given-item">
+                                    <span class="react-emoji" aria-hidden="true">{emoji}</span>
+                                    <span class="sr-only">{reactionName(emoji)}</span>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
                 )}
 
                 {/* --------------------------------------------------------
@@ -867,6 +1189,25 @@ function minisFor(pair: DayPair): Mini[] {
 
                         <form class="dj-form" id="mine-form" method="post" action="/api/us/song">
                             <input type="hidden" name="date" value={todayPair.date}>
+                            {/* WHERE HE IS, at the moment he posts. Filled in by the
+                                script at the bottom from
+                                Intl.DateTimeFormat().resolvedOptions().timeZone,
+                                which on an iPhone is the timezone iOS itself is set
+                                to — so this follows him when he travels and no line
+                                of source has to be edited.
+
+                                SHIPS EMPTY, and stays empty with JavaScript off.
+                                That is a supported state, not a degraded one: the
+                                endpoint drops a blank without complaining and the
+                                card falls back to HIS_TZ. Capturing a location is
+                                worth having; it is not worth making the
+                                no-JavaScript path fail over.
+
+                                Reading it here rather than sending the browser's
+                                minutes-from-UTC is deliberate — an offset is right
+                                today and wrong after the next DST change, and the
+                                zone NAME is the thing Intl can reason about. */}
+                            <input type="hidden" name="tz" value="" data-tz>
 
                             <div class="dj-field">
                                 <label class="dj-label" for="mine-url">Spotify link</label>
@@ -943,6 +1284,11 @@ function minisFor(pair: DayPair): Mini[] {
 
                         <form class="dj-form" id="reply-form" method="post" action="/api/us/reply">
                             <input type="hidden" name="date" value={todayPair.date}>
+                            {/* WHERE SHE IS, at the moment she posts. Same field,
+                                same script, same shipped-empty behaviour as the one
+                                on his form above — this is the half that actually
+                                moves, since she is the one who relocated. */}
+                            <input type="hidden" name="tz" value="" data-tz>
 
                             <div class="dj-field">
                                 <label class="dj-label" for="reply-url">Spotify link</label>
@@ -1141,14 +1487,14 @@ function minisFor(pair: DayPair): Mini[] {
         <p class="archive-empty">
             {storeUnreachable
                 ? "The shelf isn’t answering. Nothing is lost."
-                : `Nothing here yet. Day one, ${her}.`}
+                : `Nothing here yet. Day one, ${viewer === 'her' ? her : 'Sam'}.`}
         </p>
     )}
 
     <hr class="studio-rule">
 
     <div class="studio-foot">
-        <span class="studio-tag">Stronger for it.</span>
+        <span class="studio-tag">Love you.</span>
         <a href="/samdrea/vault">&larr; back to the room</a>
     </div>
 </div>
@@ -1175,11 +1521,63 @@ function minisFor(pair: DayPair): Mini[] {
    3. THE DAY ROLLOVER. Her phone will keep this tab alive for a week. Without
       this, coming back to it on Tuesday shows Monday's pair with no hint that
       it is stale.
+
+   4. WHERE THE POSTER IS. One line, into a hidden field, so a song's time can
+      later be printed on the clock of whoever posted it.
    -------------------------------------------------------------------------- */
 (function () {
     var status = document.getElementById('react-status');
 
-    /* ---- 1. reactions ------------------------------------------------- */
+    /* ---- 4. where the poster is ---------------------------------------
+       IT READS A ZONE NAME, NOT AN OFFSET. On iOS this is whatever Settings ▸
+       General ▸ Date & Time resolved to, which is exactly the "read it from their
+       iOS setting" that a source constant cannot do. It is NOT formatting
+       anything: the time on the card is rendered on the SERVER, in this zone, so
+       both of them read the identical string for the same song. A time formatted
+       here would be formatted against whichever phone happened to be holding the
+       page, and the two of them could not quote a time to each other.
+
+       Every failure leaves the field empty and the server falls back to the
+       HER_TZ / HIS_TZ constant, which is also exactly what happens with this
+       script absent or blocked. There is no path where this costs a post. */
+    function stampZone() {
+        try {
+            var here = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            if (!here) return;
+            Array.prototype.forEach.call(document.querySelectorAll('input[data-tz]'), function (input) {
+                input.value = here;
+            });
+        } catch (err) {
+            /* An engine with no Intl, or one that will not name its own zone. The
+               constant is the answer and the server already knows that. */
+        }
+    }
+
+    /* ONCE NOW, so the field is filled whichever way the form goes out — the
+       fetch below, a native submit, or a back-button resubmit. */
+    stampZone();
+
+    /* AND AGAIN THE INSTANT A FORM IS SUBMITTED, which is not belt-and-braces.
+       Job 3 below exists because her phone will keep this tab alive for a WEEK,
+       and the entire point of reading the zone from the device instead of a
+       constant is that it follows her when she travels. A value stamped at render
+       time is a value from wherever she opened the page, which for a tab that
+       survives a flight is the one case this field was added to get right.
+
+       Capture phase on the document: `submit` bubbles, so capture here runs before
+       the form's own handler further down reads `form.elements.tz.value`, and it
+       covers both forms and both paths from one listener. */
+    document.addEventListener('submit', stampZone, true);
+
+    /* ---- 1. reactions -------------------------------------------------
+
+       ONLY THE TOGGLE CHIPS. `.react-any` — the free-choice input — is
+       deliberately NOT enhanced and submits natively, because a successful add
+       creates a chip that does not exist in this document yet. Painting it
+       here would mean building markup in JavaScript that has to match the
+       Astro template, which is the second-renderer problem this file refuses
+       everywhere else. A 303 and a re-render is the honest answer, and it
+       costs one page load on the rarer of the two actions. */
     var forms = Array.prototype.slice.call(document.querySelectorAll('.react-form'));
 
     /**
@@ -1193,15 +1591,30 @@ function minisFor(pair: DayPair): Mini[] {
      */
     var busy = false;
 
-    /** Repaint ALL five buttons from the server's answer, not from what we
-     *  assumed would happen. One source of truth, even for optimism. */
-    function paint(list) {
+    /**
+     * U+FE0F stripped, mirroring foldReaction() in kv.ts.
+     *
+     * The server answers with what it stored, which may be a bare U+2764 where
+     * this button carries U+2764 U+FE0F. Comparing the raw strings would leave
+     * the heart looking un-pressed immediately after a successful tap on it.
+     */
+    function fold(emoji) {
+        return String(emoji).replace(/\uFE0F/g, '');
+    }
+
+    /** Repaint every button ON THAT SIDE from the server's answer, not from what
+     *  we assumed would happen. One source of truth, even for optimism.
+     *
+     *  Scoped by side, which is new and necessary: both cards can carry a bar in
+     *  principle, and an unscoped repaint would clear the other card's state
+     *  using a list that never described it. */
+    function paint(side, list) {
         var on = {};
-        for (var i = 0; i < list.length; i++) on[list[i]] = true;
+        for (var i = 0; i < list.length; i++) on[fold(list[i])] = true;
         forms.forEach(function (form) {
-            var key = form.elements.reaction.value;
+            if (form.elements.side.value !== side) return;
             var button = form.querySelector('.react');
-            var isOn = !!on[key];
+            var isOn = !!on[fold(form.elements.reaction.value)];
             button.setAttribute('aria-pressed', isOn ? 'true' : 'false');
             // The hidden field always carries the OPPOSITE, so the no-JS path
             // stays correct if she reloads after tapping.
@@ -1219,8 +1632,12 @@ function minisFor(pair: DayPair): Mini[] {
             if (busy) return;
 
             var button = form.querySelector('.react');
-            var key = form.elements.reaction.value;
-            var label = (form.querySelector('.react-label') || {}).textContent || key;
+            var emoji = form.elements.reaction.value;
+            var side = form.elements.side.value;
+            /* The accessible name IS the label now: the visible caption span is
+               gone from the markup, so this reads the button's aria-label. Without
+               that change every announcement would have been the bare emoji. */
+            var label = button.getAttribute('aria-label') || emoji;
             var want = form.elements.on.value === '1';
 
             busy = true;
@@ -1234,7 +1651,8 @@ function minisFor(pair: DayPair): Mini[] {
                     credentials: 'same-origin',
                     body: JSON.stringify({
                         date: form.elements.date.value,
-                        reaction: key,
+                        side: side,
+                        reaction: emoji,
                         on: want
                     })
                 });
@@ -1248,11 +1666,20 @@ function minisFor(pair: DayPair): Mini[] {
             }
 
             if (!res.ok || !data || data.ok !== true) {
-                say('that did not save. not your fault.');
+                /* Names the two outcomes worth naming. `own-song` should be
+                   unreachable from this markup — the bar is not drawn on your own
+                   card — so if it ever fires, the identity flipped in another tab
+                   and a generic "not your fault" would be a lie. */
+                var code = (data && data.error) || '';
+                say(code === 'own-song'
+                    ? "that one's yours. reactions go on the other song."
+                    : code === 'too-many'
+                        ? 'that song is holding all it can. take one back first?'
+                        : 'that did not save. not your fault.');
                 return;
             }
 
-            paint(data.reactions || []);
+            paint(data.side || side, data.reactions || []);
             say(label + (want ? ': yes' : ': taken back'));
         });
     });
@@ -1297,11 +1724,17 @@ function minisFor(pair: DayPair): Mini[] {
         form.addEventListener('submit', async function (event) {
             event.preventDefault();
 
+            /* Named fields, not new FormData(form) — so `tz` has to be listed here
+               explicitly or the enhanced path would silently drop the very field the
+               no-JavaScript path carries for free. `|| ''` because block 4 leaves it
+               empty on an engine that would not name its zone, and the endpoint
+               treats empty as "we do not know". */
             var body = {
                 url: form.elements.url.value.trim(),
                 note: form.elements.note.value,
                 artist: form.elements.artist.value.trim(),
-                date: form.elements.date.value
+                date: form.elements.date.value,
+                tz: (form.elements.tz && form.elements.tz.value) || ''
             };
             if (!body.url) {
                 say('bad', 'paste a link first.');

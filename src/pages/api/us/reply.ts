@@ -94,7 +94,7 @@ import { SESSION_SECRET } from '../../../lib/us/config';
 import { readCookie, verify } from '../../../lib/us/session';
 import { clientKey, hit } from '../../../lib/us/ratelimit';
 import { crossSite, identify } from '../../../lib/us/together';
-import { isWingDate, putReply, wingDate, type ReplyRecord } from '../../../lib/us/kv';
+import { isTimeZone, isWingDate, putReply, wingDate, type ReplyRecord } from '../../../lib/us/kv';
 // The one parser, the one metadata resolver, the one text cleaner, and the SAME
 // field caps as his side — a shorter note on her card would be an asymmetry
 // nobody chose. See the header.
@@ -200,6 +200,7 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
   let note = '';
   let artist = '';
   let date = wingDate();
+  let tz = '';
   try {
     const fields: Record<string, unknown> = wantsJson
       ? ((await request.json()) as Record<string, unknown>)
@@ -208,6 +209,18 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
     rawUrl = typeof fields.url === 'string' ? fields.url : '';
     note = cleanText(fields.note, MAX_NOTE);
     artist = cleanText(fields.artist, MAX_ARTIST);
+
+    /* WHERE SHE WAS WHEN SHE POSTED IT, from a hidden field the page fills in with
+       Intl.DateTimeFormat().resolvedOptions().timeZone. Same treatment as the field
+       on his side, for the same reasons — see /api/us/song, which carries the long
+       version of this comment.
+
+       Dropped silently when absent or junk rather than 400ing: it is not something
+       she typed, with JavaScript off it arrives empty, and '' simply means "we do
+       not know", at which point the page falls back to HER_TZ. Validated with
+       isTimeZone() and not cleanText() because it is an identifier bound for Intl,
+       not prose. */
+    tz = isTimeZone(fields.tz) ? fields.tz.trim() : '';
 
     // The form sends the date of the card she is answering, which is normally
     // today but is not required to be: answering yesterday's song at 1am is a
@@ -250,6 +263,10 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
     art: meta.art,
     note,
     postedAt: Date.now(),
+    /* '' rather than a default of HER_TZ, exactly as on his side: the constant is
+       consulted in one place only, the render, so an old record and a
+       JavaScript-off one behave identically. */
+    tz,
     album: meta.album,
     year: meta.year,
     durationMs: meta.durationMs,

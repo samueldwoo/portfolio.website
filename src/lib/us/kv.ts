@@ -6,7 +6,7 @@
  *
  * Five things belong together and are therefore all here:
  *
- *   1. THE INTERFACE — both halves of a day, and her reactions. Read and write.
+ *   1. THE INTERFACE — both halves of a day, and the reactions on each. Read and write.
  *   2. THREE BACKENDS behind it, chosen from whatever credentials exist.
  *   3. THE KEY LAYOUT — the exact strings each half of a day lives under.
  *   4. THE CALENDAR — the day-string those keys are built from.
@@ -24,9 +24,12 @@
  * Same failure mode answers.mjs guards against, same fix: exactly one
  * implementation, imported by everyone.
  *
- * For the same reason the REACTIONS vocabulary lives here. Those keys are
- * persisted forever; renaming one silently orphans every reaction she ever gave.
- * A list that gets written into a database is a schema, not a UI constant.
+ * For the same reason the REACTIONS rules live here. What counts as a reaction is
+ * persisted forever, so it is a schema and not a UI constant — and now that a
+ * reaction is an arbitrary emoji rather than one of five keys, the VALIDATOR is the
+ * schema. It sits next to the store it guards, with the migration for the five old
+ * keys beside it, because a validator that lives somewhere else is a validator one
+ * write path forgets to call.
  *
  * ---------------------------------------------------------------------------
  * A DAY IS A PAIR. THE TWO HALVES ARE STORED SEPARATELY ON PURPOSE.
@@ -80,7 +83,7 @@
  * THE THREE TIERS, AND WHAT EACH ONE COSTS
  *
  * 1. UPSTASH REDIS  (hasKV())  — the best of the three, and the only one with
- *    real atomic operations. A reaction is one HSET/HDEL; a post is a SET plus a
+ *    real atomic operations. A reaction is one HSET plus one HDEL; a post is a SET plus a
  *    ZADD. Two people tapping at once cannot lose each other's write.
  *
  * 2. CLOUDFLARE R2  (hasR2())  — the pragmatic default here, because R2 is
@@ -237,37 +240,384 @@ function daysBetween(from: string, to: string): number {
 }
 
 /* ============================================================================
-   REACTION VOCABULARY
+   REACTIONS — AN OPEN SET OF EMOJI, NOT A CLOSED SET OF KEYS
 
-   Persisted keys, so treat this list as a migration surface: add freely, never
-   rename or reuse a key. Unknown keys read back from the store are simply not
-   rendered, which is what makes retiring one safe.
+   WHAT CHANGED, AND WHY THE OLD DESIGN HAD TO GO
 
-   The multi-codepoint emoji are written as escapes so this file stays pure
-   ASCII. Same reasoning as answers.mjs: a literal U+1F501 is invisible in a diff
-   and one editor or terminal mangling it turns it into a different string.
+   This used to be five `{ key, emoji, label }` records — `heart`, `loop`, `cry`,
+   `move`, `pin` — and the WIRE FORMAT was the key, never the emoji. The reasoning
+   in /api/us/react's old header was sound as far as it went: an emoji is not one
+   character, U+2764 and U+2764 U+FE0F look identical and are different strings, and
+   a key is something a human can type into a Redis console.
+
+   It was also a cage. Five prose labels ("on repeat", "okay, ow") printed under
+   five buttons, and the only way to say anything else was a deploy. Two people
+   sending each other a song a day want to answer it with whatever emoji they
+   actually mean, so the vocabulary is now OPEN: three popular emoji are one tap,
+   and anything else is typed.
+
+   THE STORED VALUE IS THEREFORE ARBITRARY USER INPUT, and every rule below exists
+   because of that sentence:
+
+     * isReaction() is a VALIDATOR, not a lookup. Exactly one grapheme cluster,
+       and that cluster has to actually be an emoji. See its comment for the
+       grammar.
+     * MAX_REACTIONS_PER_DAY bounds how many distinct ones one day can hold, per
+       side, so an open vocabulary cannot grow the store without limit.
+     * Nothing here is ever rendered with set:html anywhere. A stored "emoji" is a
+       string until it has been through isReaction(), and even after that it is
+       text.
+
+   THE MIGRATION OF THE FIVE OLD KEYS
+
+   `us:react:<date>` holds live data written under the old scheme: hash FIELDS
+   named `heart`, `loop`, `cry`, `move`, `pin`. Those are not emoji, so the new
+   validator rejects them, and a validator that rejects them is a validator that
+   silently deletes every reaction ever given.
+
+   So LEGACY_REACTIONS below maps each old key to the emoji it always displayed as,
+   and normalizeReaction() applies that map on the way OUT of the store. Nothing is
+   rewritten in place by a batch job — the read is the migration, which means it
+   cannot half-apply. Writes only ever store emoji, and storedNamesFor() makes a
+   toggle-off delete the legacy alias as well as the emoji, so an old row is
+   upgraded the first time somebody touches it and is correct in the meantime.
+
+   Do not remove LEGACY_REACTIONS. Its cost is five lines; its absence is a
+   silently emptied year.
+
+   The emoji are written as escapes so this file stays pure ASCII. Same reasoning
+   as answers.mjs: a literal U+1F501 is invisible in a diff and one editor or
+   terminal mangling it turns it into a different string.
    ========================================================================= */
 
 export interface Reaction {
-  /** Stored verbatim. Never change one of these. */
-  key: string;
+  /** Stored verbatim, and also the hash field name. */
   emoji: string;
-  /** What a screen reader reads, and what sits under the emoji. */
-  label: string;
+  /**
+   * The ACCESSIBLE NAME, and deliberately not a caption.
+   *
+   * The old `label` was rendered as visible text under every emoji, which is the
+   * thing this revision was asked to remove — nobody needs "on repeat" printed
+   * under a repeat glyph. But three buttons whose entire content is aria-hidden
+   * decoration announce as "button, button, button", so the words still have to
+   * exist; they just live in aria-label now. Invisible to the eye, present to a
+   * screen reader. That distinction is the whole point of this field.
+   */
+  name: string;
 }
 
-export const REACTIONS: readonly Reaction[] = [
-  { key: 'heart', emoji: '❤️', label: 'this one' },
-  { key: 'loop', emoji: '\u{1F501}', label: 'on repeat' },
-  { key: 'cry', emoji: '\u{1F62D}', label: 'okay, ow' },
-  { key: 'move', emoji: '\u{1F57A}', label: 'made me move' },
-  { key: 'pin', emoji: '\u{1F4CC}', label: "that's us" },
+/**
+ * THE HOT BAR. Three, always visible, one tap each.
+ *
+ * Chosen to cover three DIFFERENT axes rather than three flavours of one, because
+ * three buttons that all mean "I liked it" is a hot bar with one button on it:
+ *
+ *   1. U+2764 U+FE0F  heart   — affection. The unmarked case, and the one reaction
+ *      that already had live data behind it under the old `heart` key.
+ *   2. U+1F62D        sobbing — feeling. Carries both "this destroyed me" and, in
+ *      the way it is actually used, "I am laughing too hard to type". It is the
+ *      one glyph in common use that means "this got past my defences", which for a
+ *      song is the most useful thing to be able to say in one tap.
+ *   3. U+1F525        fire    — energy. "This goes hard." Nothing about warmth or
+ *      sadness; it is the axis the other two cannot reach.
+ *
+ * All three render as recognisably the same picture on iOS, Android and every
+ * desktop font — which rules out several better-meaning candidates whose vendor
+ * artwork disagrees enough to change the message.
+ */
+export const HOT_REACTIONS: readonly Reaction[] = [
+  { emoji: '\u2764\uFE0F', name: 'love this one' },
+  { emoji: '\u{1F62D}', name: 'this got me' },
+  { emoji: '\u{1F525}', name: 'this goes hard' },
 ] as const;
 
-const REACTION_KEYS = new Set(REACTIONS.map((r) => r.key));
+/**
+ * THE MIGRATION MAP. Old stored key -> the emoji it always rendered as.
+ *
+ * Read-side only. See the section header. Never delete an entry; adding one is
+ * only correct if something once wrote that key.
+ */
+const LEGACY_REACTIONS: Readonly<Record<string, string>> = {
+  heart: '\u2764\uFE0F',
+  loop: '\u{1F501}',
+  cry: '\u{1F62D}',
+  move: '\u{1F57A}',
+  pin: '\u{1F4CC}',
+};
 
-export function isReactionKey(value: unknown): value is string {
-  return typeof value === 'string' && REACTION_KEYS.has(value);
+/**
+ * Accessible names for the emoji we can name. Presentation only — NOT a
+ * gate, and absence from this map does not make an emoji invalid.
+ *
+ * Everything a person types themselves falls through to the emoji itself, which
+ * is the right answer rather than a shrug: screen readers speak emoji from the
+ * Unicode name ("fire", "red heart"), so an unnamed reaction still announces as
+ * something rather than as "button".
+ */
+const REACTION_NAMES: Readonly<Record<string, string>> = {
+  ...Object.fromEntries(HOT_REACTIONS.map((r) => [r.emoji, r.name])),
+  // The other four old labels, kept so a reaction given under the old scheme
+  // still announces in the words it was given in.
+  '\u{1F501}': 'on repeat',
+  '\u{1F57A}': 'made me move',
+  '\u{1F4CC}': "that's us",
+};
+
+/**
+ * How many UTF-16 code units a submitted reaction may be.
+ *
+ * Not a guess at "how long is an emoji" — a ceiling on what gets persisted. The
+ * longest RGI sequences in real use are the four-person families and the
+ * kiss/couple variants with skin tones (up to ~19 units) and the three
+ * subdivision flags (14). 24 clears all of them with nothing to spare, and the
+ * grammar in ONE_EMOJI is what actually decides validity; this only stops a
+ * megabyte from being handed to a regex.
+ */
+export const MAX_REACTION_UNITS = 24;
+
+/**
+ * How many DISTINCT reactions one day can hold, per side.
+ *
+ * The old vocabulary was five, so five was the ceiling by construction. An open
+ * vocabulary has none, and "no ceiling" on a key an authenticated phone can write
+ * in a loop is how a JSON document becomes a bill. Twelve is well past what two
+ * people do to one song and small enough that the row still renders on a phone.
+ * Enforced on the way IN (see /api/us/react) and again on the way OUT, because the
+ * store can also be hand-edited.
+ */
+export const MAX_REACTIONS_PER_DAY = 12;
+
+/**
+ * ONE EMOJI, AS A GRAMMAR.
+ *
+ * `\p{Extended_Pictographic}` alone is not enough: it matches ONE code point, so
+ * it would accept a lone U+200D-less half of a family sequence and reject the
+ * whole one. And `/\p{Emoji}/u` is famously wrong in the other direction — digits
+ * and `#` carry Emoji=Yes, so it accepts "1".
+ *
+ * So this spells out the three shapes a single emoji actually takes:
+ *
+ *   1. REGIONAL INDICATOR PAIR — country flags. Two code points, one glyph.
+ *   2. KEYCAP — [0-9#*] then U+FE0F then U+20E3. The only place a digit is allowed,
+ *      and only when it is wearing the keycap.
+ *   3. A ZWJ SEQUENCE of elements, where an element is a pictographic base with an
+ *      optional variation selector and an optional skin-tone modifier. One element
+ *      is the ordinary case (U+1F525); several joined by U+200D is the family /
+ *      couple / rainbow-flag case.
+ *   4. A TAG SEQUENCE — U+1F3F4 plus tag characters. Three of these exist
+ *      (Scotland, Wales, England) and they are real emoji, so they are allowed
+ *      rather than mysteriously refused.
+ *
+ * Anchored at both ends, so "fire then a script tag" fails as a whole. Note what
+ * this rejects on purpose: a bare U+200D, a bare U+FE0F, a combining accent, two
+ * emoji in a row, and every string containing a letter, a space or a `<`.
+ *
+ * It DOES accept U+00A9, U+00AE and U+203C — the dingbat-era pictographs. They are
+ * Extended_Pictographic and they are emoji; refusing them would need a second
+ * allowlist for no benefit.
+ */
+const EMOJI_ELEMENT = '(?:\\p{Extended_Pictographic}\\uFE0F?\\p{Emoji_Modifier}?)';
+const ONE_EMOJI = new RegExp(
+  '^(?:' +
+    // 1. flags
+    '\\p{Regional_Indicator}{2}' +
+    // 2. keycaps
+    '|[0-9#*]\\uFE0F?\\u20E3' +
+    // 4. subdivision flags (before 3, which would match the base alone)
+    '|\\u{1F3F4}[\\u{E0020}-\\u{E007E}]{1,6}\\u{E007F}' +
+    // 3. one element, or several joined
+    '|' +
+    EMOJI_ELEMENT +
+    '(?:\\u200D' +
+    EMOJI_ELEMENT +
+    ')*' +
+    ')$',
+  'u',
+);
+
+/**
+ * How many grapheme clusters, or null when the engine cannot say.
+ *
+ * Intl.Segmenter is the ONLY correct answer to "is this one character" and it has
+ * been in Node since 16, so the null path is not expected to run. It exists
+ * because a validator that throws on an old runtime fails OPEN, and this one must
+ * fail closed-ish: null makes isReaction() fall back to the grammar above, which
+ * already only matches single clusters. Belt and braces, in that order.
+ */
+function graphemeCount(value: string): number | null {
+  const Segmenter = (Intl as { Segmenter?: typeof Intl.Segmenter }).Segmenter;
+  if (typeof Segmenter !== 'function') return null;
+  try {
+    return [...new Segmenter('en', { granularity: 'grapheme' }).segment(value)].length;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Is this ONE emoji, safe to persist and to print?
+ *
+ * Three independent checks, cheapest first, and all three have to pass:
+ *   a length cap, the grammar, and a grapheme count of exactly 1.
+ *
+ * Replaces isReactionKey(), which was a Set lookup against five strings. The name
+ * changed with the meaning: this validates, it does not recognise. Nothing is
+ * coerced, trimmed or repaired here — a caller that wants to trim does it first,
+ * because "nearly an emoji" is a thing to refuse and not to guess at.
+ */
+export function isReaction(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
+  if (value.length === 0 || value.length > MAX_REACTION_UNITS) return false;
+  if (!ONE_EMOJI.test(value)) return false;
+  const clusters = graphemeCount(value);
+  return clusters === null || clusters === 1;
+}
+
+/**
+ * U+FE0F stripped. FOR COMPARISON ONLY — never stored, never rendered.
+ *
+ * The variation selector is presentational: U+2764 and U+2764 U+FE0F are two
+ * strings that draw the same heart. Without a fold, tapping the hot heart on a day
+ * whose store already holds the bare one gives two chips that look identical and
+ * both claim to be off. The fold is what makes them one reaction.
+ */
+function foldReaction(emoji: string): string {
+  return emoji.replace(/\uFE0F/g, '');
+}
+
+/** Fold -> the legacy keys that meant it. Reverse of LEGACY_REACTIONS. */
+const LEGACY_BY_FOLD = new Map<string, string[]>();
+for (const [key, emoji] of Object.entries(LEGACY_REACTIONS)) {
+  const fold = foldReaction(emoji);
+  LEGACY_BY_FOLD.set(fold, [...(LEGACY_BY_FOLD.get(fold) ?? []), key]);
+}
+
+/**
+ * One value as it came out of the store, as an emoji — or null to drop it.
+ *
+ * THE MIGRATION, applied on every read. A legacy key becomes the emoji it always
+ * displayed as; a valid emoji passes through; anything else (a typo, a
+ * hand-edited field, a retired key nobody mapped) is dropped rather than
+ * rendered, which is the same behaviour the old closed set had for unknown keys
+ * and is what makes retiring one safe.
+ */
+export function normalizeReaction(stored: unknown): string | null {
+  if (typeof stored !== 'string') return null;
+  const legacy = LEGACY_REACTIONS[stored];
+  if (legacy) return legacy;
+  return isReaction(stored) ? stored : null;
+}
+
+/**
+ * Every field name in the store that means this emoji.
+ *
+ * Used by the DELETE path only. Taking a reaction back has to remove the legacy
+ * alias and the unselected variant as well as the emoji itself, or a heart given
+ * under the old scheme would be un-tappable forever: the button would send
+ * U+2764 U+FE0F, the store would still hold `heart`, and the chip would come back
+ * pressed with nothing to explain why.
+ */
+export function storedNamesFor(emoji: string): string[] {
+  const fold = foldReaction(emoji);
+  const names = new Set<string>([emoji, fold, ...(LEGACY_BY_FOLD.get(fold) ?? [])]);
+  return [...names].filter(Boolean);
+}
+
+/**
+ * What a screen reader should say for one reaction. Presentation only.
+ *
+ * Falls back to the emoji itself, which assistive tech speaks from its Unicode
+ * name. Never returns '' — an empty accessible name is the bug this exists to
+ * prevent.
+ */
+export function reactionName(emoji: string): string {
+  return REACTION_NAMES[emoji] ?? REACTION_NAMES[foldReaction(emoji)] ?? emoji;
+}
+
+/** One button in a reaction bar. */
+export interface ReactionChip {
+  emoji: string;
+  /** The accessible name. NEVER rendered as visible text — see Reaction.name. */
+  name: string;
+  /** Already given on this side today, so the button is a toggle-off. */
+  on: boolean;
+}
+
+/**
+ * The buttons one reaction bar shows: the hot three, then anything already given
+ * that the hot three do not cover.
+ *
+ * Lives here rather than in the page because it needs foldReaction() — the pressed
+ * state of the hot heart has to account for a stored bare U+2764, and a page that
+ * compared strings directly would render the heart as un-pressed next to an
+ * identical-looking second chip. That is the kind of bug that is invisible in
+ * review and obvious on a phone.
+ *
+ * The extra chips are always `on: true`: they exist BECAUSE they were given, so a
+ * chip for an emoji nobody chose is not a state this can produce. The hot three are
+ * always present and always in the same order, so the bar does not move under a
+ * thumb between renders.
+ */
+export function reactionChips(given: readonly string[]): ReactionChip[] {
+  const list = normalizeReactions(given);
+  const chosen = new Set(list.map(foldReaction));
+  const hotFolds = new Set(HOT_REACTIONS.map((r) => foldReaction(r.emoji)));
+
+  const chips: ReactionChip[] = HOT_REACTIONS.map((r) => ({
+    emoji: r.emoji,
+    name: r.name,
+    on: chosen.has(foldReaction(r.emoji)),
+  }));
+  for (const emoji of list) {
+    if (hotFolds.has(foldReaction(emoji))) continue;
+    chips.push({ emoji, name: reactionName(emoji), on: true });
+  }
+  return chips;
+}
+
+/**
+ * A stored list, normalized, de-duplicated by fold, and capped.
+ *
+ * Every read path in every tier goes through this, for the reason parseAndOrder()
+ * exists: a rule that only some backends apply turns a schema bug into "works on
+ * my laptop". The cap is re-applied here as well as at the endpoint because the
+ * store can be hand-edited and a page render is not the place to discover that.
+ */
+function normalizeReactions(raw: unknown): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const value of Array.isArray(raw) ? raw : []) {
+    const emoji = normalizeReaction(value);
+    if (!emoji) continue;
+    const fold = foldReaction(emoji);
+    if (seen.has(fold)) continue;
+    seen.add(fold);
+    out.push(emoji);
+    if (out.length >= MAX_REACTIONS_PER_DAY) break;
+  }
+  return out;
+}
+
+/**
+ * WHICH SONG A REACTION IS ON, per day. Both directions.
+ *
+ * The field names say ON, not BY, and that is the distinction the old
+ * one-directional design let itself blur. A reaction on his song can only have
+ * been written by her and vice versa (see /api/us/react), so "by" is derivable and
+ * "on" is what the page needs in order to draw it next to the right track.
+ *
+ * Always both arrays, never undefined, so no caller writes `?? []`.
+ */
+export interface DayReactions {
+  /** Emoji left ON HIS song. Only she can write these. */
+  onHis: string[];
+  /** Emoji left ON HER song. Only he can write these. */
+  onHers: string[];
+}
+
+/** A day with no reactions either way. Fresh object per call — callers mutate. */
+export function noReactions(): DayReactions {
+  return { onHis: [], onHers: [] };
 }
 
 /* ============================================================================
@@ -300,6 +650,29 @@ export interface TrackRecord {
   /** Epoch millis, for "posted this morning" copy and for debugging. */
   postedAt: number;
 
+  /**
+   * WHERE THE POSTER WAS when they posted it. An IANA name, e.g.
+   * `America/Los_Angeles`, captured from their own device.
+   *
+   * `postedAt` says WHEN in absolute terms; this says whose wall clock to print it
+   * against. Those are two different facts and the page needs both, because
+   * WING_TZ (America/New_York) is a CALENDAR and not a location — neither of them
+   * lives there, so formatting `postedAt` in it produced a time that was nobody's:
+   * a song posted at 22:40 in Los Angeles read as 01:40.
+   *
+   * OPTIONAL, AND THAT IS PERMANENT rather than a migration window. Every record
+   * written before this field existed has no `tz`, they are never rewritten, and
+   * the no-JavaScript form path cannot fill it either. So '' / undefined is an
+   * ordinary value and the render falls back to HER_TZ / HIS_TZ — see
+   * postedAtLabel() on the today page. A page that assumed this was here would
+   * break on the entire existing archive.
+   *
+   * VALIDATED, on the way in AND on the way back out — see isTimeZone(). It
+   * arrives from a form field and is handed to `Intl`, which throws RangeError on
+   * a name it does not know, and a throw inside a page render is a 500.
+   */
+  tz?: string;
+
   /* ---- enriched, and only ever present when the Web API credentials exist ----
      See resolveMetadata() in /api/us/song. All three are absent on every record
      written before those credentials were configured, so they are OPTIONAL in the
@@ -325,6 +698,57 @@ export interface TrackRecord {
  */
 export type SongRecord = TrackRecord;
 export type ReplyRecord = TrackRecord;
+
+/** Longest IANA name in the database is 30-odd characters. 64 is slack, not a guess. */
+const TZ_MAX = 64;
+
+/**
+ * Shape first, so the probe below is never handed something absurd. Two or three
+ * `/`-separated segments of the characters IANA actually uses — which deliberately
+ * excludes `:`, and therefore excludes OFFSET strings like `+05:00`. Intl accepts
+ * those; we must not, because an offset is not a location and would be an hour
+ * wrong for half of every year.
+ */
+const TZ_RE = /^[A-Za-z0-9_+-]{1,32}(?:\/[A-Za-z0-9_+.-]{1,32}){0,2}$/;
+
+/**
+ * Is this a timezone name we can safely hand to `Intl`?
+ *
+ * UNTRUSTED INPUT. It comes from a hidden form field (see the `tz` input on the
+ * posting forms), so it is checked before it is stored and again after it is read
+ * back — a stored value reaches `Intl.DateTimeFormat`, which throws RangeError on
+ * an unknown zone, and a throw inside a page render is a 500 on her vault.
+ *
+ * WHY A try/catch PROBE AND NOT `Intl.supportedValuesOf('timeZone')`:
+ *
+ *   1. The probe tests the exact predicate we care about — "will Intl accept this"
+ *      — rather than a list that approximates it. `supportedValuesOf` returns only
+ *      CANONICAL primary identifiers, so it rejects the perfectly valid IANA link
+ *      names a real device can report (`Asia/Calcutta`, `Europe/Kiev`,
+ *      `US/Pacific`), which would silently downgrade those posts to the fallback
+ *      constant for no reason.
+ *   2. It is not guaranteed present. It is ES2022 and this code runs on Node
+ *      locally and on a Cloudflare Worker in production; the constructor is
+ *      everywhere the rest of this file already relies on it being.
+ *   3. It is the pattern together.ts's zone() already uses on HER_TZ / HIS_TZ. One
+ *      way of asking this question, not two.
+ *
+ * DELIBERATELY NOT CACHED, unlike zone() in together.ts. That memoises two
+ * compile-time constants; this is fed by a form field, and a Map keyed on
+ * caller-supplied strings is an unbounded-growth vector for a constructor call
+ * that happens at most twice per render.
+ */
+export function isTimeZone(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
+  const tz = value.trim();
+  if (tz.length === 0 || tz.length > TZ_MAX || !TZ_RE.test(tz)) return false;
+  try {
+    new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(0);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Validate a record read back out of a store.
@@ -363,6 +787,13 @@ function parseTrack(raw: unknown): TrackRecord | null {
     art: str(obj.art),
     note: str(obj.note),
     postedAt: Number(obj.postedAt) || 0,
+    // Checked AGAIN on the way out, not just on the way in. This value is handed
+    // straight to Intl.DateTimeFormat by the render, and a name that got in before
+    // the check existed — or by a hand-edit in the Upstash console — would throw a
+    // RangeError inside a page render. '' means "we do not know where they were",
+    // which is the honest state of every record written before this field and is
+    // what the fallback to HER_TZ / HIS_TZ is for.
+    tz: isTimeZone(obj.tz) ? obj.tz.trim() : '',
     album: str(obj.album),
     // Four digits or nothing. A stored `year` only ever comes from Spotify's
     // `release_date`, but this read runs against records a human may have edited,
@@ -434,16 +865,22 @@ export interface Store {
   getReply(date: string): Promise<ReplyRecord | null>;
   /** Her `limit` most recent songs, newest first. */
   getReplies(limit: number): Promise<ReplyRecord[]>;
-  /** Set or clear one reaction for one day. */
-  putReaction(date: string, key: string, on: boolean): Promise<void>;
-  /** Which reactions exist, per date. Every date asked for gets an entry. */
-  getReactions(dates: string[]): Promise<Record<string, string[]>>;
+  /**
+   * Set or clear one reaction ON one side's song for one day.
+   *
+   * `target` is the side the reaction is GIVEN TO, never the side that gave it —
+   * see DayReactions. Who is ALLOWED to write which target is an authorization
+   * question and lives in /api/us/react; the store only files it correctly.
+   */
+  putReaction(date: string, target: Side, emoji: string, on: boolean): Promise<void>;
+  /** Which reactions exist on each side, per date. Every date asked for gets an entry. */
+  getReactions(dates: string[]): Promise<Record<string, DayReactions>>;
 }
 
 /** An empty result for every date asked, so callers never check for undefined. */
-function emptyReactions(dates: string[]): Record<string, string[]> {
-  const out: Record<string, string[]> = {};
-  for (const d of dates) out[d] = [];
+function emptyReactions(dates: string[]): Record<string, DayReactions> {
+  const out: Record<string, DayReactions> = {};
+  for (const d of dates) out[d] = noReactions();
   return out;
 }
 
@@ -453,7 +890,40 @@ function emptyReactions(dates: string[]): Record<string, string[]> {
 
 /** `us:` prefix matches ratelimit.ts's `us:rl:` so one Redis can hold both. */
 const SONG_KEY = (date: string) => `us:song:${date}`;
+
+/* ---------------------------------------------------------------------------
+   THE TWO REACTION KEY SPACES, AND WHY ONE OF THEM IS BADLY NAMED
+
+   `us:react:<date>` HOLDS REACTIONS ON HIS SONG. It is not renamed, for exactly
+   the reason `us:reply:*` is not renamed (see the file header): it holds live
+   data, and the failure mode of a half-applied rename is a deploy that reads an
+   empty key space and shows every reaction ever given as deleted.
+
+   THE MIGRATION, STATED PLAINLY. Before this revision there was ONE reaction key
+   per day and reactions were one-directional — only she could give them, and only
+   to his song. So every array already in `us:react:<date>` is, by definition,
+   "reactions on HIS song", and it is read as exactly that. No key is moved, no
+   value is rewritten, and nothing is re-attributed. The second direction is a NEW
+   key space that starts empty:
+
+     us:react:<date>        reactions ON HIS song   (written only by her)
+     us:react-hers:<date>   reactions ON HER song   (written only by him)
+
+   The field NAMES inside the old hash also changed meaning — they used to be the
+   five keys `heart`/`loop`/`cry`/`move`/`pin` and are now emoji. That half of the
+   migration is handled on read by normalizeReaction(); see the REACTIONS section.
+
+   So the asymmetry in these two names is a STORAGE fact with a date on it, and
+   reactKeyFor() below is the only place either name is chosen. Do not "tidy" the
+   pair into `us:react-his` / `us:react-hers` without a migration, a backfill and
+   a rollback plan.
+   ------------------------------------------------------------------------- */
 const REACT_KEY = (date: string) => `us:react:${date}`;
+const REACT_HERS_KEY = (date: string) => `us:react-hers:${date}`;
+
+/** The one place the legacy name above is mapped to the side it means. */
+const reactKeyFor = (date: string, target: Side) =>
+  target === 'his' ? REACT_KEY(date) : REACT_HERS_KEY(date);
 /**
  * Her side, in its own key space. A separate prefix rather than a field inside
  * the song blob, so that the endpoint holding only her session cookie writes keys
@@ -578,11 +1048,19 @@ function upstashStore(url: string, token: string): Store {
     getReply: (date) => replies.get(date),
     getReplies: (limit) => replies.list(limit),
 
-    async putReaction(date, key, on) {
+    async putReaction(date, target, emoji, on) {
+      const key = reactKeyFor(date, target);
       // The one place a tier difference is visible in the outcome rather than
       // just the code: this is a single atomic field write. No read, no race.
+      //
+      // Both branches also HDEL the legacy aliases (see storedNamesFor), which is
+      // what lazily upgrades a pre-emoji row the first time it is touched: setting
+      // U+2764 U+FE0F removes the old `heart` field in the same round trip, so the
+      // day never ends up holding two fields that draw the same picture.
+      const aliases = storedNamesFor(emoji).filter((n) => n !== emoji);
       await run([
-        on ? ['HSET', REACT_KEY(date), key, String(Date.now())] : ['HDEL', REACT_KEY(date), key],
+        on ? ['HSET', key, emoji, String(Date.now())] : ['HDEL', key, emoji],
+        ...(aliases.length > 0 ? [['HDEL', key, ...aliases] as Command] : []),
       ]);
     },
 
@@ -591,10 +1069,21 @@ function upstashStore(url: string, token: string): Store {
       if (dates.length === 0) return out;
       // HKEYS, not HGETALL: only the field names are rendered, so asking for the
       // values would drag the timestamps over the wire on every page load.
-      const results = await run(dates.map((d) => ['HKEYS', REACT_KEY(d)]));
+      //
+      // Two commands per date rather than one, which is the honest cost of the
+      // second direction. Still ONE round trip: it is a pipeline, so N dates cost
+      // 2N commands and one HTTP request.
+      const cmds: Command[] = [];
+      for (const d of dates) {
+        cmds.push(['HKEYS', REACT_KEY(d)]);
+        cmds.push(['HKEYS', REACT_HERS_KEY(d)]);
+      }
+      const results = await run(cmds);
       dates.forEach((d, i) => {
-        const raw = results[i];
-        out[d] = Array.isArray(raw) ? raw.filter(isReactionKey) : [];
+        out[d] = {
+          onHis: normalizeReactions(results[i * 2]),
+          onHers: normalizeReactions(results[i * 2 + 1]),
+        };
       });
       return out;
     },
@@ -632,11 +1121,27 @@ interface SongDoc {
   songs: Record<string, SongRecord>;
   /** date -> reply. HERS. Written only by the session-authenticated endpoint. */
   replies: Record<string, ReplyRecord>;
-  /** date -> reaction key -> epoch millis of the tap */
+  /**
+   * date -> emoji -> epoch millis of the tap. REACTIONS ON HIS SONG.
+   *
+   * The field name predates the second direction and is kept for the same reason
+   * `us:react:<date>` is — see the key-space comment above REACT_KEY. Every entry
+   * already in a live document was written when a reaction could only be hers,
+   * given to his song, so reading it as "on his" loses and re-attributes nothing.
+   */
   reactions: Record<string, Record<string, number>>;
+  /**
+   * The same, ON HER SONG. Written only by him.
+   *
+   * ADDITIVE and OPTIONAL, exactly like `replies` was: absent from every document
+   * written before reactions went both ways, so parseDoc() reads its absence as
+   * `{}` and `v` stays 1. An older deploy reading a newer document simply ignores
+   * a field it does not know about.
+   */
+  reactionsHers: Record<string, Record<string, number>>;
 }
 
-const EMPTY_DOC: SongDoc = { v: 1, songs: {}, replies: {}, reactions: {} };
+const EMPTY_DOC: SongDoc = { v: 1, songs: {}, replies: {}, reactions: {}, reactionsHers: {} };
 
 /**
  * A client per process, not per call.
@@ -685,6 +1190,12 @@ function parseDoc(text: string): SongDoc | null {
   const obj = raw as Partial<SongDoc>;
   const songs = obj.songs && typeof obj.songs === 'object' ? obj.songs : null;
   const reactions = obj.reactions && typeof obj.reactions === 'object' ? obj.reactions : {};
+  /* `reactionsHers` is MISSING from every document written while reactions were
+     one-directional, which is the normal case for the whole existing archive.
+     Same treatment as `replies` below and for the same reason: additive fields
+     never make a document unreadable. */
+  const reactionsHers =
+    obj.reactionsHers && typeof obj.reactionsHers === 'object' ? obj.reactionsHers : {};
   // `replies` is MISSING from every document written before she could answer, so
   // its absence is the normal case for the whole existing archive and must never
   // make a document unreadable. Only `songs` is structural.
@@ -695,6 +1206,7 @@ function parseDoc(text: string): SongDoc | null {
     songs: songs as SongDoc['songs'],
     replies: replies as SongDoc['replies'],
     reactions: reactions as SongDoc['reactions'],
+    reactionsHers: reactionsHers as SongDoc['reactionsHers'],
   };
 }
 
@@ -793,14 +1305,21 @@ function r2Store(): Store {
       return parseAndOrder(Object.values(doc.replies), limit);
     },
 
-    async putReaction(date, key, on) {
+    async putReaction(date, target, emoji, on) {
       await mutateDoc((doc) => {
-        const day = (doc.reactions[date] ??= {});
-        if (on) day[key] = Date.now();
-        else delete day[key];
+        // The ONE place this tier picks a bucket. A bug here cannot reach songs or
+        // replies, which is the property the separate fields exist to guarantee.
+        const bucket = target === 'his' ? doc.reactions : (doc.reactionsHers ??= {});
+        const day = (bucket[date] ??= {});
+        if (on) day[emoji] = Date.now();
+        // Every alias too, so a toggle-off clears a row written under the old
+        // five-key scheme rather than leaving it stuck on. See storedNamesFor.
+        for (const name of storedNamesFor(emoji)) {
+          if (!on || name !== emoji) delete day[name];
+        }
         // Prune the empty day so the document does not accumulate `{}` entries
-        // for every reaction she ever changed her mind about.
-        if (Object.keys(day).length === 0) delete doc.reactions[date];
+        // for every reaction either of us changed their mind about.
+        if (Object.keys(day).length === 0) delete bucket[date];
       });
     },
 
@@ -809,7 +1328,10 @@ function r2Store(): Store {
       if (dates.length === 0) return out;
       const { doc } = await readDoc();
       for (const d of dates) {
-        out[d] = Object.keys(doc.reactions[d] ?? {}).filter(isReactionKey);
+        out[d] = {
+          onHis: normalizeReactions(Object.keys(doc.reactions[d] ?? {})),
+          onHers: normalizeReactions(Object.keys(doc.reactionsHers?.[d] ?? {})),
+        };
       }
       return out;
     },
@@ -829,8 +1351,10 @@ const memory = {
   songs: new Map<string, SongRecord>(),
   /** Her replies. A separate Map, mirroring the separate key space above. */
   replies: new Map<string, ReplyRecord>(),
-  /** date -> (reaction key -> epoch millis) */
+  /** date -> (emoji -> epoch millis). Reactions ON HIS song. */
   reactions: new Map<string, Map<string, number>>(),
+  /** The same, ON HER song. A separate Map, mirroring the separate key space. */
+  reactionsHers: new Map<string, Map<string, number>>(),
 };
 
 function memoryStore(): Store {
@@ -861,17 +1385,23 @@ function memoryStore(): Store {
       return parseAndOrder([...memory.replies.values()], limit);
     },
 
-    async putReaction(date, key, on) {
-      const day = memory.reactions.get(date) ?? new Map<string, number>();
-      memory.reactions.set(date, day);
-      if (on) day.set(key, Date.now());
-      else day.delete(key);
+    async putReaction(date, target, emoji, on) {
+      const bucket = target === 'his' ? memory.reactions : memory.reactionsHers;
+      const day = bucket.get(date) ?? new Map<string, number>();
+      bucket.set(date, day);
+      if (on) day.set(emoji, Date.now());
+      for (const name of storedNamesFor(emoji)) {
+        if (!on || name !== emoji) day.delete(name);
+      }
     },
 
     async getReactions(dates) {
       const out = emptyReactions(dates);
       for (const d of dates) {
-        out[d] = [...(memory.reactions.get(d)?.keys() ?? [])].filter(isReactionKey);
+        out[d] = {
+          onHis: normalizeReactions([...(memory.reactions.get(d)?.keys() ?? [])]),
+          onHers: normalizeReactions([...(memory.reactionsHers.get(d)?.keys() ?? [])]),
+        };
       }
       return out;
     },
@@ -972,16 +1502,31 @@ export function getReplies(limit: number): Promise<ReplyRecord[]> {
   return store().getReplies(capped);
 }
 
-export function putReaction(date: string, key: string, on: boolean): Promise<void> {
-  // Silently ignoring an unknown key would hide a typo in a caller; the caller
-  // is expected to have validated already, so reaching here with garbage is a
-  // bug worth a thrown error rather than a no-op write.
+/**
+ * Set or clear one reaction. THE LAST GATE BEFORE AN EMOJI IS PERSISTED.
+ *
+ * Silently ignoring a bad value would hide a typo in a caller; the caller is
+ * expected to have validated already, so reaching here with garbage is a bug worth
+ * a thrown error rather than a no-op write. isReaction() is re-run here anyway —
+ * this is the function every tier is behind, and "the endpoint checked" is not a
+ * property the store can verify.
+ *
+ * NOTE WHAT THIS DOES NOT DO: it does not decide WHO may write which `target`.
+ * That is authorization and it lives in /api/us/react, where the cookie is.
+ */
+export function putReaction(
+  date: string,
+  target: Side,
+  emoji: string,
+  on: boolean,
+): Promise<void> {
   if (!isWingDate(date)) throw new StoreError(`putReaction: ${date} is not a wing date`);
-  if (!isReactionKey(key)) throw new StoreError('putReaction: unknown reaction key');
-  return store().putReaction(date, key, on);
+  if (target !== 'his' && target !== 'hers') throw new StoreError('putReaction: unknown side');
+  if (!isReaction(emoji)) throw new StoreError('putReaction: not a single emoji');
+  return store().putReaction(date, target, emoji, on);
 }
 
-export function getReactions(dates: string[]): Promise<Record<string, string[]>> {
+export function getReactions(dates: string[]): Promise<Record<string, DayReactions>> {
   const valid = dates.filter(isWingDate);
   if (valid.length === 0) return Promise.resolve(emptyReactions(valid));
   return store().getReactions(valid);
@@ -1024,17 +1569,20 @@ export interface DayPair {
   /** Her half, or null. Written only by the SESSION-authenticated endpoint. */
   hers: ReplyRecord | null;
   /**
-   * Reaction keys she gave to HIS song that day. Always an array, never
-   * undefined, so no caller writes `?? []`.
+   * The emoji on each side's song that day. Both arrays always present.
    *
-   * STILL ONE-DIRECTIONAL, and the type says so by sitting beside `his` rather
-   * than inside a per-side record. /api/us/react accepts her session token and
-   * refuses the admin one on purpose — a tap I could write as her would mean
-   * nothing — so there is no such thing as a reaction from me, and pretending the
-   * field were symmetric would just leave one half permanently empty. Making it
-   * mutual is a second endpoint plus a third key space, not a rename.
+   * NOW MUTUAL, and this field is where that change is visible. It used to be a
+   * flat `string[]` of reactions on HIS song, sitting beside `his` in this type to
+   * say out loud that there was no such thing as a reaction from him. That was
+   * honest about the old mechanism and wrong about the product: the reported bug
+   * was that one person could react to his own song and the other could not be
+   * reacted to at all.
+   *
+   * So it is a per-side record, keyed by the side the reaction is ON. Each list is
+   * dropped when the matching side has no song that day — a receipt for a track
+   * that is not on the page is worse than no receipt.
    */
-  reactions: string[];
+  reactions: DayReactions;
   /**
    * Both of us posted. This is the definition the shared streak counts.
    *
@@ -1061,24 +1609,34 @@ export function pairFrom(
   date: string,
   his: SongRecord | null,
   hers: ReplyRecord | null,
-  reactions: readonly string[] = [],
+  reactions: DayReactions = noReactions(),
 ): DayPair {
   return {
     date,
     his: his ?? null,
     hers: hers ?? null,
-    // Filtered, and dropped entirely when there is no song of his that day: a
-    // reaction is attached to his track, so keeping an orphan would render a
-    // receipt for something that is not on the page. Unknown keys are dropped
-    // rather than rendered — that is what makes retiring a reaction safe.
-    reactions: his ? reactions.filter(isReactionKey) : [],
+    /* Normalized per side, and each side dropped entirely when THAT side has no
+       song: a reaction is attached to one track, so keeping an orphan would render
+       a receipt for something that is not on the page. normalizeReactions() is what
+       applies the legacy-key migration, de-duplicates U+FE0F variants and caps the
+       count — anything it cannot make sense of is dropped rather than rendered,
+       which is what makes retiring a reaction safe. */
+    reactions: {
+      onHis: his ? normalizeReactions(reactions.onHis) : [],
+      onHers: hers ? normalizeReactions(reactions.onHers) : [],
+    },
     both: Boolean(his && hers),
   };
 }
 
+/** How many reactions a day carries in total, both directions. */
+export function reactionCount(pair: DayPair): number {
+  return pair.reactions.onHis.length + pair.reactions.onHers.length;
+}
+
 /** A day with nothing on it. For "today" before either of us has posted. */
 export function emptyPair(date: string): DayPair {
-  return pairFrom(date, null, null, []);
+  return pairFrom(date, null, null, noReactions());
 }
 
 /**
@@ -1097,7 +1655,7 @@ export function emptyPair(date: string): DayPair {
 export function buildPairs(input: {
   songs: readonly SongRecord[];
   replies: readonly ReplyRecord[];
-  reactions: Record<string, string[]>;
+  reactions: Record<string, DayReactions>;
 }): DayPair[] {
   const his = new Map<string, SongRecord>();
   for (const s of input.songs) if (isWingDate(s.date)) his.set(s.date, s);
@@ -1109,7 +1667,12 @@ export function buildPairs(input: {
     // Newest first. String comparison is correct for ISO dates.
     .sort((a, b) => b.localeCompare(a))
     .map((date) =>
-      pairFrom(date, his.get(date) ?? null, hers.get(date) ?? null, input.reactions[date] ?? []),
+      pairFrom(
+        date,
+        his.get(date) ?? null,
+        hers.get(date) ?? null,
+        input.reactions[date] ?? noReactions(),
+      ),
     );
 }
 
@@ -1127,9 +1690,12 @@ export function buildPairs(input: {
  * `Promise.all` then one dependent read, which is the minimum the data dependency
  * allows.
  *
- * Reactions are requested for HIS dates only, because that is the only kind of
- * reaction that exists (see DayPair.reactions). Asking about a day only she posted
- * on would be one extra Redis command per day, forever, to be told `[]`.
+ * Reactions are requested for the UNION of both sides' dates, which is the change
+ * mutual reactions forced here. It used to ask about HIS dates only, because that
+ * was the only kind of reaction that existed — and left that way it would have made
+ * every reaction he gave to her song invisible on every page, silently, with the
+ * write path working perfectly. De-duplicated first, so a day both of us posted on
+ * is asked about once.
  *
  * ABOUT `limit`, HONESTLY: it caps each shelf, not the number of days. Two
  * histories of `limit` records that never overlap produce up to `2 * limit` pairs,
@@ -1147,15 +1713,16 @@ export async function getExchange(
 ): Promise<{
   songs: SongRecord[];
   replies: ReplyRecord[];
-  /** date -> reaction keys. Keyed for every one of his dates, so no caller checks undefined. */
-  reactions: Record<string, string[]>;
+  /** date -> per-side emoji. Keyed for every date on EITHER side, so no caller checks undefined. */
+  reactions: Record<string, DayReactions>;
   /** Days, newest first. See the note above about how many there can be. */
   pairs: DayPair[];
   /** date -> day, for O(1) lookup of one specific day inside the window. */
   pairByDate: Record<string, DayPair>;
 }> {
   const [songs, replies] = await Promise.all([getSongs(limit), getReplies(limit)]);
-  const reactions = await getReactions(songs.map((s) => s.date));
+  const reactedDates = [...new Set([...songs.map((s) => s.date), ...replies.map((r) => r.date)])];
+  const reactions = await getReactions(reactedDates);
 
   const pairs = buildPairs({ songs, replies, reactions });
   const pairByDate: Record<string, DayPair> = {};
@@ -1201,14 +1768,22 @@ export interface Rhythm {
    */
   both: number;
   /**
-   * Days she reacted to his song.
+   * Days with at least one reaction on them, EITHER DIRECTION.
    *
-   * Kept, and kept clearly separate from `hers`, because it is the one signal in
-   * the wing that is still one-directional (see DayPair.reactions). Lumping it in
-   * with "she posted" would have quietly inflated her side using a mechanism only
-   * she has.
+   * THE MEANING CHANGED WITH THE MECHANISM, and saying so is the point of this
+   * paragraph. It used to be "days she reacted to his song", which was the only
+   * kind of reaction that existed. Now both of them can react, so a count of one
+   * direction would be a number that quietly stopped meaning what its name says
+   * the day the second direction shipped.
+   *
+   * Still kept separate from `his`/`hers`, which count POSTS. A reaction is not a
+   * post and lumping the two would inflate a number two people read as a fact.
    */
   reacted: number;
+  /** Days she reacted to his song. The old `reacted`, under an honest name. */
+  reactedOnHis: number;
+  /** Days he reacted to her song. */
+  reactedOnHers: number;
   /**
    * Consecutive days we BOTH posted, counting back from today.
    *
@@ -1234,6 +1809,8 @@ const EMPTY_RHYTHM: Rhythm = {
   hers: 0,
   both: 0,
   reacted: 0,
+  reactedOnHis: 0,
+  reactedOnHers: 0,
   streak: 0,
   streakLive: false,
   best: 0,
@@ -1274,13 +1851,17 @@ export function summarize(input: {
   const hisDates = new Set<string>();
   const herDates = new Set<string>();
   const reactedDates = new Set<string>();
+  const reactedOnHisDates = new Set<string>();
+  const reactedOnHersDates = new Set<string>();
   const bothDates = new Set<string>();
   for (const p of pairs) {
     allDates.add(p.date);
     if (p.his) hisDates.add(p.date);
     if (p.hers) herDates.add(p.date);
     if (p.both) bothDates.add(p.date);
-    if (p.reactions.length > 0) reactedDates.add(p.date);
+    if (p.reactions.onHis.length > 0) reactedOnHisDates.add(p.date);
+    if (p.reactions.onHers.length > 0) reactedOnHersDates.add(p.date);
+    if (reactionCount(p) > 0) reactedDates.add(p.date);
   }
 
   // Walk back one day at a time. Bounded by the window the caller read rather
@@ -1317,6 +1898,8 @@ export function summarize(input: {
     hers: herDates.size,
     both: bothDates.size,
     reacted: reactedDates.size,
+    reactedOnHis: reactedOnHisDates.size,
+    reactedOnHers: reactedOnHersDates.size,
     streak,
     streakLive,
     best,
@@ -1380,7 +1963,11 @@ const RESURFACE_MIN_AGE_DAYS = 14;
  *
  *   1. days we BOTH posted   — two people chose to be there. Nothing in the store
  *                              is better evidence that a day was worth having.
- *   2. days she reacted      — the next best, and the only other signal we record.
+ *   2. days SOMEBODY reacted — the next best, and the only other signal we record.
+ *                              Either direction counts: a day he answered her song
+ *                              with an emoji is exactly as much evidence as the
+ *                              mirror image, and only counting hers would have made
+ *                              the memory feature prefer his mornings.
  *   3. any old day           — because on day 20 neither of the above may exist
  *                              yet, and an empty block explaining its own absence
  *                              is worse than an unremarkable Tuesday.
@@ -1401,7 +1988,7 @@ export function resurface(input: {
   if (old.length === 0) return null;
 
   const together = old.filter((p) => p.both);
-  const answered = old.filter((p) => p.reactions.length > 0);
+  const answered = old.filter((p) => reactionCount(p) > 0);
   const pool = together.length > 0 ? together : answered.length > 0 ? answered : old;
 
   // Sorted by date so the pool's ORDER does not depend on how the store happened
