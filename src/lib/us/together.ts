@@ -286,19 +286,19 @@ export function crossSite(request: Request, url: URL): boolean {
    ========================================================================= */
 
 /**
- * Where she is. An IANA timezone name — `Europe/Lisbon`, `Europe/Berlin`,
- * `America/New_York` when she is home.
+ * Where she is. An IANA timezone name — `Europe/Paris` today, and
+ * `America/Los_Angeles` when she moves back to the west coast, at which point
+ * both clocks read the same and the two-clock line stops earning its space.
+ * That is the only change needed: this one line.
  *
- * Lisbon is a GUESS and worth checking: status.ts's NEXT_TIME.label carries
- * `'I land in Lisbon'` as one of its own examples, which is the only evidence in
- * the repository about which European city this is. If it is wrong, this line is
- * the fix and nothing else needs touching.
+ * Paris is CONFIRMED, not inferred. It was a guess (Lisbon) until Sam said so
+ * on 2026-08-22.
  *
  * A name Intl does not recognise does NOT throw — see zone(). It degrades to UTC
  * and says so loudly in the log, because a typo here would otherwise 500 the hub,
  * and a wrong clock is a much smaller failure than a missing front door.
  */
-export const HER_TZ = 'Europe/Lisbon';
+export const HER_TZ = 'Europe/Paris';
 
 /** Where he is. US west coast. */
 export const HIS_TZ = 'America/Los_Angeles';
@@ -324,7 +324,7 @@ function zone(tz: string): string {
     console.error(
       `[us] together.ts: ${JSON.stringify(tz)} is not a timezone Intl recognises. ` +
         'Falling back to UTC so the hub still renders. Fix HER_TZ / HIS_TZ — the ' +
-        'value must be an IANA name like "Europe/Lisbon", not a city or an offset.',
+        'value must be an IANA name like "Europe/Paris", not a city or an offset.',
     );
     resolved = 'UTC';
   }
@@ -886,7 +886,7 @@ export const DEFAULT_PROMPTS: readonly string[] = [
   "what's the most useless thing you know a lot about?",
   'what would you order right now if you could have anything?',
   "what's something you're looking forward to that isn't a big deal?",
-  'who crossed your mind today that you have not spoken to in ages?',
+  "who crossed your mind today that you haven’t spoken to in ages?",
   "what's the last thing you saved a photo of?",
   "what's a habit you have quietly picked up?",
   'what would your ideal Tuesday morning look like?',
@@ -894,7 +894,7 @@ export const DEFAULT_PROMPTS: readonly string[] = [
   "what's the best advice you were given that you actually took?",
   'what smell takes you straight back somewhere?',
   "what's the last thing you finished — book, show, anything?",
-  'what do you do when you cannot sleep?',
+  "what do you do when you can’t sleep?",
   "what's a rule you have that nobody else would understand?",
   'what would you spend a whole afternoon on if nobody could interrupt?',
   "what's the nicest thing a stranger has done for you?",

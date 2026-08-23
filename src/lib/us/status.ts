@@ -63,7 +63,7 @@ import type { Mark, Visits } from './marks';
             would think he had set it, and there would be no way to tell.
 
      label  What actually happens that day, in his voice, lower case, no full stop:
-            'you land in SFO', 'I land in Lisbon', 'we are in the same room'.
+            'you land in SFO', 'I land in Paris', 'we are in the same room'.
             Optional — leave it '' and the date carries the line on its own.
 
      graceDays
@@ -88,8 +88,8 @@ interface NextTime {
  * the moment somebody trusted the inference.
  */
 export const NEXT_TIME: NextTime = {
-  date: '',
-  label: '',
+  date: '2026-10-16',
+  label: 'I see you',
   graceDays: 2,
 };
 

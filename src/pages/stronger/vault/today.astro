@@ -260,11 +260,11 @@ const slots: Slot[] = [
     side: 'his',
     who: 'me',
     track: todayPair.his,
-    open: storeUnreachable ? 'I cannot see today from here.' : 'I have not picked one yet.',
+    open: storeUnreachable ? "I can’t see today from here." : "I haven’t picked one yet.",
     openSub: storeUnreachable
-      ? 'There may well be one. The shelf is not answering, so this is not evidence either way.'
-      : 'Which does not mean there is not one. It means it is not this minute.',
-    unnamed: 'a song I could not name',
+      ? "There may well be one. The shelf just isn’t answering."
+      : "Not yet, anyway.",
+    unnamed: "a song I couldn’t name",
   },
   {
     side: 'hers',
@@ -278,11 +278,11 @@ const slots: Slot[] = [
        exactly the failure the store's read policy exists to avoid. It is also
        worse than the mirror-image case on my side: mine is a claim about me, hers
        is a claim about her, made to her. */
-    open: storeUnreachable ? 'I cannot see your side from here.' : 'Your side of today is open.',
+    open: storeUnreachable ? "I can’t see your side from here." : 'Your side of today is open.',
     openSub: storeUnreachable
-      ? 'If you already posted one, it is still there. The shelf just is not answering.'
-      : 'Whenever you feel like it. Nothing here is waiting on you.',
-    unnamed: 'a song Spotify would not name',
+      ? "If you already posted one, it’s still there. The shelf just isn’t answering."
+      : "Whenever you feel like it.",
+    unnamed: "a song Spotify wouldn’t name",
   },
 ];
 
@@ -387,7 +387,7 @@ function minisFor(pair: DayPair): Mini[] {
       glyphs,
       label: [
         day,
-        `mine: ${pair.his.title || 'a song I could not name'}`,
+        `mine: ${pair.his.title || "a song I couldn’t name"}`,
         words ? `you said: ${words}` : '',
         'opens in Spotify',
       ]
@@ -407,7 +407,7 @@ function minisFor(pair: DayPair): Mini[] {
       glyphs: '',
       label: [
         day,
-        `yours: ${pair.hers.title || 'a song Spotify would not name'}`,
+        `yours: ${pair.hers.title || "a song Spotify wouldn’t name"}`,
         'opens in Spotify',
       ].join('. '),
     });
@@ -792,8 +792,8 @@ function minisFor(pair: DayPair): Mini[] {
                                     required
                                 >
                                 <p class="dj-hint" id="reply-url-hint">
-                                    Share &rarr; Copy link, from the SONG. Album and playlist links
-                                    are rejected.
+                                    Share &rarr; Copy link, from the song itself. Albums and playlists
+                                    won&rsquo;t work.
                                 </p>
                             </div>
 
@@ -833,8 +833,8 @@ function minisFor(pair: DayPair): Mini[] {
                                     aria-describedby="reply-artist-hint"
                                 >
                                 <p class="dj-hint" id="reply-artist-hint">
-                                    Spotify only tells us the title and the art. Leave it blank
-                                    and your card just omits the line.
+                                    Spotify only gives us the title and the art. Leave it blank and
+                                    we&rsquo;ll skip that line.
                                 </p>
                             </div>
 
@@ -966,8 +966,8 @@ function minisFor(pair: DayPair): Mini[] {
     ) : (
         <p class="archive-empty">
             {storeUnreachable
-                ? 'The shelf is not answering. Nothing is lost.'
-                : `Nothing here yet. This is day one, ${her}.`}
+                ? "The shelf isn’t answering. Nothing is lost."
+                : `Nothing here yet. Day one, ${her}.`}
         </p>
     )}
 

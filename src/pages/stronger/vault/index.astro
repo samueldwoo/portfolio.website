@@ -440,9 +440,9 @@ const rooms = [
     </h1>
 
     <p class="studio-lede">
-        You got in, {her}. Obviously you got in.
+        You&rsquo;re in, {her}.
         <br>
-        This is the part of the site nobody else has the address to.
+        Nobody else has this address.
     </p>
 
     {/* ============================================================
@@ -542,8 +542,8 @@ const rooms = [
                    were last here" line. It is also the state she will see most
                    often, so it has to read as deliberate. */
                 <p class="tg-think-line tg-think-line--quiet">
-                    Nothing from {them === 'her' ? her : 'him'} today. One tap is a
-                    whole message here &mdash; it does not need anything else in it.
+                    Nothing from {them === 'her' ? her : 'him'} today. One tap counts as
+                    a whole message.
                 </p>
             )}
 
@@ -751,8 +751,7 @@ const rooms = [
                 /* Without this line, "your answer is in, nothing here yet" reads
                    like a bug rather than like the mechanic. */
                 <p class="tg-q-rule">
-                    neither answer shows up until both are in &mdash; that is the whole
-                    point of it
+                    neither answer shows up until both are in
                 </p>
             )}
 
@@ -866,8 +865,8 @@ const rooms = [
 
         {list.open.length === 0 ? (
             <p class="tg-empty">
-                Nothing on the list yet. Put something stupid and specific on it &mdash;
-                that is the kind you actually end up doing.
+                Nothing on the list yet. Put something small and specific on it &mdash;
+                those are the ones we actually do.
             </p>
         ) : (
             <ul class="tg-items">
