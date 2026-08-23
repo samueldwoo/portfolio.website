@@ -90,7 +90,7 @@ import type { APIRoute } from 'astro';
 import { SESSION_SECRET } from '../../../lib/us/config';
 import { readCookie, verify } from '../../../lib/us/session';
 import { clientKey, hit } from '../../../lib/us/ratelimit';
-import { crossSite } from '../../../lib/us/together';
+import { crossSite, identify } from '../../../lib/us/together';
 import {
   StoreError,
   emptyPair,
@@ -142,7 +142,10 @@ export const MAX_NOTE = 600;
 export const MAX_ARTIST = 120;
 
 /** Where a browser form is sent afterwards, either way. */
-const DJ = '/samdrea/dj';
+/* The posting form moved onto /samdrea/vault/today, so that is where a no-JS
+   submit has to land — it used to bounce back to the booth, which after the merge
+   is a page he was never on. */
+const DJ = '/samdrea/vault/today';
 
 function json(body: unknown, status = 200, headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), {
@@ -590,10 +593,42 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
     return answer(false, 503, 'unconfigured');
   }
 
-  // ADMIN ONLY. Note that a valid session token is rejected here exactly like an
-  // anonymous caller: being allowed to read is not a step towards writing.
-  if (!verify(secret, 'admin', readCookie(cookies, 'admin', url))) {
+  /* A SESSION IS ENOUGH, and this used to demand `admin`.
+  
+     It was the ONLY endpoint in the wing that did. Photos, letters, the daily
+     question, the list, the marks and HER song all accept a session — so anybody
+     through the gate could already write nine-tenths of the site, and the passcode
+     was protecting exactly one form. That is an inconsistency, not a threat model,
+     and it cost a second credential and a second login on every device.
+  
+     THE GATE IS THE SECURITY BOUNDARY. Inside it there are two people who do not
+     need protecting from each other. So `whoami` is a LABEL rather than a
+     permission (see identify() in together.ts), and this endpoint now asks the same
+     question every other write asks: is this a request from someone who is through
+     the gate, and which of the two do they say they are?
+  
+     identify() answers both. `who` is not read from the body, so a caller cannot
+     post as the other person by editing a field — it comes from the cookie. */
+  const who = identify(cookies, url);
+  if (!who) {
     return answer(false, 401, 'unauthorized');
+  }
+
+  /* YOU MAY ONLY WRITE YOUR OWN HALF, and this line is the whole of the new
+     identity model's teeth.
+  
+     The two endpoints are per-SIDE, not per-person: this one writes his slot,
+     /api/us/reply writes hers. While this demanded `admin` that split enforced
+     itself. The moment it accepted a session, a session alone could post into his
+     slot — verified: a her-cookie POST came back `?posted=`, filing her song as
+     his. That is precisely the misattribution the whoami split exists to prevent,
+     arriving from the other direction.
+  
+     `who` is read from the cookie and never from the body, so this cannot be
+     bypassed by editing a field. If she wants to post, /api/us/reply is her
+     endpoint and the page gives her that form. */
+  if (who !== 'him') {
+    return answer(false, 403, 'not-your-half');
   }
 
   /* CROSS-SITE. Checked AFTER the cookie, so an unauthenticated probe learns

@@ -69,7 +69,7 @@ import type { APIRoute } from 'astro';
 import { SESSION_SECRET } from '../../../lib/us/config';
 import { readCookie, verify } from '../../../lib/us/session';
 import { clientKey, hit } from '../../../lib/us/ratelimit';
-import { crossSite } from '../../../lib/us/together';
+import { crossSite, identify } from '../../../lib/us/together';
 import {
   getReactions,
   isReactionKey,
@@ -143,8 +143,24 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
   }
 
   // Session, and only session. See the header.
-  if (!verify(secret, 'session', readCookie(cookies, 'session', url))) {
+  /* WHICH ONE OF THEM, not merely "someone with a session".
+  
+     This endpoint writes a reaction to his song — reacting to HIS song, which is hers to do. While /api/us/song
+     demanded an admin passcode, the two sides were kept apart by having
+     two different credentials. Now the gate is the only credential and
+     identity is a label (see whoami.ts), so the split has to be stated
+     here instead. Verified before this: a him-cookie POST was accepted,
+     filing one person's song under the other's name on the page whose
+     entire subject is whose is whose.
+  
+     `who` comes from the cookie and never from the body, so it cannot be
+     changed by editing a field. */
+  const who = identify(cookies, url);
+  if (!who) {
     return answer(false, 401, 'unauthorized');
+  }
+  if (who !== 'her') {
+    return answer(false, 403, 'not-your-half');
   }
 
   /* CROSS-SITE. Checked AFTER the cookie, so an unauthenticated probe learns

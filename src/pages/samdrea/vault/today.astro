@@ -67,7 +67,7 @@
 import { HER_NAME, SESSION_SECRET } from '../../../lib/us/config';
 import { readCookie, verify } from '../../../lib/us/session';
 import { touch } from '../../../lib/us/presence';
-import { identify } from '../../../lib/us/together';
+import { identify, type Who } from '../../../lib/us/together';
 import {
   REACTIONS,
   WING_TZ,
@@ -102,7 +102,12 @@ if (!session) return Astro.redirect('/samdrea', 302);
 
    Never awaited for its value and never able to throw: presence.ts
    resolves to undefined on every failure path, including no Upstash. */
-const _seenBy = identify(Astro.cookies, Astro.url) ?? 'her';
+/* WHICH OF THEM IS READING. Was `_seenBy`, used only to stamp presence; the page
+   now needs it for a second reason: whoever is reading gets the posting form for
+   THEIR half. The gate is the only credential in the wing, so this comes from the
+   whoami cookie via identify() — a label, not a permission. See whoami.ts. */
+const viewer: Who = identify(Astro.cookies, Astro.url) ?? 'her';
+const _seenBy = viewer;
 await touch(_seenBy);
 
 const her = HER_NAME();
@@ -189,6 +194,9 @@ const ERRORS: Record<string, string> = {
      cheaper to write than to diagnose later. */
   'bad-reaction': "that isn't one of the five. tap one of the buttons instead?",
   'cross-site': 'that came from somewhere I do not recognise.',
+  /* Only reachable if the identity switched between rendering the page and
+     submitting it — e.g. flipped in another tab. Names the fix. */
+  'not-your-half': 'that slot belongs to the other one of us. Yours is the other form.',
 };
 const errorText = errorCode ? (ERRORS[errorCode] ?? "that didn't go through. try again?") : '';
 
@@ -796,7 +804,97 @@ function minisFor(pair: DayPair): Mini[] {
                     anyway — it is a primary key and this page is not trusted
                     to have got it right.
                     -------------------------------------------------------- */}
-                {slot.side === 'hers' && (
+                {/* HIS HALF, POSTABLE FROM HERE.
+                    It used to live on /samdrea/dj behind a second credential, for
+                    no reason except the order things were built: the site started
+                    one-directional and his end never moved when it went mutual. So
+                    "one day, two songs" was split across two pages and needed two
+                    logins.
+
+                    Gated on the VIEWER, not just the side — she is shown his card
+                    but never his form, because a form she can see and never use is
+                    worse than no form. Same endpoint, same fields, same caps as
+                    hers; /api/us/song now takes a session like every other write
+                    and reads `who` from the cookie rather than the body. */}
+                {slot.side === 'his' && viewer === 'him' && (
+                    <details class="reply-details" open={!slot.track && !storeUnreachable}>
+                        <summary class="reply-summary">
+                            {slot.track ? 'swap yours for another one' : 'pick yours'}
+                        </summary>
+
+                        <form class="dj-form" id="mine-form" method="post" action="/api/us/song">
+                            <input type="hidden" name="date" value={todayPair.date}>
+
+                            <div class="dj-field">
+                                <label class="dj-label" for="mine-url">Spotify link</label>
+                                {/* type="text" with inputmode="url", NOT type="url":
+                                    the native validator rejects `spotify:track:...`,
+                                    which the endpoint accepts. */}
+                                <input
+                                    class="dj-input"
+                                    id="mine-url"
+                                    name="url"
+                                    type="text"
+                                    inputmode="url"
+                                    autocomplete="off"
+                                    autocapitalize="none"
+                                    autocorrect="off"
+                                    spellcheck="false"
+                                    placeholder="open.spotify.com/track/..."
+                                    aria-describedby="mine-url-hint"
+                                    required
+                                >
+                                <p class="dj-hint" id="mine-url-hint">
+                                    Share &rarr; Copy link, from the song itself. Albums and playlists
+                                    won&rsquo;t work.
+                                </p>
+                            </div>
+
+                            <div class="dj-field">
+                                <label class="dj-label" for="mine-note">
+                                    Your note <span class="dj-opt">&mdash; why this one</span>
+                                </label>
+                                <textarea
+                                    class="dj-textarea"
+                                    id="mine-note"
+                                    name="note"
+                                    rows="4"
+                                    maxlength="600"
+                                ></textarea>
+                            </div>
+
+                            <div class="dj-field">
+                                <label class="dj-label" for="mine-artist">
+                                    Artist <span class="dj-opt">&mdash; optional</span>
+                                </label>
+                                <input
+                                    class="dj-input"
+                                    id="mine-artist"
+                                    name="artist"
+                                    type="text"
+                                    maxlength="120"
+                                    autocapitalize="words"
+                                    aria-describedby="mine-artist-hint"
+                                >
+                                <p class="dj-hint" id="mine-artist-hint">
+                                    Spotify only gives us the title and the art. Leave it blank and
+                                    we&rsquo;ll skip that line.
+                                </p>
+                            </div>
+
+                            <button class="dj-submit" id="mine-submit" type="submit">
+                                {slot.track ? 'swap it' : 'post it'}
+                            </button>
+                            <p class="notice" id="mine-status" role="status" aria-live="polite" hidden></p>
+                        </form>
+                    </details>
+                )}
+
+                {/* AND GATED ON THE VIEWER TOO, mirroring his above. Without
+                    this he was shown HER posting form as well as his own — each of
+                    them posts their own half, and /api/us/reply would refuse him
+                    anyway, so it was a form he could see and never use. */}
+                {slot.side === 'hers' && viewer === 'her' && (
                     <details class="reply-details" open={!slot.track && !storeUnreachable}>
                         <summary class="reply-summary">{herSummary}</summary>
 
