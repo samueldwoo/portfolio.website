@@ -1612,12 +1612,36 @@ a.bubble.ticker:hover::after { transform: translate(2px, -2px); opacity: 1; }
 }
 .case-tags { margin-top: 0; }
 
-/* Even project grid variant (teasers, three cards).
+/* Even project grid variant (teasers).
    Subtle vertical stagger + alternating fills so it isn't a rigid uniform grid
-   (keeps the "no copy-paste cards" design language on the projects page too). */
+   (keeps the "no copy-paste cards" design language on the projects page too).
+
+   COLUMN COUNT FOLLOWS THE CARD COUNT. This was a hard `repeat(3, 1fr)`, which
+   was right while there were three teasers and wrong the moment there were not:
+   two work projects were removed from that row (they were internal, and a
+   titled project card is a disclosure a résumé bullet is not), and a single card
+   left in a three-column grid renders at one third width — a lonely stub beside
+   two empty tracks, which reads as a layout bug rather than a short list.
+   `:only-child` / `:nth-last-child(2):first-child` are the two cases that can
+   exist here, so both are stated. The stagger rules below key off nth-child and
+   are simply inert at one card. */
 .project-grid--even {
     grid-template-columns: repeat(3, 1fr);
     align-items: start;
+}
+/* One teaser: give it a readable measure and let it sit at the column's left
+   edge, rather than stretching a single card across the full content width. */
+.project-grid--even > .project-card:only-child {
+    grid-column: 1 / -1;
+    max-width: min(var(--card-measure, 46ch), 100%);
+}
+/* Two teasers: an even pair, no third track to leave empty. */
+.project-grid--even > .project-card:first-child:nth-last-child(2),
+.project-grid--even > .project-card:first-child:nth-last-child(2) ~ .project-card {
+    grid-column: auto;
+}
+.project-grid--even:has(> .project-card:first-child:nth-last-child(2)) {
+    grid-template-columns: repeat(2, 1fr);
 }
 .project-grid--even .project-card { grid-column: auto; grid-row: auto; }
 .project-grid--even .project-card:nth-child(2) { margin-top: clamp(20px, 3vw, 40px); }
