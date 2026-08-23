@@ -2189,9 +2189,6 @@ a.bubble.ticker:hover::after { transform: translate(2px, -2px); opacity: 1; }
    margin narrows and they drift behind the content column, which is fine: they
    are z-index 0 under `.band-inner`, and they are already hidden entirely below
    the mobile breakpoint. */
-.shape-field--interests { top: 4%;   right: 0; width: min(16vw, 230px); }
-.shape-field--projects  { bottom: 2%; left: 0; width: min(16vw, 230px); }
-.shape-field--connect   { top: 10%;  right: 0; width: min(15vw, 215px); }
 /* HEADROOM, not 0. This was the only shape field pinned flush to its band's
    top edge (the others sit at 4% / 2% / 10% / 50%), and it is the one the
    owner's "shapes sometimes get cut off" report survives on.
@@ -2204,7 +2201,6 @@ a.bubble.ticker:hover::after { transform: translate(2px, -2px); opacity: 1; }
    exactly why it read as intermittent rather than broken.
    Measured at forced worst-case excursion: 4 clipped children (one entirely
    invisible) before, 0 after, at 1024/1280/1440/1512/1920/2560/3840. */
-.shape-field--cooking   { top: clamp(24px, 2.2vw, 34px); right: 0; width: min(15vw, 215px); }
 .shape-field--travel    { top: 50%;  right: 0; width: min(18vw, 260px); transform: translateY(-50%); }
 
 @media (max-width: 1080px) {

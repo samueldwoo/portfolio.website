@@ -99,22 +99,7 @@ const formConfigured = !FORM_ENDPOINT.includes('YOUR_FORM_ID');
              uninterrupted sheet. All the colour inversion lives in
              `.band--dark` in styles.css (local custom-property overrides),
              so the markup below is unchanged by it. */}
-        <section id="interests" class="band band--shapes band--dark" aria-labelledby="interests-title">
-            {/* Decorative line-art field: draws itself in on enter, then drifts.
-                 Same sage stroke register as the hero signature motif. */}
-            <svg class="shape-field shape-field--interests" viewBox="0 0 260 260" fill="none" aria-hidden="true">
-                <g class="shape-drift">
-                    <circle class="shape-ring" cx="132" cy="120" r="86" />
-                    <circle class="shape-ring" cx="132" cy="120" r="58" />
-                    <path class="shape-line" d="M46 120 C 90 40, 174 40, 218 120" />
-                    <path class="shape-line" d="M46 120 C 90 200, 174 200, 218 120" />
-                    <path class="shape-line" d="M132 34 L 132 206" />
-                    <circle class="shape-dot" cx="132" cy="34" r="4.5" />
-                    <circle class="shape-dot shape-dot--soft" cx="218" cy="120" r="4" />
-                    <circle class="shape-dot shape-dot--soft" cx="46" cy="120" r="4" />
-                    <path class="shape-tick" d="M24 236 L 40 236 M52 236 L 68 236 M80 236 L 96 236 M108 236 L 124 236 M136 236 L 152 236 M164 236 L 180 236" />
-                </g>
-            </svg>
+        <section id="interests" class="band band--dark" aria-labelledby="interests-title">
             {/* data-rail: the rotated mono running head in the band's left
                  margin (layout.css). Decorative — it repeats the <h2> below,
                  is drawn with generated content so it is never in the a11y
@@ -213,17 +198,7 @@ const formConfigured = !FORM_ENDPOINT.includes('YOUR_FORM_ID');
              sheet laid on the page rather than another full-bleed slab. It
              sits between the two dark plates, which is what makes the
              bleed/inset alternation legible. */}
-        <section id="projects" class="band band--shapes band--plate" aria-labelledby="projects-title">
-            {/* Stacked-cards / layered-sheet abstraction, in line-art */}
-            <svg class="shape-field shape-field--projects" viewBox="0 0 240 240" fill="none" aria-hidden="true">
-                <g class="shape-drift">
-                    <path class="shape-line" d="M30 88 L 120 44 L 210 88 L 120 132 Z" />
-                    <path class="shape-line" d="M30 128 L 120 84 L 210 128 L 120 172 Z" />
-                    <path class="shape-line" d="M30 168 L 120 124 L 210 168 L 120 212 Z" />
-                    <circle class="shape-dot" cx="120" cy="44" r="4.5" />
-                    <circle class="shape-dot shape-dot--soft" cx="120" cy="212" r="4" />
-                </g>
-            </svg>
+        <section id="projects" class="band band--plate" aria-labelledby="projects-title">
             <div class="band-inner" data-rail="02 / Projects">
                 <div class="section-head">
                     <h2 id="projects-title" class="section-title reveal reveal-clip">Projects</h2>
@@ -379,21 +354,7 @@ const formConfigured = !FORM_ENDPOINT.includes('YOUR_FORM_ID');
         </section>
 
         {/* CONNECT */}
-        <section id="connect" class="band band--shapes" aria-labelledby="connect-title">
-            {/* Signal / node-graph abstraction — "reach out" in line-art */}
-            <svg class="shape-field shape-field--connect" viewBox="0 0 240 240" fill="none" aria-hidden="true">
-                <g class="shape-drift">
-                    <circle class="shape-ring" cx="120" cy="120" r="34" />
-                    <circle class="shape-ring" cx="120" cy="120" r="66" />
-                    <circle class="shape-ring" cx="120" cy="120" r="98" />
-                    <path class="shape-line" d="M120 120 L 214 66" />
-                    <path class="shape-line" d="M120 120 L 40 174" />
-                    <path class="shape-line" d="M120 120 L 168 208" />
-                    <circle class="shape-dot" cx="214" cy="66" r="5" />
-                    <circle class="shape-dot shape-dot--soft" cx="40" cy="174" r="4.5" />
-                    <circle class="shape-dot shape-dot--soft" cx="168" cy="208" r="4" />
-                </g>
-            </svg>
+        <section id="connect" class="band" aria-labelledby="connect-title">
             <div class="band-inner" data-rail="04 / Connect">
                 <div class="section-head">
                     <h2 id="connect-title" class="section-title reveal reveal-clip">Connect</h2>

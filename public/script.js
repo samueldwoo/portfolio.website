@@ -52,9 +52,9 @@
        media query cannot stop a JS timer or an anime.js `loop: true`.
 
        Two things here run FOREVER rather than merely resting somewhere wrong,
-       which is what makes them worth a live listener: the ambient `.bg-shape`
-       drift (`loop: true`) and the hero subtitle's setInterval. Both register a
-       stop below.
+       which is what makes it worth a live listener: the hero subtitle's
+       setInterval. (An ambient `.bg-shape` drift used to be the second, but its
+       markup never existed and the tween has been removed.)
 
        Reassigning `reduceMotion` is deliberate and does useful work beyond the
        two callbacks: `goToSection` stops smooth-scrolling, `closeDrawer` and
@@ -1410,31 +1410,11 @@
         });
     }
 
-    /* ---------- Ambient drifting background shapes ---------- */
-    if (animate) {
-        var bgShapes = document.querySelectorAll(".bg-shapes .bg-shape");
-        var drift = null;
-        if (bgShapes.length) {
-            drift = window.anime({
-                targets: ".bg-shapes .bg-shape",
-                translateX: function () { return [window.anime.random(-16, 16), window.anime.random(-16, 16)]; },
-                translateY: function () { return [window.anime.random(-12, 12), window.anime.random(-12, 12)]; },
-                opacity: [{ value: [0.04, 0.10] }, { value: 0.06 }],
-                duration: function () { return window.anime.random(15000, 24000); },
-                direction: "alternate",
-                loop: true,
-                easing: "easeInOutSine",
-                delay: window.anime.stagger(1400)
-            });
-        }
-        document.addEventListener("visibilitychange", function () {
-            if (!drift) return;
-            if (document.hidden) drift.pause(); else drift.play();
-        });
-        /* `loop: true` — the only tween in this file with no end. A preference
-           flipped mid-session has to stop it; see the registry at the top. */
-        onReduceMotion(function () { if (drift) drift.pause(); });
-    }
+    /* Ambient background-shape drift: REMOVED. It animated
+       `.bg-shapes .bg-shape`, which exists in no markup on any page (0 hits in
+       src/ and 0 in every built page) — so it started an endless `loop: true`
+       tween over an empty target list and registered a reduced-motion stop for
+       it. Same dead-selector class as the count-up numerals above. */
 
     /* ---------- Rotating hero subtitle ----------
        WCAG 2.2.2 Pause, Stop, Hide (Level A): moving or blinking information
