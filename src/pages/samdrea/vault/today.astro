@@ -282,20 +282,58 @@ interface Slot {
   unnamed: string;
 }
 
+/* WHOSE SIDE IS WHOSE, FROM THE READER'S SIDE.
+
+   Every person label on this page used to be hardcoded in HIS voice — `who: 'me'`
+   on the his slot, `who: 'you'` on hers, "I haven't picked one yet", "I sent" /
+   "you sent" — because the page was written when the wing was one-directional and
+   he was the only one who ever posted.
+
+   Now both of them read it, and the labels never flipped. Verified against the live
+   store with one song on each side: BOTH viewers saw the identical headings `me`
+   and `you`, so when she opened it, HIS song was labelled "me" and hers "you". The
+   data was always right; the words on top of it were his.
+
+   So: your own side says "you", the other side says their name. The same scheme
+   day.astro already uses for the photo frames, and for the same reason — "me" is
+   only meaningful if you know whose voice the page is in, and now there are two. */
+const theirWord = viewer === 'her' ? 'Sam' : (her || 'her');
+const mineIsHis = viewer === 'him';
+
+/** A slot's empty-state sentences, told from the reader's side. */
+function emptyFor(isMine: boolean): { open: string; openSub: string } {
+  if (storeUnreachable) {
+    /* BOTH SIDES HEDGE ON AN OUTAGE, and the reader's OWN side is the one that has
+       to. getExchange() throwing yields an empty pair, so an unhedged slot would
+       say "your side of today is open" and offer the form about a day they may
+       already have posted on — the page stating a fact about the reader's own
+       history that it cannot currently see. */
+    return isMine
+      ? {
+          open: 'I can’t see your side from here.',
+          openSub: 'If you already posted one, it’s still there. The shelf just isn’t answering.',
+        }
+      : {
+          open: `I can’t see ${theirWord}’s side from here.`,
+          openSub: 'There may well be one. The shelf just isn’t answering.',
+        };
+  }
+  return isMine
+    ? { open: 'Your side of today is open.', openSub: 'Whenever you feel like it.' }
+    : { open: `Nothing from ${theirWord} yet today.`, openSub: 'Not yet, anyway.' };
+}
+
 const slots: Slot[] = [
   {
     side: 'his',
-    who: 'me',
+    who: mineIsHis ? 'you' : theirWord,
     track: todayPair.his,
-    open: storeUnreachable ? "I can’t see today from here." : "I haven’t picked one yet.",
-    openSub: storeUnreachable
-      ? "There may well be one. The shelf just isn’t answering."
-      : "Not yet, anyway.",
-    unnamed: "a song I couldn’t name",
+    ...emptyFor(mineIsHis),
+    unnamed: 'a song Spotify wouldn’t name',
   },
   {
     side: 'hers',
-    who: 'you',
+    who: mineIsHis ? theirWord : 'you',
     track: todayPair.hers,
     /* BOTH SIDES HEDGE ON AN OUTAGE, and hers is the one that has to.
        When getExchange() throws, todayPair is emptyPair() — so an unhedged empty
@@ -305,11 +343,8 @@ const slots: Slot[] = [
        exactly the failure the store's read policy exists to avoid. It is also
        worse than the mirror-image case on my side: mine is a claim about me, hers
        is a claim about her, made to her. */
-    open: storeUnreachable ? "I can’t see your side from here." : 'Your side of today is open.',
-    openSub: storeUnreachable
-      ? "If you already posted one, it’s still there. The shelf just isn’t answering."
-      : "Whenever you feel like it.",
-    unnamed: "a song Spotify wouldn’t name",
+    ...emptyFor(!mineIsHis),
+    unnamed: 'a song Spotify wouldn’t name',
   },
 ];
 
@@ -373,7 +408,12 @@ const sideCell = (label: string, count: number) =>
             : undefined,
       }
     : null;
-for (const cell of [sideCell('I sent', rhythm.his), sideCell('you sent', rhythm.hers)]) {
+/* Also from the reader's side. `rhythm.his` is always Sam's count and
+   `rhythm.hers` is always hers — the DATA is fixed; only the label flips. */
+for (const cell of [
+  sideCell(mineIsHis ? 'you sent' : `${theirWord} sent`, rhythm.his),
+  sideCell(mineIsHis ? `${theirWord} sent` : 'you sent', rhythm.hers),
+]) {
   if (cell) stats.push(cell);
 }
 
