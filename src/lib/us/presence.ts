@@ -140,9 +140,11 @@ function read(raw: unknown, nowMs: number): Presence | null {
  * two facts describe the same instant.
  *
  * The write is unconditional and the read is of the OTHER key, which together
- * make the "he is here" line impossible to produce from his own visit. That
- * mistake would be invisible in testing, because the person testing it is
- * exactly the person whose own footprints would be reflected back at them.
+ * make the "he is here" line impossible to produce from his own visit — SO LONG AS
+ * a browser is only ever one of them. It is not: /api/us/whoami switches identity
+ * in place, and a stamp left under the abandoned identity is read straight back as
+ * the other person. That is why switching calls forget(), and why the reasoning
+ * lives there rather than here.
  */
 export async function touchAndRead(
   viewer: Who,
@@ -164,9 +166,71 @@ export async function touchAndRead(
  * else arriving would pull her out of the thing she came to read. But time spent
  * there is still time spent here, so they stamp without reading. Without this,
  * twenty minutes in the studio would look like twenty minutes away.
+ *
+ * IT OVERWRITES, AND THAT IS ALREADY TRUE. A plain `SET` replaces the value and
+ * resets the TTL, so there is exactly one timestamp per person and it is always
+ * the most recent one. Nothing here accumulates: no list, no counter, no history.
+ * Worth stating because "should this overwrite rather than accumulate" is the
+ * obvious question to ask of a per-identity key, and the answer is that the
+ * accumulation this feature could have suffered from is not two stamps for one
+ * person — it is one stamp left behind under the WRONG person. See forget().
  */
 export async function touch(viewer: Who, nowMs: number = Date.now()): Promise<void> {
   await redis([['SET', KEY(viewer), nowMs, 'EX', TTL_SEC]]);
+}
+
+/**
+ * Delete a presence stamp, because the person who left it is no longer that person.
+ *
+ * ---------------------------------------------------------------------------
+ * THE BUG THIS EXISTS FOR, REPORTED FROM A PHONE
+ *
+ * touchAndRead() and touch() stamp `us:presence:<who>` for whoever the reader is
+ * AT THAT MOMENT, and identity in this wing is a DECLARATION that can be changed
+ * mid-session (see /api/us/whoami). Those two facts collide:
+ *
+ *   1. Sam browses the wing as HER — to see what she sees, which is the only way
+ *      to check her copy. Every page render stamps `us:presence:her` with his
+ *      clock. He cannot avoid it; the stamp is a side effect of looking.
+ *   2. He taps "not Andrea?" and becomes Sam.
+ *   3. The hub, as Sam, reads the OTHER key — `us:presence:her` — finds a
+ *      timestamp five seconds old, and tells him "she is in here too, right now."
+ *
+ * It is his own footprint, in her shoes, read back to him as her. The comment on
+ * touchAndRead() claims the write/read asymmetry makes that "impossible to produce
+ * from his own visit". That was true for one identity per browser and stopped being
+ * true the moment identity became switchable, which is exactly the mistake it
+ * warned about — invisible in testing, because the tester is the person whose own
+ * footprints are being reflected.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY DELETE RATHER THAN REASSIGN
+ *
+ * Moving the stamp to the new identity would be worse. It asserts a second true
+ * thing to fix a false one, and the new identity is about to stamp itself anyway
+ * on the very next page render — the 303 from the switch lands on the hub, which
+ * calls touchAndRead(). So the reassignment is redundant, and a DEL is the only
+ * operation whose failure mode is silence rather than a different wrong sentence.
+ *
+ * ---------------------------------------------------------------------------
+ * IT CAN DELETE A TRUE STAMP, AND THAT IS THE RIGHT TRADE
+ *
+ * If she is genuinely reading the wing on her own phone at the moment he stops
+ * being her, this throws her real stamp away. The store cannot tell her footprint
+ * from his — they are the same key holding the same kind of number — so there is
+ * no version of this that keeps hers and drops his.
+ *
+ * The cost of deleting hers is that he is not told she is here until her next page
+ * render, which is at most a scroll away and is bounded by RIGHT_NOW_MS anyway. The
+ * cost of keeping his is a sentence that is a lie about the person the whole wing
+ * is for. A missed true positive here is a nicety arriving late; a false positive
+ * is the feature not working.
+ *
+ * Only ever called for the identity being ABANDONED, never for the other one — the
+ * two keys coexisting is not the bug, it is the feature.
+ */
+export async function forget(who: Who): Promise<void> {
+  await redis([['DEL', KEY(who)]]);
 }
 
 /**

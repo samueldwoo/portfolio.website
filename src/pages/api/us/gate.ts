@@ -20,6 +20,19 @@
  *   - Behave differently for "no such question" vs "wrong answer" (both are a
  *     plain miss, so probing the question count tells you nothing).
  *   - Open when misconfigured. Missing secrets is a 503, never a pass.
+ *   - Take a NAME. It accepts an optional passcode and DERIVES the name from it;
+ *     `who` is never read from a request body anywhere in this wing.
+ *
+ * ---------------------------------------------------------------------------
+ * THE OPTIONAL IDENTITY PROOF
+ *
+ * Passing the questions makes you HER, which is correct — the wing is for her.
+ * Sam passes the same gate, so he arrived as her and had to correct it afterwards.
+ * An optional `passcode` alongside the final answer lets him arrive as himself in
+ * one pass: correct, and the endpoint mints identity and admin next to the session;
+ * absent, and nothing below changes; present and wrong, and it mints NOTHING and
+ * says so, because opening as her would be the exact silent mis-identification the
+ * field exists to prevent. See step 6.
  * ---------------------------------------------------------------------------
  */
 
@@ -27,8 +40,10 @@ import type { APIRoute } from 'astro';
 import { crossSite } from '../../../lib/us/together';
 import { isAccepted } from '../../../lib/us/answers.mjs';
 import {
+  ADMIN_PASSCODE_DIGEST,
   ANSWER_PEPPER,
   SESSION_SECRET,
+  checkAdminPasscode,
   isConfigured,
   loadAnswers,
   loadQuestions,
@@ -43,6 +58,26 @@ export const prerender = false;
 /** Attempts per window, per IP. Generous for her, useless for a wordlist. */
 const RATE_LIMIT = 12;
 const RATE_WINDOW_SEC = 600;
+
+/**
+ * The passcode's budget, and it is DELIBERATELY THE SAME BUCKET /api/us/admin USES.
+ *
+ * The gate now accepts an optional admin passcode (see step 6), which means there
+ * are two doors a guess at that one secret can be posted through. Giving this one
+ * its own counter would have handed an attacker 12 tries here PLUS 8 at
+ * /api/us/admin — twenty guesses per ten minutes at a credential whose whole
+ * defence is that it is only guessable, never derivable.
+ *
+ * One key (`admin:<ip>`, identical to admin.ts's) means the budget belongs to the
+ * SECRET rather than to the endpoint, so opening a second door does not widen the
+ * hole. The gate's own 12/600s still applies on top and is charged first, so a
+ * wrong passcode costs an attempt on both counters and there is no free probe.
+ *
+ * She never touches this: the passcode is optional, absent from her request, and
+ * this only runs when one was actually supplied.
+ */
+const PASSCODE_LIMIT = 8;
+const PASSCODE_WINDOW_SEC = 600;
 
 /**
  * Fixed pause on every REJECTED answer. Two jobs: it caps the practical guess
@@ -110,10 +145,20 @@ export const POST: APIRoute = async ({ request, cookies, url, clientAddress }) =
   // ---- 3. Parse, defensively --------------------------------------------
   let step: number;
   let answer: string;
+  /* THE OPTIONAL IDENTITY PROOF. Empty for her, on every request she will ever
+     make — the field that carries it is not even rendered unless the gate is asked
+     for it (see /samdrea's `?me`). It is read here and evaluated in step 6, because
+     it only means anything once the questions are actually done. */
+  let passcode: string;
   try {
-    const body = (await request.json()) as { step?: unknown; answer?: unknown };
+    const body = (await request.json()) as {
+      step?: unknown;
+      answer?: unknown;
+      passcode?: unknown;
+    };
     step = Number(body?.step);
     answer = typeof body?.answer === 'string' ? body.answer : '';
+    passcode = typeof body?.passcode === 'string' ? body.passcode : '';
   } catch {
     return json({ ok: false, error: 'bad-request' }, 400);
   }
@@ -124,6 +169,10 @@ export const POST: APIRoute = async ({ request, cookies, url, clientAddress }) =
   // Cap the answer length before hashing it. Unbounded input into an HMAC is a
   // free CPU-burn vector, and no real answer is 4KB.
   if (answer.length > 200) answer = answer.slice(0, 200);
+  /* Same cap, same reason. NOT trimmed, unlike an answer: checkAdminPasscode
+     compares raw so that case and punctuation still count, and silently eating a
+     leading space would make a correct passcode fail with no clue why. */
+  if (passcode.length > 200) passcode = passcode.slice(0, 200);
 
   const stepValid = Number.isInteger(step) && step >= 0 && step < questions.length;
 
@@ -179,8 +228,92 @@ export const POST: APIRoute = async ({ request, cookies, url, clientAddress }) =
     return json({ ok: true, done: false, next, solved });
   }
 
+  /* ---------------------------------------------------------------------------
+     THE OPTIONAL IDENTITY PROOF, CHECKED HERE AND NOWHERE ELSE.
+
+     WHAT IT IS FOR. Everyone who answers the three questions is treated as HER,
+     which is right — she is who the wing is for, and being her is the absence of a
+     cookie rather than a claim. But Sam passes the same gate, so he landed as her
+     and had to tap "not Andrea?" afterwards. That is one tap too many AND it is the
+     window the stale-presence bug lived in: he browsed as her first, and the
+     footprint he left in her slot was read back to him as her.
+
+     So: an optional field. Supply the admin passcode and the gate mints identity in
+     the same pass. Supply nothing and this whole block is skipped and the endpoint
+     behaves exactly as it did before, byte for byte.
+
+     WHY THIS IS NOT A SECOND CREDENTIAL. It is the SAME one — the passcode
+     /api/us/admin has always taken, against the same US_ADMIN_PASSCODE_DIGEST, via
+     the same constant-time digest comparison in config.ts. Nothing new was invented
+     and there is nothing extra to rotate.
+
+     AND `who` IS STILL NEVER READ FROM A BODY. This does not accept a name; it
+     accepts a SECRET and derives the name from whether that secret verifies. The
+     body cannot say "I am Sam" — it can only prove it. Every reader of identity
+     still goes through identify(), which reads cookies and nothing else.
+     --------------------------------------------------------------------------- */
+  const provedHim = passcode.length > 0;
+
+  if (provedHim) {
+    // The name of the variable rather than "wrong passcode": being told you typed
+    // it wrong for an hour when the real problem is an unset environment variable
+    // is a genuinely bad afternoon. Same call admin.ts makes.
+    if (!ADMIN_PASSCODE_DIGEST()) {
+      console.error('[us] gate got a passcode but US_ADMIN_PASSCODE_DIGEST is missing.');
+      return json({ ok: false, error: 'passcode-unconfigured' }, 503);
+    }
+
+    /* SHARED BUDGET WITH /api/us/admin — see PASSCODE_LIMIT. Charged BEFORE the
+       comparison, so a correct passcode costs an attempt too and the counter
+       cannot be read as a hit/miss oracle. */
+    const pass = await hit(
+      `admin:${clientKey(request, clientAddress)}`,
+      PASSCODE_LIMIT,
+      PASSCODE_WINDOW_SEC,
+    );
+    if (!pass.ok) {
+      return json({ ok: false, error: 'rate', retryAfter: pass.retryAfter }, 429, {
+        'Retry-After': String(pass.retryAfter),
+      });
+    }
+
+    if (!checkAdminPasscode(passcode)) {
+      await sleep(REJECT_DELAY_MS);
+      // Never the attempt itself. A near-miss in a log file is most of a credential
+      // in a log file.
+      console.warn('[us] gate passcode rejected — refusing to open as her instead.');
+
+      /* NO SESSION IS MINTED, and that is the point of the feature rather than a
+         side effect of it. Falling through to "well, you answered the questions, so
+         you are Andrea" is EXACTLY the silent mis-identification this exists to
+         end: he would land on the hub as her, browse, stamp her presence, and find
+         out only by reading the footer.
+
+         The solved answers are kept in the progress token so retrying costs one
+         field and not three questions. `progress` is signed and lives 20 minutes,
+         and minting still requires a correct answer on THIS request as well as a
+         complete `solved` — so persisting it here grants nothing a correct final
+         answer did not already grant. */
+      const keep = sign(secret, 'progress', TTL.progress, { solved, tries: progress.tries });
+      writeCookie(cookies, url, 'progress', keep, TTL.progress);
+
+      return json({ ok: false, error: 'bad-passcode', done: false }, 401);
+    }
+  }
+
   const session = sign(secret, 'session', TTL.session);
   writeCookie(cookies, url, 'session', session, TTL.session);
+
+  if (provedHim) {
+    /* THE SAME THREE COOKIES /api/us/admin MINTS, WITH THE SAME THREE LIFETIMES,
+       and the split is load-bearing rather than tidy — see Purpose in session.ts.
+       12 hours to post, 30 days of access, 180 days of identity. They were one
+       cookie once, and because the posting half expired first he silently became
+       Andrea overnight and his photographs were filed as hers. */
+    writeCookie(cookies, url, 'whoami', sign(secret, 'whoami', TTL.whoami), TTL.whoami);
+    writeCookie(cookies, url, 'admin', sign(secret, 'admin', TTL.admin), TTL.admin);
+  }
+
   clearCookie(cookies, 'progress');
 
   return json({ ok: true, done: true, redirect: '/samdrea/vault' });

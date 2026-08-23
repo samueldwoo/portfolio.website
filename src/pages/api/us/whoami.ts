@@ -50,6 +50,7 @@ import { SESSION_SECRET } from '../../../lib/us/config';
 import { TTL, clearCookie, sign, writeCookie } from '../../../lib/us/session';
 import { clientKey, hit } from '../../../lib/us/ratelimit';
 import { crossSite, identify } from '../../../lib/us/together';
+import { forget } from '../../../lib/us/presence';
 
 export const prerender = false;
 
@@ -134,6 +135,32 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
        which is right, because she is who the wing is for. */
     clearCookie(cookies, 'whoami');
   }
+
+  /* ---------------------------------------------------------------------------
+     AND DROP THE FOOTPRINT THE ABANDONED IDENTITY LEFT BEHIND.
+
+     THE BUG, reported from her phone as "it still says she's logged in when it's
+     really me": presence is stamped on EVERY vault page render, keyed by whoever
+     the reader is at that moment (presence.ts). Browsing as her — which is the only
+     way to check her copy — stamps `us:presence:her` with his clock. Switching
+     identity used to touch nothing but a cookie, so the hub then read the OTHER
+     key, found that stamp seconds old, and told him "she is in here too, right
+     now." About himself.
+
+     Clearing it is the switch's job and not the hub's, because the hub cannot tell
+     a stale stamp from a live one — that is the whole point of a timestamp. The
+     moment identity changes is the only moment anything in the system KNOWS the
+     record is no longer about the person whose slot it sits in.
+
+     ONLY WHEN IDENTITY ACTUALLY CHANGES. `who=her` posted while already her is a
+     no-op, and deleting `us:presence:him` there would throw away HIS genuinely live
+     stamp — the other key existing is the feature, not the fault.
+
+     Never awaited for a value and never able to throw: every function in
+     presence.ts resolves rather than rejects. A store that is down means the
+     record expires on its own inside the hour instead of now, which is a late fix
+     rather than a broken response. */
+  if (want !== current) await forget(current);
 
   return answer(true, 200, 'switched', { who: want });
 };

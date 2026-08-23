@@ -64,7 +64,13 @@ const already = secret ? verify(secret, 'session', readCookie(Astro.cookies, 'se
 const NEXT_ALLOWED = new Set([
   '/samdrea/vault',
   '/samdrea/vault/today',
-  '/samdrea/vault/room',
+  /* '/samdrea/vault/room' IS DELIBERATELY ABSENT. The 3D studio is benched — it
+     is off the hub and the board replaced it — but leaving it here meant an
+     anonymous hit on the room URL 302'd to the gate with ?next=...vault/room,
+     and passing the gate then delivered her STRAIGHT INTO the unfinished room.
+     Any stale bookmark or installed-app tile did it. Removing the entry makes
+     `next` fall through to the hub, which is where she should land anyway.
+     The route itself still works by direct URL, so it can still be finished. */
   '/samdrea/vault/letters',
   '/samdrea/vault/day',
   '/samdrea/dj',
@@ -91,6 +97,54 @@ const missing = import.meta.env.DEV ? missingConfig() : [];
  * completing the attack for them.
  */
 const showPlaceholderWarning = import.meta.env.DEV && gateNeedsReview();
+
+/**
+ * `?me` — the one extra field, and the reason it is behind a query parameter.
+ *
+ * ---------------------------------------------------------------------------
+ * THE PROBLEM
+ *
+ * Everyone who answers the three questions is treated as HER, which is right. But
+ * Sam answers the same three questions, so he arrived as Andrea and had to tap
+ * "not Andrea?" on the hub afterwards — a second step, on every device, and the
+ * window in which he browsed her pages leaving footprints in her name.
+ *
+ * He asked for the fix to be an optional passcode AT the door. The passcode
+ * already exists (US_ADMIN_PASSCODE_DIGEST, checked by config.ts); the only
+ * question was where to put the box.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY A QUERY PARAMETER AND NOT A VISIBLE FIELD
+ *
+ * Read the header of this file's body: twenty-eight visible strings were cut to
+ * three because the joke is a page that does not know it is a page. A second input
+ * captioned "admin passcode (optional)" is a page that knows exactly what it is —
+ * it is administration, on the screen she opens from a text message. It would also
+ * be the only thing here that hints she is not the only reader.
+ *
+ * Rejected alternatives, and why:
+ *
+ *   A FOURTH STEP reached by typing something specific. It works, but it puts a
+ *   branch inside the one flow that must never break for her, and the flow's whole
+ *   safety property is that the SERVER decides which question comes next. Adding a
+ *   client-side escape hatch to that is the wrong place to be clever.
+ *
+ *   AN UNOBTRUSIVE-BUT-PRESENT field. Still a field: still in the DOM, still
+ *   announced by a screen reader, still offered to a password manager, still a
+ *   second box on a page whose entire content is one box. "Visually quiet" is not
+ *   invisible, it is just quiet, and the joke is about what is THERE.
+ *
+ * The parameter costs her nothing because it is SERVER-side: without `?me` the
+ * input is not rendered at all, so there is no hidden element, nothing for
+ * autofill to notice, and nothing for a screen reader to read. Her page is
+ * byte-identical to what it was. And it degrades safely in the one direction that
+ * matters — a stranger who finds `?me` sees an extra box that grants nothing
+ * without the secret, which is the same thing /samdrea/dj already shows anybody.
+ *
+ * `has()` rather than `=== '1'`, so `?me` on its own works. It is typed one-handed
+ * on a phone, by the one person who knows it is there.
+ */
+const showPasscode = Astro.url.searchParams.has('me');
 ---
 
 <!DOCTYPE html>
@@ -199,6 +253,11 @@ const showPlaceholderWarning = import.meta.env.DEV && gateNeedsReview();
                                 told, and it is hidden until then
       #q-giveup               — the mailto, hidden until 3 misses,
                                 so she is never actually stuck
+      #q-pass                 — the optional identity proof, and ONLY
+                                when the page is asked for it with ?me.
+                                Absent from the DOM otherwise, so the
+                                count of visible strings on HER page is
+                                still three. See showPasscode above.
       <noscript>              — invisible unless JS is off, and
                                 without it the page is inert with
                                 no explanation at all
@@ -255,6 +314,23 @@ const showPlaceholderWarning = import.meta.env.DEV && gateNeedsReview();
                 required
                 disabled={!ready}
             >
+            {/* ONLY WITH `?me` — see showPasscode in the frontmatter. Not hidden:
+                absent. Inside the form so Enter still submits, after the answer so
+                the answer keeps focus and the tab order reads in the right order.
+                NOT `required`: blank is a legitimate submission that means "I am
+                her", which is what this page means without the field at all. */}
+            {showPasscode && (
+                <input
+                    class="crude-input"
+                    id="q-pass"
+                    name="passcode"
+                    type="password"
+                    autocomplete="current-password"
+                    placeholder="passcode"
+                    aria-label="Admin passcode, optional"
+                    disabled={!ready}
+                />
+            )}
             <button class="crude-submit" id="q-submit" type="submit" disabled={!ready}>SUBMIT</button>
         </form>
 
@@ -298,6 +374,9 @@ const showPlaceholderWarning = import.meta.env.DEV && gateNeedsReview();
     var input = document.getElementById('q-input');
     var submit = document.getElementById('q-submit');
     var msg = document.getElementById('q-msg');
+    /* null unless the page was asked for it with `?me`. Everything below is
+       written to be correct when it is null, which is her every visit. */
+    var pass = document.getElementById('q-pass');
     var prompt = document.getElementById('q-prompt');
     var qn = document.getElementById('q-n');
     var giveUp = document.getElementById('q-giveup');
@@ -360,6 +439,14 @@ const showPlaceholderWarning = import.meta.env.DEV && gateNeedsReview();
         submit.disabled = true;
         submit.textContent = 'CHECKING';
 
+        /* The passcode rides along on EVERY submit rather than only the last one,
+           because the client does not know which question is last — the server owns
+           that (see `next` above) and this script deliberately makes no decisions.
+           The server ignores it until the answers are complete. Omitted entirely
+           when the field is absent or empty, so her request body is unchanged. */
+        var payload = { step: step, answer: answer };
+        if (pass && pass.value) payload.passcode = pass.value;
+
         var data;
         try {
             var res = await fetch('/api/us/gate', {
@@ -369,7 +456,7 @@ const showPlaceholderWarning = import.meta.env.DEV && gateNeedsReview();
                 // be credentialed. Same-origin is the default, but being
                 // explicit here documents that the token is load-bearing.
                 credentials: 'same-origin',
-                body: JSON.stringify({ step: step, answer: answer })
+                body: JSON.stringify(payload)
             });
             data = await res.json();
 
@@ -378,7 +465,12 @@ const showPlaceholderWarning = import.meta.env.DEV && gateNeedsReview();
                 return;
             }
             if (res.status === 503) {
-                say('bad', 'the terminal is offline. not your fault.');
+                // Only reachable with `?me`, and only for him: "offline" would send
+                // him looking for an outage when the real fault is an unset
+                // US_ADMIN_PASSCODE_DIGEST.
+                say('bad', data && data.error === 'passcode-unconfigured'
+                    ? 'no passcode is configured on the server.'
+                    : 'the terminal is offline. not your fault.');
                 return;
             }
         } catch (err) {
@@ -387,6 +479,17 @@ const showPlaceholderWarning = import.meta.env.DEV && gateNeedsReview();
         } finally {
             submit.disabled = false;
             submit.textContent = 'SUBMIT';
+        }
+
+        /* THE ANSWERS WERE ALL RIGHT AND THE PASSCODE WAS NOT, so nothing was
+           minted — deliberately, because opening as her would be the silent
+           mis-identification the field exists to prevent. Only reachable when a
+           passcode was actually sent, so she can never see this. The questions stay
+           solved server-side; only this box needs retyping. */
+        if (data && data.error === 'bad-passcode') {
+            say('bad', 'not the passcode. the answers are still good.');
+            if (pass) { pass.value = ''; pass.focus(); }
+            return;
         }
 
         if (!data || data.ok !== true) {
