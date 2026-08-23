@@ -900,11 +900,38 @@ export default function HeroCanvas() {
        cuts of the composite. The four bands separate cleanly by median sinking
        lines: 226 / 196 / 76 / 39.
 
-       HONEST LIMIT: the spread is calibrated on desktop geometry. Measured label
-       counts over 80 holes — 1440: 25/20/19/16, 1280: 28/19/17/16,
-       1024: 39/16/13/12, 390: 63/5/4/8. A phone skews "Gentle" because its play
-       box is smaller and the putts really are shorter. That is the truth about
-       the hole, not a calibration bug, so it is left alone. */
+       HONEST LIMIT — AND THE EXPLANATION HERE WAS WRONG ONCE, so read the numbers
+       rather than the intuition. This comment used to say wide viewports skew
+       easy "because the putts are shorter". They are not: once the tee sampler
+       started targeting a hole length as a fraction of the REACH BUDGET rather
+       than taking the first lie past the floor, mean distance became flat across
+       every viewport — measured over 60 holes, 294 / 293 / 302 / 298 / 303 px at
+       1024 / 1440 / 1920 / 2560 / 3840.
+
+       The real mechanism is that THE GREEN GETS FLATTER AS THE CANVAS GROWS.
+       heightAt() works in units of `span = min(cssW, cssH) * 0.5`, so the same
+       undulation is stretched over more pixels on a bigger canvas and a 300px
+       putt crosses less of it. Mean |slope| over those same holes:
+
+           1024  span  450   124
+           1440  span  450   121
+           1920  span  540    94
+           2560  span  720    68
+           3840  span 1080    48
+
+       So difficulty still depends on viewport, just through steepness instead of
+       length, and 1440 keeps the most "Brutal" holes because its greens are the
+       steepest.
+
+       LEFT AS IS, DELIBERATELY, and it is a trade rather than an oversight:
+       `span` is also what the CONTOUR LINES are drawn from. Anchoring the terrain
+       to fixed pixels would make difficulty viewport-independent but would put
+       ~2.4x more undulation across a 3840 green, and the contour field is a
+       designed element of the hero, not just a physics input. One height field
+       cannot hold both a consistent picture and a consistent difficulty; the
+       picture wins here. Nobody compares hole difficulty across monitors, and the
+       scorecard's "best" is per-browser localStorage, so there is no scoreboard
+       for the inconsistency to be unfair on. */
     const HOLE_CAL = { dMean: 271.5, dSd: 56.5, uMean: 5.7, uSd: 83.4 };
     const HOLE_CUTS = [-0.793, 0.003, 0.852];
     const HOLE_BANDS = ['Gentle', 'Fair', 'Tricky', 'Brutal'];
