@@ -174,7 +174,7 @@ const HISTORY_WINDOW = 365;
  * why together.ts exposes getAll() instead of a getter per feature — three separate
  * reads would be three GETs of one R2 object on every render of the front door.
  */
-const [songs, marks, visits, together] = await Promise.all([
+const [songs, marks, visits, togetherRead] = await Promise.all([
   getSongs(HISTORY_WINDOW).catch((err): SongRecord[] => {
     // kv.ts throws on read failure by policy. Here that is decoration failing, so it
     // degrades to "nothing new" rather than to an error page.
@@ -190,6 +190,15 @@ const [songs, marks, visits, together] = await Promise.all([
      correctly. */
   getAllSafe(today, HUB_DAY_WINDOW),
 ]);
+
+/* SPLIT OUT, so the page can tell "nothing happened" from "I could not ask".
+   getAllSafe returns an empty snapshot on failure, and an empty snapshot is
+   indistinguishable from a quiet day — so without this flag the hub asserted
+   "Nothing from him today" and rendered the daily question as unanswered when the
+   truth was that nothing had been read. She would have no way to tell.
+   today.astro already hedged correctly on the song page; this is the same idea. */
+const together = togetherRead.snapshot;
+const storeReachable = togetherRead.reachable;
 
 const fresh = newSince({ today, visits, songs, marks });
 
@@ -555,6 +564,25 @@ const rooms = [
     )}
 
     <p class="tg-shared" data-both={shared.bothAwake ? 'yes' : 'no'}>{sharedLine}</p>
+
+    {/* ONE HONEST BANNER, above everything it qualifies.
+        getAllSafe returns an EMPTY snapshot when the store cannot be read, and an
+        empty snapshot is indistinguishable from a quiet day — so this page used to
+        assert "Nothing from him today", show the daily question as unanswered and
+        show the list as empty when the truth was that nothing had been read at
+        all. She would have had no way to tell, which is the one kind of lie this
+        wing cannot afford.
+
+        Hedging each of those six sentences separately would mean six conditionals
+        and six chances to get one wrong. One banner says the true thing once and
+        leaves every empty state exactly as written. */}
+    {!storeReachable && (
+        <p class="tg-notice" data-kind="warn" role="status">
+            I can&rsquo;t reach the shelf right now, so this page may be missing
+            things. Nothing either of us wrote is lost &mdash; it just is not
+            answering. Worth another look in a minute.
+        </p>
+    )}
 
     {/* Nothing at all when the date is unset, mistyped, or long past. No
         placeholder, no "TBD", no empty box — see countdown() in status.ts. */}

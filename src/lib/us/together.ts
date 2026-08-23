@@ -2870,15 +2870,31 @@ export function removeItem(id: string, by: Who): Promise<boolean> {
  * question, nobody has answered" is a state the page renders correctly and a missing
  * key is a crash.
  */
+/**
+ * As getAll, but a dead store costs the hub its contents rather than the page.
+ *
+ * IT NOW REPORTS WHETHER IT ACTUALLY READ ANYTHING, and that distinction is the
+ * whole reason this signature changed. Returning an empty snapshot on failure is
+ * right — the front door must render — but an empty snapshet is
+ * INDISTINGUISHABLE from a genuinely quiet day, so the hub confidently said
+ * things like "Nothing from him today" and rendered the daily question as
+ * unanswered when the truth was that nothing had been asked.
+ *
+ * That is the one class of lie this wing cannot afford: she would read "nothing
+ * from him" on a day he had sent something, and there is no way for her to tell.
+ * today.astro solved this correctly for the song page ("I can't see your side
+ * from here. If you already posted one, it's still there.") and the pattern is
+ * now available to every caller.
+ */
 export async function getAllSafe(
   today: string,
   dayWindow: number = HUB_DAY_WINDOW,
-): Promise<Snapshot> {
+): Promise<{ snapshot: Snapshot; reachable: boolean }> {
   try {
-    return await getAll(today, dayWindow);
+    return { snapshot: await getAll(today, dayWindow), reachable: true };
   } catch (err) {
     console.error('[us] could not read the together store; rendering the hub without it.', err);
-    return emptySnapshot(today);
+    return { snapshot: emptySnapshot(today), reachable: false };
   }
 }
 

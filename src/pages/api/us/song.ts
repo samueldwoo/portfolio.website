@@ -572,9 +572,15 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
     extra: Record<string, unknown> = {},
   ): Response => {
     if (wantsJson) return json({ ok, ...(error ? { error } : {}), ...extra }, status);
+    /* `s=` carries retryAfter through to the page, which admin.ts already did and
+       this did not — so dj.astro fell back to its `|| '600'` default and said
+       "wait 600 seconds" when thirty were left. Only appended when there is a
+       number, so no other error grows a meaningless query param. */
+    const secs = Number(extra.retryAfter);
     const query = ok
       ? `?posted=${encodeURIComponent(String(extra.date ?? ''))}`
-      : `?e=${encodeURIComponent(error ?? 'no')}`;
+      : `?e=${encodeURIComponent(error ?? 'no')}` +
+        (Number.isFinite(secs) && secs > 0 ? `&s=${Math.round(secs)}` : '');
     return redirect(`${DJ}${query}`, 303);
   };
 
