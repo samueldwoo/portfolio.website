@@ -449,7 +449,10 @@ function minisFor(pair: DayPair): Mini[] {
     const { glyphs, words } = reactionGlyphs(pair.reactions);
     out.push({
       side: 'his',
-      who: 'me',
+      /* Viewer-relative, like today's slots above. This block had the same
+         hardcoded labels and would have shown her an old song of Sam's
+         captioned "me". */
+      who: mineIsHis ? 'you' : theirWord,
       track: pair.his,
       glyphs,
       label: [
@@ -466,7 +469,7 @@ function minisFor(pair: DayPair): Mini[] {
   if (pair.hers) {
     out.push({
       side: 'hers',
-      who: 'you',
+      who: mineIsHis ? theirWord : 'you',
       track: pair.hers,
       // Reactions are one-directional by design — /api/us/react takes her session
       // and refuses my admin token, so a reaction on her own song does not exist.
