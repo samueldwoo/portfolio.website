@@ -73,6 +73,7 @@ import {
   ITEM_MAX,
   LATE_ANSWER_DAYS,
   OPEN_CAP,
+  TOTAL_CAP,
   answerParagraphs,
   apartLine,
   board,
@@ -312,6 +313,19 @@ const stillOpen = pastDays.filter((d) => d.canAnswer).length;
 const list = board(together.items);
 /** Room left before OPEN_CAP refuses an add. Only mentioned when it is getting close. */
 const roomLeft = OPEN_CAP - list.open.length;
+/**
+ * Room left before TOTAL_CAP refuses an add, which is the OTHER way the store can
+ * say no and the one this page used to know nothing about.
+ *
+ * addRefusal() checks TOTAL_CAP *before* OPEN_CAP, so a list holding 300 items —
+ * 5 open and 295 ticked off, say — refuses every add while `roomLeft` reads 35 and
+ * happily draws the box. She would type a line, press add, and get "the list is
+ * completely full" from a form that had just invited her. Counting both means the
+ * page only offers what the store will actually take.
+ */
+const totalLeft = TOTAL_CAP - (list.open.length + list.done.length);
+/** True only when BOTH caps have room. Gates the add form. */
+const canAdd = roomLeft > 0 && totalLeft > 0;
 
 /* ============================================================================
    OUTCOMES FROM THE NO-JAVASCRIPT FORM PATHS
@@ -376,9 +390,33 @@ function byWord(by: Who): string {
   return by === viewer ? 'you' : by === 'her' ? 'her' : 'him';
 }
 
+/**
+ * The label above today's answer box, and the ONE place the ceiling is named.
+ *
+ * It used to read "Your answer — up to 400" on every day of the week, with no unit
+ * on the number, and that was wrong twice over:
+ *
+ *   1. ANSWER_MAX is 400 CHARACTERS. A bare "up to 400" above a four-row textarea
+ *      reads as four hundred WORDS, which is an invitation to write an essay into a
+ *      box that will cut her off at about eighty.
+ *
+ *   2. On Sundays the prompt IS "your week, in five words" (see WEEK_PROMPT), so the
+ *      same label put "up to 400" directly underneath a question asking for five.
+ *      The page contradicted itself once a week.
+ *
+ * So Sunday names no ceiling at all. That is not an omission: the prompt has already
+ * said how long the answer should be, the server limit is unchanged and unreachable
+ * at five words, and together.ts is explicit that five words is an invitation rather
+ * than a validation — if she answers in seven, seven is right. A number here would
+ * argue with the question above it for no gain.
+ */
+const answerLabel = isWeekPrompt(dayToday.date)
+  ? 'Your answer'
+  : `Your answer — up to ${ANSWER_MAX} characters`;
+
 const rooms = [
   {
-    n: 'line 01',
+    n: '01',
     title: 'one day, two songs',
     note: 'one from each of us, every day. and why.',
     href: '/samdrea/vault/today',
@@ -433,14 +471,14 @@ const rooms = [
      something — i.e. it would tell her about her own tap. A signal that fires on
      your own action is decoration. */
   {
-    n: 'line 02',
+    n: '02',
     title: 'the board',
     note: 'every photograph, pinned up under the lights. tap one.',
     href: '/samdrea/vault/board',
     ready: true,
   },
   {
-    n: 'line 03',
+    n: '03',
     title: 'letters',
     note: 'the longer things. one at a time, and some of them are sealed.',
     href: '/samdrea/vault/letters',
@@ -453,7 +491,7 @@ const rooms = [
        always-present one would train her to ignore all three. */
   },
   {
-    n: 'line 04',
+    n: '04',
     title: 'today, seen',
     note: 'one picture each. whatever we were looking at.',
     href: '/samdrea/vault/day',
@@ -535,10 +573,14 @@ const rooms = [
     </h1>
 
     <p class="studio-lede">
-        You&rsquo;re in, {her}.
-        <br>
-        Nobody else has this address.
-    </p>
+            {/* THE NAME HAS TO FOLLOW THE READER. This said "You're in, {her}" for
+                everyone, so switching to Sam left the very first line of the hub
+                greeting him as Andrea — which is what "items still say Andrea"
+                was. The name is HER name; the greeting is the READER's. */}
+            You&rsquo;re in, {viewer === 'her' ? (her || 'you') : 'Sam'}.
+            <br>
+            Nobody else has this address.
+        </p>
 
     {/* ============================================================
         THE TWO CLOCKS
@@ -568,8 +610,18 @@ const rooms = [
         </span>
         <span class="tg-clock">
             {/* A word, not a colour and not an icon. Which clock is whose is
-                the entire information content of this strip. */}
-            <span class="tg-clock-who">{them === 'her' ? her : 'him'}</span>
+                the entire information content of this strip.
+
+                A NAME, not a pronoun. This said 'him', and the asymmetry only
+                shows up when you read the two sides at once: when he opens the
+                hub her clock is labelled with her NAME, and when she opens it
+                his is labelled "him". The one person this wing is for got the
+                impersonal half of its own clock strip. today.astro already
+                titles his card "Sam"; day.astro said "him"; three pages, two
+                words, one person. Labels take the name everywhere now.
+                Sentences still take the pronoun — "Nothing from him today" a
+                few blocks below is right and stays. */}
+            <span class="tg-clock-who">{them === 'her' ? her : 'Sam'}</span>
             <time
                 class="tg-clock-time"
                 datetime={theirClock.iso}
@@ -604,7 +656,17 @@ const rooms = [
         <p class="tg-seen" data-together={seen?.together ? 'yes' : 'no'}>{seenLine}</p>
     )}
 
-    <p class="tg-shared" data-both={shared.bothAwake ? 'yes' : 'no'}>{sharedLine}</p>
+    {/* SUPPRESSED WHEN PRESENCE ALREADY CONTRADICTS IT.
+        These two lines render together, and they could disagree out loud:
+        "he is in here too, right now" directly above "he is asleep. he is up
+        again in six hours." The awake window is a pure clock GUESS; presence is
+        an OBSERVED visit. When he is genuinely up at 2am his time, both fired and
+        the page read as though it knew nothing about either of them.
+        Observation beats inference, so the guess yields to it — and only in that
+        exact case, because the awake line is useful every other time. */}
+    {!(seen?.together && shared.asleep.includes(them)) && (
+        <p class="tg-shared" data-both={shared.bothAwake ? 'yes' : 'no'}>{sharedLine}</p>
+    )}
 
     {/* ONE HONEST BANNER, above everything it qualifies.
         getAllSafe returns an EMPTY snapshot when the store cannot be read, and an
@@ -710,7 +772,7 @@ const rooms = [
 
     <hr class="studio-rule">
 
-    <p class="studio-kicker">the room, by carriage line</p>
+    <p class="studio-kicker">what&rsquo;s in here</p>
 
     {/* Directly above the cards it describes, because it is a summary of them and
         not an announcement about the site. `data-any` only changes emphasis — the
@@ -726,7 +788,7 @@ const rooms = [
                     <h2 class="room-title">{room.title}</h2>
                     <p class="room-note">{room.note}</p>
                     {/* Inside the <a>, so the words join the link's accessible name:
-                        "line 01, song of the day, ..., something new in here" is
+                        "01, one day two songs, ..., something new in here" is
                         exactly what a screen reader should hear before following it. */}
                     {room.fresh && (
                         <p class="room-fresh">
@@ -805,7 +867,7 @@ const rooms = [
                             ))}
                         </article>
                         <article class="tg-a tg-a--sealed">
-                            <p class="tg-a-who">{themWord} has not answered yet</p>
+                            <p class="tg-a-who">{themWord} hasn&rsquo;t answered yet</p>
                             <p class="tg-a-sealed-note">
                                 When {themWord} does, both answers appear here at the
                                 same time. Yours is not shown to {themWord} until then
@@ -829,7 +891,7 @@ const rooms = [
                                 <input type="hidden" name="date" value={dayToday.date}>
                                 <div class="tg-field">
                                     <label class="tg-label" for="answer-text">
-                                        Your answer &mdash; up to {ANSWER_MAX}
+                                        {answerLabel}
                                     </label>
                                     <textarea
                                         class="tg-textarea"
@@ -869,7 +931,7 @@ const rooms = [
                         <input type="hidden" name="date" value={dayToday.date}>
                         <div class="tg-field">
                             <label class="tg-label" for="answer-text">
-                                Your answer &mdash; up to {ANSWER_MAX}
+                                {answerLabel}
                             </label>
                             {/* maxlength matches ANSWER_MAX, which the endpoint also
                                 checks. The browser stopping her at the limit is
@@ -1078,9 +1140,19 @@ const rooms = [
             </ul>
         )}
 
-        {/* Only mentioned when it is close, so the cap is never a number she has
-            to think about until it matters. See OPEN_CAP's reasoning. */}
-        {roomLeft <= 8 && (
+        {/* Only mentioned when it is close, so neither cap is a number she has to
+            think about until it matters. See OPEN_CAP's and TOTAL_CAP's reasoning.
+
+            TOTAL first, because it is the one with no way out: ticking something
+            off makes room under OPEN_CAP and makes none at all under TOTAL_CAP, so
+            "tick something off" would be advice that does not work. */}
+        {totalLeft <= 0 ? (
+            <p class="tg-list-meta">
+                {TOTAL_CAP} lines is everything this list can hold, and it is holding
+                them. Nothing on it is going anywhere &mdash; there just isn&rsquo;t
+                space for a new one.
+            </p>
+        ) : roomLeft <= 8 && (
             <p class="tg-list-meta">
                 {roomLeft > 0
                     ? `${roomLeft} more will fit before you have to tick something off.`
@@ -1088,7 +1160,7 @@ const rooms = [
             </p>
         )}
 
-        {roomLeft > 0 && (
+        {canAdd && (
             <form class="tg-add" method="post" action="/api/us/together?a=add">
                 <input type="hidden" name="action" value="add">
                 {/* A real <label>, visually hidden rather than replaced by the
@@ -1108,9 +1180,22 @@ const rooms = [
             </form>
         )}
 
+        {/* THE ONES ALREADY DONE, and the summary says so in words.
+
+            It read `done (3)`, which is a status label and not a door: it names a
+            state the reader is already looking at the absence of, so there is no
+            reason in it to open the thing. And what is behind it is the good part.
+            together.ts is explicit that ticked lines are never deleted because they
+            are "proof of a year" — so the one path to them cannot be the most
+            skippable word on the page.
+
+            Still a <details>, still collapsed: the open list is what she came for,
+            and a year of ticked lines above it would bury that. */}
         {list.done.length > 0 && (
             <details class="tg-more">
-                <summary>done ({list.done.length})</summary>
+                <summary>
+                    the ones we&rsquo;ve done ({list.done.length})
+                </summary>
                 <ul class="tg-items">
                     {list.done.map((item) => (
                         <li class="tg-item tg-item--done">
@@ -1159,7 +1244,7 @@ const rooms = [
     <hr class="studio-rule">
 
     <div class="studio-foot">
-        <span class="studio-tag">Stronger for it.</span>
+        <span class="studio-tag">Love you.</span>
         {/* WHO THE SITE THINKS YOU ARE, stated out loud.
 
             Not decoration and not a debug aid. Identity here decides which half

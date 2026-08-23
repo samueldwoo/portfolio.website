@@ -116,7 +116,14 @@ function clockOf(atMs: number, tz: string): string {
   }
 }
 
-const whoWord = (w: Who): string => (w === viewer ? 'you' : w === 'her' ? (her || 'her') : 'him');
+/**
+ * Whose half of the day this is: 'you', her name, or his.
+ *
+ * 'Sam' rather than 'him', matching the hub's clock strip and today.astro's card
+ * title. It was the only page left calling him by a pronoun in a position where
+ * her side got a name.
+ */
+const whoWord = (w: Who): string => (w === viewer ? 'you' : w === 'her' ? (her || 'her') : 'Sam');
 ---
 
 <!DOCTYPE html>
@@ -172,7 +179,7 @@ const whoWord = (w: Who): string => (w === viewer ? 'you' : w === 'her' ? (her |
 <body class="studio">
 <div class="studio-wrap">
 
-    <p class="studio-kicker">line 04 &middot; today, seen</p>
+    <p class="studio-kicker">04 &middot; today, seen</p>
 
     <h1 class="us-mark">
         <span class="us-mark-bracket" aria-hidden="true">[</span>day<span
@@ -333,8 +340,8 @@ const whoWord = (w: Who): string => (w === viewer ? 'you' : w === 'her' ? (her |
                             aria-describedby="fr-photo-hint"
                         >
                         <p class="fr-hint" id="fr-photo-hint">
-                            JPEG, PNG or WebP. It gets shrunk before it is sent, so
-                            size does not matter much.
+                            JPEG, PNG or WebP. It gets shrunk before it&rsquo;s sent,
+                            so the size doesn&rsquo;t matter much.
                         </p>
                     </div>
 
@@ -430,7 +437,7 @@ const whoWord = (w: Who): string => (w === viewer ? 'you' : w === 'her' ? (her |
     <hr class="studio-rule">
 
     <div class="studio-foot">
-        <span class="studio-tag">Stronger for it.</span>
+        <span class="studio-tag">Love you.</span>
         <a href="/samdrea/vault">&larr; back to the room</a>
     </div>
 </div>

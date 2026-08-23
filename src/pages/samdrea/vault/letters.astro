@@ -370,7 +370,7 @@ function replyParagraphs(text: string): string[] {
                           class="us-mark-bracket" aria-hidden="true">]</span>
                 </a>
                 <p class="lt-topbar-where">
-                    line 03 &middot; {readBefore ? 'again' : 'for you'}
+                    03 &middot; {readBefore ? 'again' : 'for you'}
                 </p>
             </div>
 
@@ -462,7 +462,14 @@ function replyParagraphs(text: string): string[] {
                         <div class="dj-field">
                             <label class="dj-label" for="letter-reply">
                                 Your letter back
-                                <span class="dj-opt">&mdash; as long as you want, up to {REPLY_MAX}</span>
+                                {/* "characters" said out loud, for the same reason the
+                                    hub's answer label now says it: a bare "up to 4000"
+                                    over a tall box reads as four thousand WORDS, and
+                                    "as long as you want" makes that reading more
+                                    likely rather than less. 4000 characters is around
+                                    seven hundred words, which is still long — the
+                                    label just has to mean the thing it counts. */}
+                                <span class="dj-opt">&mdash; as long as you want, up to {REPLY_MAX} characters</span>
                             </label>
                             {/* maxlength matches REPLY_MAX in letters.ts, which the
                                 endpoint also checks. The browser stopping her at the
@@ -521,7 +528,7 @@ function replyParagraphs(text: string): string[] {
             <hr class="studio-rule">
 
             <div class="studio-foot">
-                <span class="studio-tag">Stronger for it.</span>
+                <span class="studio-tag">Love you.</span>
                 <a href="/samdrea/vault/letters">&larr; all the letters</a>
             </div>
         </>
@@ -530,7 +537,7 @@ function replyParagraphs(text: string): string[] {
            VIEW ONE — THE SHELF
            ============================================================== */
         <>
-            <p class="studio-kicker">line 03 &middot; letters</p>
+            <p class="studio-kicker">03 &middot; letters</p>
 
             <h1 class="us-mark">
                 <span class="us-mark-bracket" aria-hidden="true">[</span>letters<span
@@ -762,7 +769,7 @@ function replyParagraphs(text: string): string[] {
             <hr class="studio-rule">
 
             <div class="studio-foot">
-                <span class="studio-tag">Stronger for it.</span>
+                <span class="studio-tag">Love you.</span>
                 <a href="/samdrea/vault">&larr; back to the room</a>
             </div>
         </>
