@@ -1,9 +1,10 @@
 {
+  "id": "/stronger/vault",
   "name": "[us]",
   "short_name": "[us]",
   "description": "A room with the door closed.",
   "start_url": "/stronger/vault",
-  "scope": "/stronger/",
+  "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#000000",

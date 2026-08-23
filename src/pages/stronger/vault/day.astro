@@ -131,6 +131,26 @@ const whoWord = (w: Who): string => (w === viewer ? 'you' : w === 'her' ? (her |
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <!-- Installable-app metadata. `scope` is "/" and that is a CORRECTION, not
+         laziness. It was "/stronger/", which looks tighter and quietly broke the
+         installed app in three places: an installed PWA opens any out-of-scope
+         URL in the BROWSER instead of the app, and "/stronger" (the gate, where
+         every expired session lands), "/api/us/out" (sign out) and all eleven
+         "/api/us/*" form actions are every one of them outside "/stronger/".
+         So her session expiring would eject her to Safari to log back in, and
+         with JavaScript off every form post would leave the app too. Nothing in
+         the wing links to the public site, so a wide scope traps nothing.
+
+         `start_url: /stronger/vault` opens at the hub rather than the gate —
+         she already holds a session cookie, so she skips the quiz on launch.
+         `id` is pinned so the identity survives future manifest edits.
+
+         DELIBERATELY NO SERVICE WORKER. Every page here is behind a session and
+         several are per-day; a worker that cached the wrong response would serve
+         her a stale room, or worse, hand a cached authorised page to whoever
+         opened the app next. Standalone display, the icon and the black status
+         bar all work without one. The only thing given up is offline, which for
+         a room whose whole content is fetched per visit is not a real loss. -->
     <link rel="manifest" href="/manifest.webmanifest">
     <link rel="apple-touch-icon" href="/assets/us/icons/apple-touch-icon.png">
     <meta name="apple-mobile-web-app-capable" content="yes">

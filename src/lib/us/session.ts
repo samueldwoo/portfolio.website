@@ -27,7 +27,28 @@
 
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
-export type Purpose = 'session' | 'progress' | 'admin';
+/**
+ * `whoami` is NOT a permission. It is the answer to "which of the two people is
+ * this", and it exists because that question and "may this request post as
+ * admin" had been the same cookie — which produced a silent, dated bug.
+ *
+ * THE BUG, RECORDED BECAUSE THE FIX LOOKS ARBITRARY WITHOUT IT.
+ * identify() resolved `admin` -> him and `session` -> her, admin first. Sam holds
+ * BOTH: he passes the gate like she does, and then logs in at /stronger/dj. But
+ * TTL.admin is 12 hours and TTL.session is 30 days. So twelve hours after
+ * installing the app his admin token expired, identify() fell through to the
+ * session token, and the site decided he was Andrea — with nothing on screen
+ * saying so. The next photograph he posted was filed as HERS, overwriting hers if
+ * she had already posted that day. Verified before the fix: a request holding an
+ * expired admin cookie and a live session cookie posted a frame that came back
+ * `{"who":"her"}`.
+ *
+ * The two facts have genuinely different lifetimes. Who he is does not expire in
+ * twelve hours; his ability to rewrite the answer key should. So they are now two
+ * cookies: `whoami` is long-lived and carries no privilege whatsoever, `admin`
+ * stays short and is the only one any write checks for.
+ */
+export type Purpose = 'session' | 'progress' | 'admin' | 'whoami';
 
 export interface Payload {
   /** purpose — checked on verify to prevent cross-purpose token replay */
@@ -140,6 +161,7 @@ const NAMES: Record<Purpose, CookiePair> = {
   session: { secure: '__Host-us', dev: 'us_session' },
   progress: { secure: '__Host-us-p', dev: 'us_progress' },
   admin: { secure: '__Host-us-a', dev: 'us_admin' },
+  whoami: { secure: '__Host-us-w', dev: 'us_whoami' },
 };
 
 export const TTL = {
@@ -149,6 +171,18 @@ export const TTL = {
   progress: 60 * 20,
   /** 12 hours. Short: this one can post. */
   admin: 60 * 60 * 12,
+  /**
+   * 180 days, and deliberately the longest TTL here.
+   *
+   * It grants NOTHING. Its only effect is that identify() says "him" instead of
+   * "her", so the worst a stolen one can do is make a request be attributed to
+   * the person who already has to pass the gate to get anywhere. Every write that
+   * matters still demands `admin`, which still expires in twelve hours.
+   *
+   * Longer than TTL.session on purpose: if this expired FIRST, the exact bug it
+   * was added to prevent would come back on a slower timer.
+   */
+  whoami: 60 * 60 * 24 * 180,
 } as const;
 
 function isSecure(url: URL): boolean {

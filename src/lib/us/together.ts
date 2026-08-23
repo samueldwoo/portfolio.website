@@ -203,6 +203,18 @@ export function identify(cookies: CookieJar, url: URL): Who | null {
   if (!secret) return null;
   // ADMIN FIRST. See the section header for why this order is the whole rule.
   if (verify(secret, 'admin', readCookie(cookies, 'admin', url))) return 'him';
+
+  /* THEN the long-lived identity cookie, which is the fix for a bug worth
+     naming: `admin` lives 12 hours and `session` lives 30 days, and Sam holds
+     both. So every night his admin token expired, this function fell through to
+     the session token, and the wing decided he was Andrea — with nothing on
+     screen saying so. His next photograph was filed as hers.
+
+     `whoami` carries no privilege at all (see Purpose in session.ts) and outlives
+     both, so identity survives an expired admin session while the ability to post
+     as admin does not. */
+  if (verify(secret, 'whoami', readCookie(cookies, 'whoami', url))) return 'him';
+
   if (verify(secret, 'session', readCookie(cookies, 'session', url))) return 'her';
   return null;
 }

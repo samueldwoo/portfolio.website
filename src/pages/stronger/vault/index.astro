@@ -429,11 +429,19 @@ const rooms = [
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <!-- Installable-app metadata. `scope: /stronger/` in the manifest keeps the
-         installed app inside the wing, so tapping the icon can never land her on
-         the public portfolio, and `start_url: /stronger/vault` opens at the hub
-         rather than the gate — she already holds a session cookie, so she skips
-         the quiz on every launch.
+    <!-- Installable-app metadata. `scope` is "/" and that is a CORRECTION, not
+         laziness. It was "/stronger/", which looks tighter and quietly broke the
+         installed app in three places: an installed PWA opens any out-of-scope
+         URL in the BROWSER instead of the app, and "/stronger" (the gate, where
+         every expired session lands), "/api/us/out" (sign out) and all eleven
+         "/api/us/*" form actions are every one of them outside "/stronger/".
+         So her session expiring would eject her to Safari to log back in, and
+         with JavaScript off every form post would leave the app too. Nothing in
+         the wing links to the public site, so a wide scope traps nothing.
+
+         `start_url: /stronger/vault` opens at the hub rather than the gate —
+         she already holds a session cookie, so she skips the quiz on launch.
+         `id` is pinned so the identity survives future manifest edits.
 
          DELIBERATELY NO SERVICE WORKER. Every page here is behind a session and
          several are per-day; a worker that cached the wrong response would serve
@@ -1077,6 +1085,24 @@ const rooms = [
 
     <div class="studio-foot">
         <span class="studio-tag">Stronger for it.</span>
+        {/* WHO THE SITE THINKS YOU ARE, stated out loud.
+
+            Not decoration and not a debug aid. Identity here decides which half
+            of every mutual feature a write lands in, and it used to be able to be
+            WRONG with nothing on screen admitting it: Sam's admin cookie expired
+            in 12 hours while his session cookie lasted 30 days, so overnight the
+            wing decided he was Andrea and filed his photographs as hers. The
+            cookie split in session.ts fixes the cause; this line means that if
+            anything like it ever happens again it is visible in one glance
+            instead of discovered in the data weeks later.
+
+            Rendered for BOTH of them rather than only for him, because a line
+            that appears only in the broken state is a line nobody recognises when
+            it appears. For her it reads "you are Andrea", which is true and
+            unremarkable — which is exactly the point. */}
+        <span class="studio-who" data-who={viewer}>
+            you are {viewer === 'her' ? (her || 'her') : 'Sam'}
+        </span>
         <a href="/api/us/out">sign out</a>
     </div>
 </div>

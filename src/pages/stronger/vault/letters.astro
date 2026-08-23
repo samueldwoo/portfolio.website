@@ -314,11 +314,19 @@ function replyParagraphs(text: string): string[] {
          treat them that way. Redefining them here is the drift that comment warns
          about, and every rule in that file is class-scoped (there is not one bare
          element selector in it), so loading it has no side effects on this page. -->
-    <!-- Installable-app metadata. `scope: /stronger/` in the manifest keeps the
-         installed app inside the wing, so tapping the icon can never land her on
-         the public portfolio, and `start_url: /stronger/vault` opens at the hub
-         rather than the gate — she already holds a session cookie, so she skips
-         the quiz on every launch.
+    <!-- Installable-app metadata. `scope` is "/" and that is a CORRECTION, not
+         laziness. It was "/stronger/", which looks tighter and quietly broke the
+         installed app in three places: an installed PWA opens any out-of-scope
+         URL in the BROWSER instead of the app, and "/stronger" (the gate, where
+         every expired session lands), "/api/us/out" (sign out) and all eleven
+         "/api/us/*" form actions are every one of them outside "/stronger/".
+         So her session expiring would eject her to Safari to log back in, and
+         with JavaScript off every form post would leave the app too. Nothing in
+         the wing links to the public site, so a wide scope traps nothing.
+
+         `start_url: /stronger/vault` opens at the hub rather than the gate —
+         she already holds a session cookie, so she skips the quiz on launch.
+         `id` is pinned so the identity survives future manifest edits.
 
          DELIBERATELY NO SERVICE WORKER. Every page here is behind a session and
          several are per-day; a worker that cached the wrong response would serve

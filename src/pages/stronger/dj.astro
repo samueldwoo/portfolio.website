@@ -271,11 +271,39 @@ const habit = rhythmLine(rhythm);
     <!-- Absolute paths: this page is at /stronger/dj, so "css/us.css" would
          resolve to /stronger/css/us.css and 404. us.css first — it owns every
          token us-song.css then uses. -->
-    <!-- Installable-app metadata. `scope: /stronger/` in the manifest keeps the
-         installed app inside the wing, so tapping the icon can never land her on
-         the public portfolio, and `start_url: /stronger/vault` opens at the hub
-         rather than the gate — she already holds a session cookie, so she skips
-         the quiz on every launch.
+    <!-- Installable-app metadata. `scope` is "/" and that is a CORRECTION, not
+         laziness. It was "/stronger/", which looks tighter and quietly broke the
+         installed app in three places: an installed PWA opens any out-of-scope
+         URL in the BROWSER instead of the app, and "/stronger" (the gate, where
+         every expired session lands), "/api/us/out" (sign out) and all eleven
+         "/api/us/*" form actions are every one of them outside "/stronger/".
+         So her session expiring would eject her to Safari to log back in, and
+         with JavaScript off every form post would leave the app too. Nothing in
+         the wing links to the public site, so a wide scope traps nothing.
+
+         `start_url: /stronger/vault` opens at the hub rather than the gate —
+         she already holds a session cookie, so she skips the quiz on launch.
+         `id` is pinned so the identity survives future manifest edits.
+
+         DELIBERATELY NO SERVICE WORKER. Every page here is behind a session and
+         several are per-day; a worker that cached the wrong response would serve
+         her a stale room, or worse, hand a cached authorised page to whoever
+         opened the app next. Standalone display, the icon and the black status
+         bar all work without one. The only thing given up is offline, which for
+         a room whose whole content is fetched per visit is not a real loss. -->
+    <!-- Installable-app metadata. `scope` is "/" and that is a CORRECTION, not
+         laziness. It was "/stronger/", which looks tighter and quietly broke the
+         installed app in three places: an installed PWA opens any out-of-scope
+         URL in the BROWSER instead of the app, and "/stronger" (the gate, where
+         every expired session lands), "/api/us/out" (sign out) and all eleven
+         "/api/us/*" form actions are every one of them outside "/stronger/".
+         So her session expiring would eject her to Safari to log back in, and
+         with JavaScript off every form post would leave the app too. Nothing in
+         the wing links to the public site, so a wide scope traps nothing.
+
+         `start_url: /stronger/vault` opens at the hub rather than the gate —
+         she already holds a session cookie, so she skips the quiz on launch.
+         `id` is pinned so the identity survives future manifest edits.
 
          DELIBERATELY NO SERVICE WORKER. Every page here is behind a session and
          several are per-day; a worker that cached the wrong response would serve

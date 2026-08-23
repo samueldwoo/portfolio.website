@@ -178,6 +178,17 @@ export const POST: APIRoute = async ({ request, cookies, url, clientAddress, red
   // left on a table is not a standing write credential.
   writeCookie(cookies, url, 'admin', sign(secret, 'admin', TTL.admin), TTL.admin);
 
+  /* AND a long-lived identity cookie, which is a separate fact with a separate
+     lifetime. See Purpose in session.ts: these were one cookie, and because the
+     admin half expires in 12 hours while his session cookie lasts 30 days, he
+     silently became Andrea overnight and his photographs were filed as hers.
+
+     This grants nothing. Every write still demands the `admin` token above; all
+     this does is keep identify() answering "him" after that token has gone, so
+     the failure mode of an expired admin session is "he cannot post as admin"
+     rather than "he posts as her". */
+  writeCookie(cookies, url, 'whoami', sign(secret, 'whoami', TTL.whoami), TTL.whoami);
+
   return answer(true, 200, null, { redirect: DJ });
 };
 
