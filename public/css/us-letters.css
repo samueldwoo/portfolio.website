@@ -537,6 +537,16 @@
    The product.
    ------------------------------------------------------------ */
 .lt-prose {
+    /* A PASTED LINK IS AN UNBREAKABLE TOKEN, and this holds free text she
+       controls. Without this the grid track is forced to the URL's min-content
+       width: one Spotify link in the daily answer took the hub from 390px to
+       700px, shoving the wordmark, the cards and the countdown off-screen.
+       Ordinary 400-character prose was always fine — it is specifically the
+       unbroken token. `.tg-item-text` already had this; these did not.
+       On a site whose whole subject is trading song links, pasting one into a
+       text box is not an edge case. */
+    overflow-wrap: anywhere;
+
     color: var(--letter-ink);
     /* 1.72 rather than the 1.5-1.6 used elsewhere in the wing.
        Light type on a dark ground needs more leading than dark

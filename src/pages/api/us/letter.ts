@@ -62,10 +62,12 @@ import type { APIRoute } from 'astro';
 import { SESSION_SECRET } from '../../../lib/us/config';
 import { readCookie, verify } from '../../../lib/us/session';
 import { clientKey, hit } from '../../../lib/us/ratelimit';
+import { crossSite } from '../../../lib/us/together';
 import { wingDate } from '../../../lib/us/kv';
 import {
   REPLY_MAX,
   findLetter,
+  getStatesSafe,
   isSealed,
   setReply,
   tidyReply,
@@ -136,6 +138,21 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
     return answer(false, 401, 'unauthorized');
   }
 
+  /* CROSS-SITE. Checked AFTER the cookie, so an unauthenticated probe learns
+     nothing it did not already know.
+  
+     This was absent here while frame.ts, mark.ts, thinking.ts and together.ts all
+     had it. That gap was real, not theoretical: Astro's own origin check exempts
+     `application/json` entirely (see origin-check.js — a non-form content type
+     returns early), and `sameSite: 'lax'` is SITE-scoped rather than
+     origin-scoped, so any host under the same registrable domain could make a
+     JSON POST carrying her cookie. The 'cross-site' sentence the pages already
+     had for this could never fire. */
+  if (crossSite(request, url)) {
+    console.warn('[us] refused a cross-site letter reply.');
+    return answer(false, 403, 'cross-site');
+  }
+
   const limit = await hit(
     `letter:${clientKey(request, clientAddress)}`,
     RATE_LIMIT,
@@ -173,7 +190,29 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
      write state for a letter whose card must show nothing at all. Re-checked here
      rather than trusted from the page: the seal is the promise, so it is verified
      everywhere it matters. */
-  if (isSealed(letter, wingDate())) return answer(false, 403, 'sealed', { id: letter.id });
+  /* THE THIRD ARGUMENT IS LOAD-BEARING, AND OMITTING IT BROKE A WHOLE FEATURE.
+     isSealed(letter, today, opened) treats an `openWhen` letter as sealed until
+     `opened` is true, and `opened` DEFAULTS TO FALSE. That default is the correct
+     failure direction for a renderer that has not been taught about this seal, and
+     exactly wrong here. This endpoint was calling it with two arguments, so EVERY
+     "open when..." letter was permanently unrepliable:
+
+       she opens the 3am letter, reads it, writes back, presses send
+         -> 303 ?e=sealed   "that one is still sealed. It opens on its own."
+
+     ...about the open letter in front of her. With JavaScript off her words were
+     gone. The read receipt IS the opened receipt, so the fact needed was one store
+     read away the whole time.
+
+     getStatesSafe, not getStates: a dead store must not turn "reply" into
+     "sealed". It resolves to {} on failure, which makes `opened` false again — the
+     same fail-toward-the-seal direction, and still right, because refusing to
+     write into a store we cannot read is correct anyway. */
+  const states = await getStatesSafe();
+  const opened = (states[letter.id]?.firstReadAt ?? 0) > 0;
+  if (isSealed(letter, wingDate(), opened)) {
+    return answer(false, 403, 'sealed', { id: letter.id });
+  }
 
   /* MEASURED WITH tidyReply, NOT normalizeReply. normalizeReply truncates, so
      `normalizeReply(x).length > REPLY_MAX` is permanently false and this 413 would

@@ -111,6 +111,10 @@
        styles.css is not loaded here and Astro adds nothing. */
     margin: 8px;
     padding: 0;
+    /* The gate is deliberately unstyled, but its <h1> measured y=23..61,
+       so a notch hid most of it — and this is the page a 30-day session
+       expiry lands on INSIDE the installed app. One inset, no design. */
+    margin-top: max(8px, env(safe-area-inset-top));
 }
 
 /* No max-width, no centring. Text runs the full window like a
@@ -247,6 +251,19 @@
     min-height: 100vh;
     min-height: 100dvh;
     padding: clamp(28px, 6vw, 72px) clamp(18px, 5vw, 48px) 64px;
+    /* SAFE AREA, and it must come AFTER the shorthand above or the shorthand
+       wins. clamp(28px, 6vw, 72px) always resolves to its 28px FLOOR in iPhone
+       portrait (6vw of 390px is 23px), while the status bar is 47-59px tall and
+       the pages set black-translucent — so the kicker was 100% hidden and the
+       [us] wordmark cleared by 3-8px on every page in the wing. Measured in a
+       headless browser, not inferred.
+       max(), not addition, so a device with no inset keeps exactly 28px rather
+       than growing everywhere. env() is 0 without viewport-fit=cover in the
+       viewport meta; both landed in the same commit. */
+    padding-top: max(clamp(28px, 6vw, 72px), calc(env(safe-area-inset-top) + 14px));
+    padding-bottom: max(64px, calc(env(safe-area-inset-bottom) + 24px));
+    padding-left: max(clamp(18px, 5vw, 48px), env(safe-area-inset-left));
+    padding-right: max(clamp(18px, 5vw, 48px), env(safe-area-inset-right));
     background: var(--void);
     color: var(--chalk-dim);
     font-family: var(--us-display);
@@ -388,7 +405,19 @@
     text-transform: uppercase;
     color: var(--concrete-3);
 }
-.studio-foot a { color: var(--concrete-4); }
+/* 44px TOUCH FLOOR. These measured 67x15 ("sign out"), 151x15
+   ("back to the room") and 143x15 ("all the letters") — the
+   navigation between every room in the wing was a 15px-tall
+   target, which takes two or three stabs on a phone. Padding and
+   inline-flex rather than min-height, so the footer's baseline
+   alignment is unchanged. */
+.studio-foot a {
+    color: var(--concrete-4);
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0 2px;
+}
 .studio-foot a:hover { color: var(--blue-light); }
 
 /* Their real tagline, and it happens to be literally true. */
@@ -404,4 +433,41 @@
 @media (prefers-reduced-motion: reduce) {
     .room { transition: none; }
     .room:hover, .room:focus-visible { transform: none; }
+}
+
+/* ============================================================
+   SIGN OUT
+
+   A one-button FORM, styled to read as the link it used to be.
+   It was a plain <a href> until an audit pointed out that a GET
+   logout is activated by things that are not clicks: an iOS
+   long-press link preview, a prefetcher, or a HEAD probe (which
+   Astro maps onto GET). In an installed app that meant being
+   dropped back at the quiz for no visible reason.
+
+   Deliberately still looks like a link and not a button: it is
+   the least important control on the page and promoting it
+   visually would be the wrong reading of a bug fix.
+   ============================================================ */
+.studio-out { display: inline; margin: 0; }
+
+.studio-out-btn {
+    appearance: none;
+    background: none;
+    border: 0;
+    padding: 0;
+    /* 44px is the touch floor everywhere else in the wing; here the
+       hit area is grown with padding on the FORM's line box instead
+       of a min-height, so the footer's baseline is not disturbed. */
+    min-height: 44px;
+    font: inherit;
+    color: var(--concrete-4);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    cursor: pointer;
+}
+.studio-out-btn:hover { color: var(--chalk-dim); }
+.studio-out-btn:focus-visible {
+    outline: 2px solid var(--blue-light);
+    outline-offset: 2px;
 }

@@ -173,7 +173,13 @@ const showPlaceholderNotice = import.meta.env.DEV && !hasR2();
 <html lang="en" class="studio-room-html">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <!-- viewport-fit=cover is REQUIRED for env(safe-area-inset-*) to be
+         anything but 0. The pages set apple-mobile-web-app-status-bar-style
+         to black-translucent, so iOS draws content UNDER the notch and the
+         home indicator; without this attribute there is no opt-out AND no
+         way to pad around it, so the studio's "exit" link sat behind the
+         battery icon. The insets are applied in us.css and us-studio.css. -->
     <meta name="color-scheme" content="dark">
     <meta name="robots" content="noindex, nofollow, noarchive">
     <meta name="referrer" content="no-referrer">
@@ -430,7 +436,7 @@ const showPlaceholderNotice = import.meta.env.DEV && !hasR2();
         <span>
             <a href="/stronger/vault">back to the vault</a>
             &nbsp;&middot;&nbsp;
-            <a href="/api/us/out">sign out</a>
+            <form class="studio-out" method="post" action="/api/us/out"><button class="studio-out-btn" type="submit">sign out</button></form>
         </span>
     </div>
 </main>

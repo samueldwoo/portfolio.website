@@ -184,6 +184,11 @@ const ERRORS: Record<string, string> = {
   'bad-request': "the server couldn't read that. try again?",
   'bad-date': 'that day is not a real day.',
   'future-date': "that day hasn't happened yet.",
+  /* Both of these were falling through to the generic sentence. Only a
+     hand-made request reaches them, but a wrong-but-specific answer is
+     cheaper to write than to diagnose later. */
+  'bad-reaction': "that isn't one of the five. tap one of the buttons instead?",
+  'cross-site': 'that came from somewhere I do not recognise.',
 };
 const errorText = errorCode ? (ERRORS[errorCode] ?? "that didn't go through. try again?") : '';
 
@@ -435,7 +440,13 @@ function minisFor(pair: DayPair): Mini[] {
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <!-- viewport-fit=cover is REQUIRED for env(safe-area-inset-*) to be
+         anything but 0. The pages set apple-mobile-web-app-status-bar-style
+         to black-translucent, so iOS draws content UNDER the notch and the
+         home indicator; without this attribute there is no opt-out AND no
+         way to pad around it, so the studio's "exit" link sat behind the
+         battery icon. The insets are applied in us.css and us-studio.css. -->
     <meta name="color-scheme" content="dark">
     <!-- Belt and braces: the middleware also sends X-Robots-Tag, which covers
          the redirects and JSON responses that cannot carry a meta tag. -->

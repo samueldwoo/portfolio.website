@@ -245,7 +245,7 @@ export function tidyNote(raw: unknown): string {
   const s = String(raw ?? '')
     .replace(/[\r\n\t]+/g, ' ')
     // eslint-disable-next-line no-control-regex
-    .replace(/[ -]/g, '')
+    .replace(/[\x00-]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
   return s.length <= NOTE_MAX ? s : s.slice(0, NOTE_MAX).trimEnd();

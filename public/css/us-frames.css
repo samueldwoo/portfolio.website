@@ -109,6 +109,16 @@
    words rather than as a UI label — the same distinction
    us-letters.css draws with .lt-teaser. */
 .fr-note {
+    /* A PASTED LINK IS AN UNBREAKABLE TOKEN, and this holds free text she
+       controls. Without this the grid track is forced to the URL's min-content
+       width: one Spotify link in the daily answer took the hub from 390px to
+       700px, shoving the wordmark, the cards and the countdown off-screen.
+       Ordinary 400-character prose was always fine — it is specifically the
+       unbroken token. `.tg-item-text` already had this; these did not.
+       On a site whose whole subject is trading song links, pasting one into a
+       text box is not an edge case. */
+    overflow-wrap: anywhere;
+
     font-family: var(--letter-serif, ui-serif, Georgia, serif);
     font-size: 1rem;
     line-height: 1.5;
@@ -175,6 +185,14 @@
    in the wing holds this floor too. */
 .fr-file,
 .fr-input {
+    /* BORDER-BOX, and its absence was a page-level bug rather than a nicety.
+       `width: 100%` + 14px of padding + a 1px border on a content-box input
+       measured 381px inside a 351px column, so the day page scrolled sideways
+       on EVERY load at 390px (document scrollWidth 401) and at 320px (332).
+       Measured in a headless browser, not inferred. UA default box-sizing is
+       content-box for input/textarea and border-box for button, which is why
+       only these two overflowed. */
+    box-sizing: border-box;
     font-family: var(--us-mono);
     font-size: 16px;
     color: var(--chalk-dim);

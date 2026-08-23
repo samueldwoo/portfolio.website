@@ -421,7 +421,13 @@ const rooms = [
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <!-- viewport-fit=cover is REQUIRED for env(safe-area-inset-*) to be
+         anything but 0. The pages set apple-mobile-web-app-status-bar-style
+         to black-translucent, so iOS draws content UNDER the notch and the
+         home indicator; without this attribute there is no opt-out AND no
+         way to pad around it, so the studio's "exit" link sat behind the
+         battery icon. The insets are applied in us.css and us-studio.css. -->
     <meta name="color-scheme" content="dark">
     <meta name="robots" content="noindex, nofollow, noarchive">
     <meta name="referrer" content="no-referrer">
@@ -1103,7 +1109,7 @@ const rooms = [
         <span class="studio-who" data-who={viewer}>
             you are {viewer === 'her' ? (her || 'her') : 'Sam'}
         </span>
-        <a href="/api/us/out">sign out</a>
+        <form class="studio-out" method="post" action="/api/us/out"><button class="studio-out-btn" type="submit">sign out</button></form>
     </div>
 </div>
 
@@ -1330,9 +1336,16 @@ const rooms = [
 
         var say = function (kind, text) {
             /* The word is part of the message, so this never depends on colour. */
+            /* UNHIDE BEFORE WRITING. A live region that appears with its
+               text already inside it does not announce: the screen reader sees
+               one mutation adding a whole subtree, not a change within a region
+               it was already watching. So it must enter the a11y tree FIRST and
+               gain its text SECOND. today.astro and dj.astro already did it this
+               way; the hub, the letters page and the gate did not, so every
+               outcome they reported was silent. */
             ansOut.dataset.kind = kind;
-            ansOut.textContent = (kind === 'bad' ? 'hm — ' : '') + text;
             ansOut.hidden = false;
+            ansOut.textContent = (kind === 'bad' ? 'hm — ' : '') + text;
         };
 
         var ansLabel = ansBtn.textContent;

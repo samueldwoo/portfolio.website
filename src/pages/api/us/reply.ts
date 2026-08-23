@@ -93,6 +93,7 @@ import type { APIRoute } from 'astro';
 import { SESSION_SECRET } from '../../../lib/us/config';
 import { readCookie, verify } from '../../../lib/us/session';
 import { clientKey, hit } from '../../../lib/us/ratelimit';
+import { crossSite } from '../../../lib/us/together';
 import { isWingDate, putReply, wingDate, type ReplyRecord } from '../../../lib/us/kv';
 // The one parser, the one metadata resolver, the one text cleaner, and the SAME
 // field caps as his side — a shorter note on her card would be an asymmetry
@@ -158,6 +159,21 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
   // Session, and only session. My admin token is refused here — see the header.
   if (!verify(secret, 'session', readCookie(cookies, 'session', url))) {
     return answer(false, 401, 'unauthorized');
+  }
+
+  /* CROSS-SITE. Checked AFTER the cookie, so an unauthenticated probe learns
+     nothing it did not already know.
+  
+     This was absent here while frame.ts, mark.ts, thinking.ts and together.ts all
+     had it. That gap was real, not theoretical: Astro's own origin check exempts
+     `application/json` entirely (see origin-check.js — a non-form content type
+     returns early), and `sameSite: 'lax'` is SITE-scoped rather than
+     origin-scoped, so any host under the same registrable domain could make a
+     JSON POST carrying her cookie. The 'cross-site' sentence the pages already
+     had for this could never fire. */
+  if (crossSite(request, url)) {
+    console.warn('[us] refused a cross-site song reply.');
+    return answer(false, 403, 'cross-site');
   }
 
   const limit = await hit(`reply:${clientKey(request, clientAddress)}`, RATE_LIMIT, RATE_WINDOW_SEC);

@@ -123,7 +123,13 @@ const whoWord = (w: Who): string => (w === viewer ? 'you' : w === 'her' ? (her |
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <!-- viewport-fit=cover is REQUIRED for env(safe-area-inset-*) to be
+         anything but 0. The pages set apple-mobile-web-app-status-bar-style
+         to black-translucent, so iOS draws content UNDER the notch and the
+         home indicator; without this attribute there is no opt-out AND no
+         way to pad around it, so the studio's "exit" link sat behind the
+         battery icon. The insets are applied in us.css and us-studio.css. -->
     <meta name="color-scheme" content="dark">
     <meta name="robots" content="noindex, nofollow, noarchive">
     <meta name="referrer" content="no-referrer">
@@ -197,7 +203,12 @@ const whoWord = (w: Who): string => (w === viewer ? 'you' : w === 'her' ? (her |
         </p>
     )}
 
-    {available && !hasKV() && reachable && (
+    {/* GATED ON import.meta.env.DEV, not on the config.
+        This was `available && !hasKV() && reachable`, which is a CONFIGURATION
+        test — so if the Upstash vars were ever missing in production she would
+        read the word "dev" and the name of a service. Every other `dev —` string
+        in the wing is gated on the environment; this one was the sole leak. */}
+    {import.meta.env.DEV && available && !hasKV() && reachable && (
         <p class="notice" data-kind="warn" role="status">
             dev &mdash; no Upstash, so captions and times are not being kept. The
             pictures themselves are safe in the bucket.
@@ -516,16 +527,36 @@ const whoWord = (w: Who): string => (w === viewer ? 'you' : w === 'her' ? (her |
         if (go) go.disabled = true;
         say('shrinking it…');
 
-        shrink(original).then(function (small) {
+        /* The same guarantee for the ENCODE. canvas.toBlob() takes a callback and
+           nothing promises it ever runs; a race means a stuck encoder falls into
+           the .catch below rather than stalling behind a disabled button. */
+        var raced = Promise.race([
+            shrink(original),
+            new Promise(function (_, reject) {
+                setTimeout(function () { reject(new Error('resize timed out')); }, 15000);
+            }),
+        ]);
+
+        raced.then(function (small) {
             var body = new FormData();
             body.append('photo', small, 'frame.jpg');
             var note = form.querySelector('input[name=note]');
             if (note) body.append('note', note.value);
 
             say('sending…');
+            /* A DEADLINE. Every FAILURE branch here falls back to submitting the
+               plain form, but a request that never settles is not a failure — it
+               is a hang, and preventDefault() has already suppressed the native
+               submit and disabled the button. On a phone with one bar, which is
+               the exact case the resizer exists for, she was left on "sending…"
+               forever with no way to retry but a reload that loses her file.
+               45s is generous for a few hundred KB and still finite. */
+            var ctl = new AbortController();
+            var killer = setTimeout(function () { ctl.abort(); }, 45000);
             return fetch(form.action, {
                 method: 'POST',
                 body: body,
+                signal: ctl.signal,
                 /* Accept decides the response shape — see wantsJson() in the
                    endpoint. The Content-Type is set by FormData, boundary and all,
                    and must NOT be set by hand. */
@@ -533,6 +564,7 @@ const whoWord = (w: Who): string => (w === viewer ? 'you' : w === 'her' ? (her |
                 credentials: 'same-origin',
             });
         }).then(function (res) {
+            clearTimeout(killer);
             return res.json().catch(function () { return { ok: res.ok }; });
         }).then(function (data) {
             if (data && data.ok) {
@@ -548,6 +580,11 @@ const whoWord = (w: Who): string => (w === viewer ? 'you' : w === 'her' ? (her |
                re-encode — and the endpoint's own error page explains the rest. */
             form.submit();
         }).catch(function () {
+            /* Reached by an abort (the deadline above), a network failure, or a
+               resize that threw. All three mean the same thing: hand the job to
+               the real form, which posts the ORIGINAL file with no script
+               involved. */
+            clearTimeout(killer);
             say('');
             if (go) go.disabled = false;
             form.submit();

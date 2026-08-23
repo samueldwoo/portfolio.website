@@ -101,13 +101,48 @@ export const onRequest = defineMiddleware(async (ctx, next) => {
     const valid = needsAdmin ? read('admin') : (read('session') ?? read('admin'));
 
     if (!valid) {
-      // An API caller gets a status code; a person gets sent to the front door.
+      /* A SCRIPT gets a status code; a PERSON gets sent to the front door — and
+         "is this an API path" was the wrong way to tell them apart.
+
+         Every endpoint here is posted to two ways: by fetch, which wants JSON,
+         and by a plain <form>, which is a NAVIGATION whose response BECOMES the
+         page. Keying off the path meant a form post carrying a stale cookie
+         returned `{"ok":false,"error":"unauthorized"}` as the page. Her session
+         lapses, she taps a reaction, and she is looking at a JSON blob — inside
+         an installed app with no URL bar and no back button.
+
+         It also made dead code of a sentence written four times over ("your
+         session ran out. Answer the questions again and you are back in."):
+         every copy was unreachable, because this branch fired first and never
+         redirected.
+
+         So the test is now what the CALLER can render. A form-encoded or
+         multipart POST is a navigation and goes to the gate. Everything else —
+         fetch, JSON, anything asking for JSON back — still gets the 401 it can
+         parse. */
       if (path.startsWith('/api/')) {
+        const ct = (ctx.request.headers.get('content-type') ?? '').toLowerCase();
+        const accept = (ctx.request.headers.get('accept') ?? '').toLowerCase();
+        const isFormNavigation =
+          !accept.includes('application/json') &&
+          (ct.includes('application/x-www-form-urlencoded') ||
+            ct.includes('multipart/form-data'));
+
+        if (!isFormNavigation) {
+          return withPrivacyHeaders(
+            new Response(JSON.stringify({ ok: false, error: 'unauthorized' }), {
+              status: 401,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+          );
+        }
+
+        /* 303, not 302: the request was a POST and the destination is a page to
+           GET. A 302 would have the browser re-POST to the gate. */
+        const back = new URL(WING, ctx.url);
+        back.searchParams.set('e', 'unauthorized');
         return withPrivacyHeaders(
-          new Response(JSON.stringify({ ok: false, error: 'unauthorized' }), {
-            status: 401,
-            headers: { 'Content-Type': 'application/json' },
-          }),
+          new Response(null, { status: 303, headers: { Location: back.toString() } }),
         );
       }
 

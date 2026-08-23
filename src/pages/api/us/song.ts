@@ -90,6 +90,7 @@ import type { APIRoute } from 'astro';
 import { SESSION_SECRET } from '../../../lib/us/config';
 import { readCookie, verify } from '../../../lib/us/session';
 import { clientKey, hit } from '../../../lib/us/ratelimit';
+import { crossSite } from '../../../lib/us/together';
 import {
   StoreError,
   emptyPair,
@@ -587,6 +588,21 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
   // anonymous caller: being allowed to read is not a step towards writing.
   if (!verify(secret, 'admin', readCookie(cookies, 'admin', url))) {
     return answer(false, 401, 'unauthorized');
+  }
+
+  /* CROSS-SITE. Checked AFTER the cookie, so an unauthenticated probe learns
+     nothing it did not already know.
+  
+     This was absent here while frame.ts, mark.ts, thinking.ts and together.ts all
+     had it. That gap was real, not theoretical: Astro's own origin check exempts
+     `application/json` entirely (see origin-check.js — a non-form content type
+     returns early), and `sameSite: 'lax'` is SITE-scoped rather than
+     origin-scoped, so any host under the same registrable domain could make a
+     JSON POST carrying her cookie. The 'cross-site' sentence the pages already
+     had for this could never fire. */
+  if (crossSite(request, url)) {
+    console.warn('[us] refused a cross-site song post.');
+    return answer(false, 403, 'cross-site');
   }
 
   const limit = await hit(`song:${clientKey(request, clientAddress)}`, POST_LIMIT, POST_WINDOW_SEC);

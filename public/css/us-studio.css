@@ -307,6 +307,22 @@
         "mid   mid"
         "plate index";
     padding: clamp(14px, 3vw, 26px);
+    /* THE WORST MEASURED DEFECT IN THE WING, and two independent audits found
+       it separately. clamp(14px, 3vw, 26px) always resolves to its 14px FLOOR
+       on a phone (3vw of 390px is 11.7px). With black-translucent set, that put
+       the ONLY WAY OUT of the room — the `exit` link — at y=9..48, i.e. 38 of
+       its 39 pixels behind a 47px notch and all 39 behind a Dynamic Island. It
+       also overlapped iOS's own tap-status-bar-to-scroll-top region, so taps
+       there were ambiguous even where it was visible.
+       The bottom inset matters too: the memory index is a horizontal swipe
+       strip that sat 18px inside the home-indicator band, so swiping through
+       the memories competed with the iOS home gesture.
+       AFTER the shorthand, or the shorthand wins. max(), so a device with no
+       inset is unchanged. */
+    padding-top: max(clamp(14px, 3vw, 26px), calc(env(safe-area-inset-top) + 10px));
+    padding-bottom: max(clamp(14px, 3vw, 26px), calc(env(safe-area-inset-bottom) + 10px));
+    padding-left: max(clamp(14px, 3vw, 26px), env(safe-area-inset-left));
+    padding-right: max(clamp(14px, 3vw, 26px), env(safe-area-inset-right));
     gap: 12px;
 }
 
@@ -434,7 +450,16 @@
     text-decoration: none;
     border-bottom: 1px solid var(--concrete-2);
     /* 44px of pressable height without 44px of visual weight. */
-    padding: 12px 4px;
+    /* 44px in BOTH axes. Measured at 42x39, which is under the floor on
+       both — and this is the ONLY way out of the room, so it is the worst
+       control in the wing to have undersized. Padding rather than
+       min-height so the HUD's baseline is untouched. */
+    padding: 12px 10px;
+    min-width: 44px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     margin: -12px 0;
 }
 .room-exit:hover,
@@ -691,7 +716,13 @@
     min-height: 66px;
     padding: 10px;
     font-family: var(--us-display);
-    font-size: 0.95rem;
+    /* 16px FLOOR. Was under it, and under 16px iOS Safari zooms the
+       viewport on focus and never zooms back — which here would leave a
+       scroll-driven 3D room permanently magnified, with both the canvas
+       hit test and the sticky HUD scaled. Measured at 15.2px and 14.7px;
+       this was the one place on her real path where the wing's own 16px
+       rule was broken. */
+    font-size: 1rem;
     line-height: 1.5;
     color: var(--chalk);
     background: var(--void);
@@ -1336,7 +1367,13 @@
     padding: 9px;
     resize: vertical;
     font-family: var(--us-display);
-    font-size: 0.92rem;
+    /* 16px FLOOR. Was under it, and under 16px iOS Safari zooms the
+       viewport on focus and never zooms back — which here would leave a
+       scroll-driven 3D room permanently magnified, with both the canvas
+       hit test and the sticky HUD scaled. Measured at 15.2px and 14.7px;
+       this was the one place on her real path where the wing's own 16px
+       rule was broken. */
+    font-size: 1rem;
     line-height: 1.5;
     color: var(--chalk);
     background: var(--void);
