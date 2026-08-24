@@ -1231,19 +1231,38 @@ a.bubble.ticker:hover::after { transform: translate(2px, -2px); opacity: 1; }
     font-weight: 600;
     margin: 4px 0 12px;
 }
-/* The two rungs of one role. Same mono micro register as `.exp-date` so it reads
-   as metadata about the entry rather than as a second heading — the whole point
-   is to show the promotion WITHOUT splitting the entry into two blocks and
-   duplicating the description. Sits between the company and the prose, where the
-   eye is already travelling. Tabular figures so the two dates align. */
+/* THE RUNGS OF ONE STINT, grouped under the employer.
+   Each rung is a title plus its own dates; the shared description follows the
+   list. A left hairline ties them to the company above and does the job
+   LinkedIn's indent does — it says "these are inside that" without inventing a
+   second heading level, which is why the titles are spans and not <h5>s.
+   Tabular figures so the two date rows align under each other. */
 .exp-rungs {
+    list-style: none;
+    margin: 10px 0 16px;
+    padding-left: 14px;
+    border-left: 1px solid var(--line);
+    display: grid;
+    gap: 8px;
+}
+.exp-rung { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; }
+.exp-rung-title {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 1.02rem;
+    line-height: var(--lh-head);
+    letter-spacing: var(--tr-sm);
+    color: var(--ink);
+    flex: 1 1 auto;
+}
+.exp-rung-date {
     font-family: var(--mono);
     font-size: .66rem;
     letter-spacing: .1em;
     text-transform: uppercase;
     color: var(--mut);
     font-variant-numeric: tabular-nums;
-    margin: -6px 0 12px;
+    white-space: nowrap;
 }
 /* MEASURE. This was the site's worst line length: 68ch realized 89 real
    characters per line from 1024 up (87 at 820), against a 60-85 comfortable

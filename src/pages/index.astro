@@ -38,6 +38,34 @@ const resumeExists = fs.existsSync(
     new URL(`../../public${RESUME_PATH}`, import.meta.url)
 );
 
+/**
+ * TENURE, DERIVED — because a hardcoded "2 yrs 6 mos" is wrong within a month.
+ * Recomputed at every build, which is the same cadence the footer year uses.
+ *
+ * COUNTING CONVENTION, stated because the two rungs share a month. LinkedIn
+ * counts inclusively (its "Oct 2025 - Jul 2026" reads 10 mos), so the CURRENT
+ * rung is inclusive of both ends. The earlier rung is exclusive of its end month
+ * instead, because Jul 2026 is the month the promotion happened and belongs to
+ * one rung only — counting it twice would make the parts sum to more than the
+ * whole. They now add up exactly: 29 + 2 = 31.
+ */
+const LAB126_START = new Date(2024, 1);   // Feb 2024
+const SDE2_START = new Date(2026, 6);     // Jul 2026
+const NOW = new Date();
+
+const monthSpan = (a: Date, b: Date) => (b.getFullYear() - a.getFullYear()) * 12 + (b.getMonth() - a.getMonth());
+const humanDur = (months: number) => {
+    const y = Math.floor(months / 12);
+    const m = months % 12;
+    const parts = [];
+    if (y) parts.push(`${y} yr${y === 1 ? '' : 's'}`);
+    if (m || !y) parts.push(`${m} mo${m === 1 ? '' : 's'}`);
+    return parts.join(' ');
+};
+const sde1Dur = humanDur(monthSpan(LAB126_START, SDE2_START));        // exclusive end
+const sde2Dur = humanDur(monthSpan(SDE2_START, NOW) + 1);             // inclusive
+const lab126Dur = humanDur(monthSpan(LAB126_START, NOW) + 1);
+
 const CONTACT_EMAIL = 'samuel.dw.woo@gmail.com';
 const FORM_ENDPOINT = 'https://formspree.io/f/YOUR_FORM_ID';
 const formConfigured = !FORM_ENDPOINT.includes('YOUR_FORM_ID');
@@ -584,29 +612,33 @@ const reachAxisTicks = AXIS_TICKS.map((t) => `M${vbX(t)} 0.6 V5.4`).join(' ');
                         {/* Read-progress rail: scrubs from 0 to full as the
                              timeline scrolls past. Rests filled with motion off. */}
                         <span class="timeline-rail" aria-hidden="true"></span>
-                        <article class="exp-item reveal" aria-labelledby="exp-sde2-title">
+                        {/* GROUPED BY EMPLOYER, the way LinkedIn does it: the company is
+                             the anchor, total tenure sits under it, and each rung carries its
+                             own dates — but with ONE description for the whole stint rather
+                             than one per rung, which is what was asked for.
+
+                             The <h4> is the COMPANY now, not the current title, so the roles
+                             can be an ordered list inside the entry instead of competing with
+                             it for the same heading level. Newest first, as on a CV. The
+                             overall "February 2024 – Present" span is gone: with per-rung
+                             dates and a tenure line it was the same fact three times.
+
+                             Durations come from the frontmatter, never typed. */}
+                        <article class="exp-item exp-item--grouped reveal" aria-labelledby="exp-lab126-title">
                             <div class="exp-head">
-                                <h4 id="exp-sde2-title" class="exp-title">Software Development Engineer II</h4>
-                                <span class="exp-date">February 2024 – Present</span>
+                                <h4 id="exp-lab126-title" class="exp-title">Amazon Lab126</h4>
+                                <span class="exp-date">Full-time · {lab126Dur}</span>
                             </div>
-                            <p class="exp-company">Amazon Lab126</p>
-                            {/* THE PROMOTION, as one subtle line rather than a second block.
-                                The heading carries the CURRENT level and the span above carries
-                                the whole tenure, which together read as "SDE II since 2024" —
-                                not true. Splitting the entry in two would say it accurately and
-                                cost the single role description, so the rungs go on one mono
-                                line instead: same register as `.exp-date`, no new hierarchy.
-                                NO ARROW AND NO HIDDEN TEXT. The first version was
-                                "SDE I Feb 2024 → SDE II Jul 2026" with the arrow
-                                `aria-hidden` and ", promoted to" in a `.visually-hidden`
-                                span. Chrome's AX tree showed only the two visible
-                                fragments, so the relationship a sighted reader gets from
-                                the glyph may simply not reach a screen reader — and
-                                meaning should not depend on hidden text when plain
-                                wording does the same job. "Since" carries it for both,
-                                and Feb 2024 is not repeated because the date span above
-                                already states it. */}
-                            <p class="exp-rungs">Started SDE I · SDE II since Jul 2026</p>
+                            <ol class="exp-rungs">
+                                <li class="exp-rung">
+                                    <span class="exp-rung-title">Software Development Engineer II</span>
+                                    <span class="exp-rung-date">Jul 2026 – Present · {sde2Dur}</span>
+                                </li>
+                                <li class="exp-rung">
+                                    <span class="exp-rung-title">Software Development Engineer I</span>
+                                    <span class="exp-rung-date">Feb 2024 – Jul 2026 · {sde1Dur}</span>
+                                </li>
+                            </ol>
                             <p>Building the high-throughput data pipeline for autonomous delivery robots — a C++ edge appliance that ingests self-encrypting drives of vehicle sensor data into S3, moving 40+ Gbps across drives uploading in parallel. Owns the drive security lifecycle end to end: keyless cloud auth, encrypted-drive unlock, and audited crypto-erase.</p>
                             <p>Before this, was the SME for the camera stack on Amazon's smart delivery glasses — drove camera failure rates from 30.7% down to 0.5% and shipped hardware dewarp that cut CPU ~80%, across 244 devices and 270k+ deliveries.</p>
                         </article>
