@@ -41,9 +41,14 @@
     --bo-hand: "Caveat", "Bradley Hand", "Segoe Script", cursive;
 }
 
+/* 0.72rem, matching .song-eyebrow rather than sitting 0.04rem
+   under it. Both files say in their headers that they reuse one
+   eyebrow vocabulary; this is the value finally agreeing with the
+   claim, and "put one up" is the header of the posting surface, so
+   it is the one that was costing something. */
 .fr-eyebrow {
     font-family: var(--us-mono);
-    font-size: 0.68rem;
+    font-size: 0.72rem;
     letter-spacing: 0.18em;
     text-transform: uppercase;
     color: var(--concrete-4);
@@ -186,17 +191,32 @@
    POSTING
    ------------------------------------------------------------ */
 
+/* ============================================================
+   26 BETWEEN FIELDS, 8 INSIDE ONE
+
+   It was 20 and 8. Every line in this form is small, mono, grey
+   and uppercase — label, hint, warning, button — so 12px of
+   difference was the only thing separating one question from the
+   next, and at 320px the whole form measured as a single column
+   of grey text with no visible seams. Same complaint the owner
+   made about the song form, same cause, same fix: 3.25:1 is where
+   proximity groups on its own, so no rule, box or tint had to be
+   invented to help it.
+   ============================================================ */
 .fr-form {
     display: grid;
-    gap: 20px;
+    gap: 26px;
     max-width: 46ch;
 }
 
 .fr-field { display: grid; gap: 8px; }
 
+/* 12px, up from 11.2px, matching .dj-label on the song page.
+   These two forms are the same act on two surfaces and were
+   typeset half a pixel apart. */
 .fr-label {
     font-family: var(--us-mono);
-    font-size: 0.7rem;
+    font-size: 0.75rem;
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--chalk-dim);
@@ -227,7 +247,120 @@
     min-height: 44px;
     width: 100%;
 }
-.fr-file { padding: 10px 12px; }
+
+/* ============================================================
+   THE FILE INPUT — THE UGLIEST THING ON EITHER SURFACE, AND THE
+   ONE PIECE OF THIS WING THAT WAS NOT DESIGNED AT ALL
+
+   WHAT IT LOOKED LIKE. A box styled to look like a text field,
+   with the operating system's own "Choose File" button sitting
+   inside it: light grey, system font, system corner radius,
+   system border. Two boxes, one of them from a different design
+   language, nested. On a black industrial page it read as a
+   rendering fault. And the affordance lied in both directions —
+   the small grey rectangle looked like the only thing you could
+   press, while the large field-shaped box around it looked like
+   somewhere you could type.
+
+   WHAT WAS REJECTED. The usual fix is to hide the input and point
+   a <label> at it, styled as a button. That is not available here
+   and it is not a close call: this form is a real multipart POST
+   with a real action because it is the one feature most likely to
+   be used from a phone with the script blocked, and a visually
+   hidden input is one CSS rule away from being an unreachable
+   input. The affordance must be the control, not a stand-in for
+   it.
+
+   WHAT IT IS NOW. ::file-selector-button, which styles the real
+   shadow button in place — no markup change, no JavaScript, no
+   label indirection, and nothing to fall back FROM. Where the
+   pseudo-element is unsupported the browser draws exactly what it
+   drew before, so the floor is today's rendering rather than a
+   broken one.
+
+   THE PLATE AROUND IT IS NO LONGER FIELD-SHAPED. It is taller than
+   a text input on purpose — 58px used against the note field's 47
+   — it holds the button in a visible gutter, and the UA's own "no
+   file chosen" text sits beside it already inheriting our mono face
+   and our --chalk-dim. So the whole control is ours and it stops
+   impersonating something you can type into.
+
+   THE BUTTON IS 44px BY ITSELF. Chrome opens the picker from
+   anywhere in the input's box, but Safari activates only the
+   button — so sizing the plate would have been sizing the wrong
+   thing, and the button carries the floor on its own.
+   ============================================================ */
+.fr-file {
+    /* 6px all round: the plate is a gutter for the button rather
+       than the text padding a field wants — and every pixel here is
+       a pixel the browser's own status text does not get. See the
+       WIDTH BUDGET note on the button below. */
+    padding: 6px;
+    min-height: 56px;
+    /* The plate keeps --machine from the shared rule above and the
+       button takes --machine-2, so the button reads as ON the plate
+       rather than as a lighter patch of it. That is the palette's
+       own elevation step and the same pairing the song page's
+       disclosure now uses. */
+    cursor: pointer;
+}
+
+/* ============================================================
+   THE WIDTH BUDGET, WHICH IS WHY THIS BUTTON IS NOT ROOMIER
+
+   The browser prints its own status text — "No file chosen", then
+   the filename — to the RIGHT of this button, inside the same box,
+   and it truncates that text with a middle ellipsis when it does
+   not fit. There is no pseudo-element for it and no way to move
+   it to a second line, so the button's width is subtracted
+   directly from the readability of the one piece of state this
+   control reports.
+
+   The first version of this rule used 0.14em tracking and 18px of
+   side padding, which is the wing's normal setting for a mono
+   button. It measured 136px, and at 320px that left 116px for a
+   string that needs 134px: the empty state rendered as
+   "No fi…chosen", which looks like a rendering fault and is worse
+   than the system button it replaced.
+
+   So: 0.1em and 12px, measured at 116px including its margin,
+   which leaves ~144px against the 134px the string needs — about
+   9px of slack at 320px and ~73px at 390px. Tighter tracking than
+   the wing's default is the price of the browser owning half of
+   this control, and it is cheaper than a truncated status line.
+
+   The 16px on the input above is NOT available to trade here, even
+   though a file input never raises a keyboard and so never
+   triggers the iOS zoom that number exists for: the size is shared
+   by the button and the status text, and the status text is the
+   part that has to stay legible.
+   ============================================================ */
+.fr-file::file-selector-button {
+    appearance: none;
+    -webkit-appearance: none;
+    /* margin, not the plate's gap: flex/grid gaps do not reach
+       into a UA shadow tree, and the status text beside this is not
+       a sibling box we can space. `display: flex` on the input is
+       accepted by the cascade and changes nothing about the shadow
+       layout — verified, not assumed. */
+    margin: 0 10px 0 0;
+    min-height: 44px;
+    padding: 0 12px;
+    font-family: var(--us-mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--chalk);
+    background: var(--machine-2);
+    border: 1px solid var(--concrete-2);
+    border-radius: 2px;
+    cursor: pointer;
+}
+
+.fr-file:hover::file-selector-button {
+    border-color: var(--blue-light);
+    color: var(--chalk);
+}
 
 .fr-input:focus-visible,
 .fr-file:focus-visible,
@@ -236,50 +369,110 @@
     outline-offset: 2px;
 }
 
+/* Focus lands on the INPUT, never on the shadow button, so the
+   ring above is the only indicator — and it is drawn round the
+   whole plate. This adds the border change the song page's fields
+   already had, so a focused control is identifiable without
+   relying on the ring alone. */
+.fr-input:focus-visible,
+.fr-file:focus-visible {
+    border-color: var(--blue-light);
+}
+
+/* 12px, up from 10.88px — this was the smallest type on either
+   page and it is the text that tells her the picture gets shrunk
+   for her, read one-handed. Matches .dj-hint. */
 .fr-hint {
     font-family: var(--us-mono);
-    font-size: 0.68rem;
-    line-height: 1.65;
+    font-size: 0.75rem;
+    line-height: 1.55;
     letter-spacing: 0.03em;
     color: var(--concrete-4);
     margin: 0;
 }
-/* "you already put one up today". A word-carried warning — no
-   colour is doing the work on its own. */
-.fr-hint--warn { color: var(--chalk-dim); }
 
+/* ============================================================
+   "YOU ALREADY PUT ONE UP TODAY. A NEW ONE REPLACES IT."
+
+   Still word-carried, still no colour doing the work on its own —
+   that part was right and is unchanged. What was wrong is that
+   this is the single most consequential sentence in the form, and
+   it was rendered as a third .fr-hint: same size, same face, same
+   grey, sitting in the same rhythm as "JPEG, PNG or WebP". A
+   sentence that says the next tap destroys today's photograph
+   cannot look like a note about file formats.
+
+   A left rule and a gutter, borrowed from .notice's vocabulary
+   without becoming a .notice — this is a standing condition of the
+   form, not an outcome of an action, so it must not appear in the
+   same clothes as "that's up." at the top of the page.
+   ============================================================ */
+.fr-hint--warn {
+    color: var(--chalk-dim);
+    border-left: 2px solid var(--concrete-4);
+    padding: 2px 0 2px 12px;
+    /* IT BELONGS TO THE BUTTON, so the space it gives up is the
+       space BELOW it. The first attempt pulled it upward with a
+       negative margin-top, which in a grid row does the opposite of
+       what was wanted: it tightened the gap to the note field above
+       and widened the one to the control the warning is about. */
+    margin-bottom: -8px;
+}
+
+/* ============================================================
+   ONE COMMIT BUTTON FOR THE WHOLE WING
+
+   This was --blue-glow with black text, 44px tall, 0.74rem, and
+   `justify-self: start`. The song page's .dj-submit is
+   --blue-brand with white text, 52px tall, 0.86rem, full measure.
+   Same wing, same act — "this is my one for today" — rendered in
+   two different visual languages, and the pale one read as the
+   secondary of the two even though nothing on this page is more
+   important than it.
+
+   --blue-brand is the wing's answer for a primary control (see
+   us.css: "-brand for marks and controls"), so the two now agree
+   on that one. The full measure is deliberate rather than
+   incidental: the emphasis and the hit area are the same rectangle
+   here, which is the rule this codebase learned the hard way when
+   a "subtle" button became undiscoverable.
+   ============================================================ */
 .fr-go {
-    justify-self: start;
-    min-height: 44px;
-    padding: 0 22px;
+    min-height: 52px;
+    padding: 14px 22px;
     font-family: var(--us-mono);
-    font-size: 0.74rem;
+    font-size: 0.86rem;
     letter-spacing: 0.16em;
     text-transform: uppercase;
-    color: var(--void);
-    background: var(--blue-glow);
-    border: 1px solid var(--blue-glow);
+    color: var(--chalk);
+    background: var(--blue-brand);
+    border: 1px solid var(--blue-light);
     border-radius: 2px;
     cursor: pointer;
+    transition: background 160ms ease, box-shadow 160ms ease;
 }
 .fr-go:hover:not(:disabled) {
-    background: var(--chalk);
-    border-color: var(--chalk);
+    background: #2848f0;
+    box-shadow: 0 0 24px -8px rgba(62, 123, 255, 0.8);
 }
 .fr-go:disabled {
     /* Greyed by BACKGROUND, not by opacity, so the label keeps its
-       measured contrast while it is uploading. */
-    background: var(--concrete-2);
+       measured contrast while it is uploading. --concrete-4 on
+       --concrete-1 measures 5.09:1, which clears AA even though a
+       disabled control is exempt from it. */
+    background: var(--concrete-1);
     border-color: var(--concrete-2);
-    color: var(--chalk-dim);
-    cursor: default;
+    color: var(--concrete-4);
+    box-shadow: none;
+    cursor: progress;
 }
 
 /* "shrinking it…" / "sending…". Spoken by role="status", so it is
-   announced without stealing focus. */
+   announced without stealing focus. 12px, because a status line
+   that reports on an upload in progress is not decoration. */
 .fr-status {
     font-family: var(--us-mono);
-    font-size: 0.68rem;
+    font-size: 0.75rem;
     letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--blue-glow);
@@ -297,4 +490,40 @@
    ------------------------------------------------------------ */
 @media (prefers-reduced-motion: reduce) {
     .fr-go { transition: none; }
+}
+
+/* ---------------------------------------------------------------------------
+   WHERE IT WAS TAKEN
+
+   Quieter than the note and quieter than the time, because it is a fact ABOUT the
+   photograph rather than something either of them said. It exists so that keeping
+   the coordinates is visible — the reasoning lives in day.astro, next to the
+   markup it explains.
+   --------------------------------------------------------------------------- */
+.fr-where {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 5px;
+    /* Mono: these are digits meant to be compared between days, not read as
+       prose, and a proportional face makes a column of coordinates ragged. */
+    font-family: var(--us-mono, "DM Mono", ui-monospace, monospace);
+    font-size: 0.78rem;
+    letter-spacing: 0.01em;
+    /* --concrete-4 (#9a9ca1) rather than --concrete-3 (#84868b): measured 7.30:1
+       against 5.51:1 on the near-black page. Both clear 4.5:1, but this is small
+       text, which is where that floor is easiest to fail by eye. */
+    color: var(--concrete-4);
+}
+
+/* The glyph does not scale with the digits — an emoji at 0.78rem is mud on a
+   phone, and it carries nothing a screen reader needs, hence aria-hidden. */
+.fr-where-pin {
+    font-size: 0.9rem;
+    line-height: 1;
+}
+
+.fr-where-num {
+    /* A coordinate never wraps mid-number: "48.8582," on one line and "2.2945" on
+       the next reads as two values rather than one place. */
+    white-space: nowrap;
 }

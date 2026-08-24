@@ -389,6 +389,44 @@
 }
 
 /* Lowercase and bracketed, mirroring [solidcore]'s own lockup. */
+/* ============================================================
+   THE WORDMARK OWNS THE SPACE BELOW ITSELF, AND IT USED NOT TO
+
+   `margin: 0` was fine for four of the five pages that render
+   this and was a visible bug on the fifth, which is exactly the
+   shape of problem a base sheet is supposed to prevent.
+
+   WHAT WAS ACTUALLY WRONG. `line-height: 1` makes the element
+   box exactly font-size tall, and Space Grotesk's natural line
+   box is ~1.27em — so at the 2.6rem floor the glyphs measured
+   53px of ink inside a 41.6px box: 6px escaping above and 5.4px
+   below. Ink outside the box is invisible to layout, so the next
+   sibling is free to start where the ink still is.
+
+   On four pages the next sibling is `.studio-lede`, whose
+   `margin-top: 20px` quietly absorbed all of it. On
+   /samdrea/vault/today there is no lede — the next thing is a
+   bordered card (or `.rhythm`, or `.notice`, and every one of
+   those carries `margin-top: 0`). So the card's top edge landed
+   at the heading's box bottom, 5.4px ABOVE the bottom of the
+   bracket glyphs, and the border drew a hairline straight
+   through `[today]`'s brackets. Reported as the form's menu
+   cutting into the heading; measured in a headless browser at
+   both 390px and 320px before anything was touched.
+
+   WHY A MARGIN AND NOT A BIGGER line-height. Growing the line
+   box to contain the ink would fix the collision and would also
+   loosen the lockup on all five pages — and the tight, cropped
+   setting IS the mark. So the box keeps lying about its height
+   and the margin is sized to cover the lie (5.4px) plus real
+   space on top of it.
+
+   IT CANNOT DOUBLE UP. Adjacent block siblings collapse their
+   margins and nothing between here and them opens a new block
+   formatting context, so on the four pages with a lede this
+   resolves to the larger of the two (22px vs 20px) rather than
+   to their sum. Verified on all five pages, not assumed.
+   ============================================================ */
 .us-mark {
     font-family: var(--us-display);
     font-weight: 700;
@@ -396,7 +434,7 @@
     letter-spacing: -0.035em;
     line-height: 1;
     color: var(--chalk);
-    margin: 0;
+    margin: 0 0 clamp(22px, 3.4vw, 30px);
 }
 .us-mark-bracket { color: var(--blue-light); }
 

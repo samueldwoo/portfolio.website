@@ -1020,7 +1020,7 @@ a.mini:focus-visible {
     box-sizing: border-box;
     padding: 13px 14px;
     line-height: 1.4;
-    background: var(--machine);
+    background: var(--machine-2);
     border: 1px solid var(--concrete-2);
     border-radius: 2px;
     font-family: var(--us-mono);
@@ -1041,12 +1041,55 @@ a.mini:focus-visible {
     outline-offset: 2px;
 }
 
-/* Open: the form below is the point, so the summary steps back
-   and becomes a header for it rather than competing with it. */
+/* ============================================================
+   OPEN, IT STOPS PRETENDING TO BE A DROPDOWN
+
+   THE OLD OPEN STATE KEPT THE WHOLE BOX and only recoloured its
+   edge, which produced the thing the owner actually complained
+   about: a bordered plate carrying a triangle and an uppercase
+   label is the exact rendering of a native <select>, so with the
+   form beneath it the card read as a selection menu jammed open
+   above a stack of fields. The words underneath it were the
+   form's; the box on top of them was still shaped like the
+   control you press to choose something.
+
+   Closed it SHOULD look like that — it is a control, it is the
+   only way into posting, and the wing has already been bitten
+   once by making a real button subtle enough to disappear. So
+   the plate, the ground and the border all stay in the closed
+   state and get one step MORE contrast than before
+   (--machine-2 rather than --machine, so the plate separates
+   from the card it sits on instead of matching it).
+
+   Open, there is nothing left to press: the disclosure has
+   already disclosed, and its job for the rest of the interaction
+   is to caption the fields below. So the plate is dropped for a
+   single rule under the words. The state is still carried
+   without colour by the two things that always carried it — the
+   marker has rotated and the sentence has changed — and dropping
+   the border cannot cost discoverability of a control that is,
+   by definition, already activated.
+
+   The hit area does NOT shrink: min-height, padding and the
+   line-height are untouched, so this is still a 44px target that
+   collapses the form again.
+   ============================================================ */
 .reply-details[open] .reply-summary {
-    border-color: var(--blue-light);
-    color: var(--blue-glow);
-    margin-bottom: 18px;
+    background: none;
+    border-color: transparent;
+    border-bottom: 1px solid var(--concrete-2);
+    border-radius: 0;
+    /* The plate is gone, so its 14px of inner gutter would leave
+       the caption indented from the fields it belongs to. */
+    padding-left: 0;
+    padding-right: 0;
+    color: var(--chalk-dim);
+    margin-bottom: 20px;
+}
+
+.reply-details[open] .reply-summary:hover {
+    color: var(--chalk);
+    border-bottom-color: var(--concrete-4);
 }
 
 /* Reuses .dj-form / .dj-field / .dj-input / .dj-textarea /
@@ -1301,9 +1344,24 @@ a.mini:focus-visible {
     margin: 0 auto;
 }
 
+/* ============================================================
+   THE SPACING IS WHAT MAKES THIS READ AS FIELDS AND NOT AS A
+   COLUMN OF SMALL GREY TEXT
+
+   It was `gap: 18px` between fields and `gap: 7px` inside one, a
+   ratio of 2.6:1 — and every line in the form is mono, small and
+   grey, so 11px of difference was the ONLY thing telling you
+   where one question ended and the next began. Measured on a
+   phone the form read as nine undifferentiated rows.
+
+   26 and 8 is 3.25:1, which is the point at which proximity does
+   the grouping on its own and no rule, box or tint has to be
+   added to help it. Nothing was added: this is the same markup,
+   spaced honestly.
+   ============================================================ */
 .dj-form {
     display: grid;
-    gap: 18px;
+    gap: 26px;
     margin: 0;
     /* A text input eight hundred pixels wide is a text input nobody can
        see the start of. Applies to both forms in the wing — mine on
@@ -1314,12 +1372,20 @@ a.mini:focus-visible {
 
 .dj-field {
     display: grid;
-    gap: 7px;
+    gap: 8px;
 }
 
+/* 0.75rem = 12px, RAISED FROM 0.72rem, and the reason is the hint
+   below it rather than the label itself. Both were under 12px
+   (11.52 and 10.88), which is small enough that neither could be
+   made to lead the other — six roles on these two pages sat
+   inside a 1.6px range, so the type carried no hierarchy at all
+   and the eye had no entry point into a field. The label and the
+   hint now differ by case, tracking and colour instead of by half
+   a pixel, and both clear the 12px floor. */
 .dj-label {
     font-family: var(--us-mono);
-    font-size: 0.72rem;
+    font-size: 0.75rem;
     text-transform: uppercase;
     letter-spacing: 0.14em;
     color: var(--concrete-5);
@@ -1333,8 +1399,11 @@ a.mini:focus-visible {
 
 .dj-hint {
     font-family: var(--us-mono);
-    font-size: 0.68rem;
-    line-height: 1.5;
+    /* 12px, up from 10.88px. This is the text that explains where
+       to find a Spotify share link while she is holding the phone
+       one-handed, and it was the smallest type on the page. */
+    font-size: 0.75rem;
+    line-height: 1.55;
     color: var(--concrete-3);
     margin: 0;
 }
@@ -1343,7 +1412,13 @@ a.mini:focus-visible {
 .dj-textarea {
     width: 100%;
     box-sizing: border-box;
-    min-height: 48px;
+    /* 52px, up from 48px, and it is 52 because .dj-submit is 52.
+       The one required field on this form and the button that
+       commits it now share a height, so the form has a single
+       vertical unit instead of two that were four pixels apart for
+       no reason anyone could have stated. Still well over the 44px
+       floor either way. */
+    min-height: 52px;
     padding: 12px 14px;
     background: var(--void);
     border: 1px solid var(--concrete-2);
