@@ -83,6 +83,19 @@ photos/
 # Playwright MCP scratch output (screenshots, console logs) from verification runs.
 .playwright-mcp/
 
+# Exported frames, for printing. `npm run export:frames` defaults to ~/us-export
+# and REFUSES to write anywhere inside this worktree, so in normal use nothing
+# ever lands here for this rule to catch.
+#
+# It exists anyway as a second, independent layer. The refusal lives in one
+# function in one script; this line survives that script being edited, and it
+# also covers the case somebody copies the finished folder in by hand to look at
+# it. The contents are photographs of two people plus the notes they wrote each
+# other, on a PUBLIC repo — one `git add -A` publishes them permanently, so it is
+# worth having two things go wrong before that can happen instead of one.
+us-export/
+/us-export*
+
 __pycache__/
 # Verification screenshots dropped in the repo root by Playwright runs.
 #

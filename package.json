@@ -17,6 +17,7 @@
     "photos:prep": "node scripts/photos-prep.mjs",
     "photos:push": "node scripts/photos-prep.mjs --push",
     "carriage:numbers": "node scripts/carriage-numbers.mjs",
+    "export:frames": "node scripts/frames-export.mjs",
     "test:slots": "node --experimental-strip-types scripts/test-slots.mts"
   },
   "dependencies": {
