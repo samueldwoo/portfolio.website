@@ -296,40 +296,95 @@ export async function resolveTrackId(raw: unknown): Promise<string | null> {
 
   const t = timer();
   try {
-    const res = await fetch(parsed.toString(), {
-      redirect: 'follow',
-      headers: {
-        /* Spotify serves a different (and often useless) response to something that
-           does not look like a browser. This is not evasion — it is asking for the
-           page a person clicking the link would get. */
-        'User-Agent': 'Mozilla/5.0 (compatible; us-private-wing/1.0)',
-        Accept: 'text/html,application/xhtml+xml',
-      },
-      signal: AbortSignal.timeout(RESOLVE_TIMEOUT_MS),
+    /* ---- HOP BY HOP, READING Location, WITHOUT DOWNLOADING ANYTHING ----------
+
+       `/s/<code>` is Spotify's DEFAULT share format, so this cost is paid on
+       essentially every song either of them posts — which makes it worth doing
+       properly rather than simply.
+
+       The first version used `redirect: 'follow'` and then read `res.url`. Correct,
+       and wasteful: following the chain downloads the destination PAGE, measured at
+       316,936 bytes in ~290ms, purely to learn a URL that the 302 had already
+       stated in a header. Reading the header instead is 195 bytes in ~120ms — the
+       same answer, two and a half times faster, on the hot path.
+
+       Manual hops also restore a boundary that `follow` had given away: with the
+       platform following, a redirect could land anywhere and only the FINAL host was
+       ever checked. Here every hop is checked against the allowlist before it is
+       taken, so the chain cannot be walked off Spotify's own hosts at all. */
+    let current = parsed;
+    let hops = 0;
+    let landed: Response | null = null;
+
+    while (hops < 5) {
+      hops += 1;
+      const res = await fetch(current.toString(), {
+        redirect: 'manual',
+        headers: {
+          /* Spotify serves a different response to something that does not look
+             like a browser. Not evasion — asking for the page a person clicking the
+             link would get. */
+          'User-Agent': 'Mozilla/5.0 (compatible; us-private-wing/1.0)',
+          Accept: 'text/html,application/xhtml+xml',
+        },
+        signal: AbortSignal.timeout(RESOLVE_TIMEOUT_MS),
+      });
+
+      const location = res.headers.get('location');
+      if (res.status >= 300 && res.status < 400 && location) {
+        let next: URL;
+        try {
+          // Resolved against the current URL, because a Location may be relative.
+          next = new URL(location, current);
+        } catch {
+          break;
+        }
+
+        /* THE ANSWER IS USUALLY RIGHT HERE, one hop in, and this is the fast exit:
+           no body has been read and nothing has been downloaded. */
+        const viaHeader = extractTrackId(next.toString());
+        if (viaHeader) {
+          trace('song.resolve', { ok: true, via: 'header', hops, ms: t.total() });
+          return viaHeader;
+        }
+
+        /* Not a track yet. Keep going only while the chain stays on a host we were
+           willing to contact in the first place. */
+        if (!SHORTLINK_HOSTS.has(next.hostname.toLowerCase())) {
+          trace('song.resolve', { ok: false, via: 'offhost', hops, ms: t.total() });
+          return null;
+        }
+        current = next;
+        continue;
+      }
+
+      landed = res;
+      break;
+    }
+
+    /* ---- THE INTERSTITIAL FALLBACK ------------------------------------------
+       Some share links serve a page rather than redirecting to the track. Only
+       reached when the header route found nothing, so the 316KB is paid by the rare
+       case instead of every case. Capped: this is somebody else's document and there
+       is no reason to hold megabytes of it to find 22 characters. */
+    if (landed && landed.ok) {
+      const text = (await landed.text()).slice(0, RESOLVE_MAX_BYTES);
+      const found =
+        /spotify:track:([A-Za-z0-9]{22})/.exec(text) ??
+        /open\.spotify\.com\/(?:intl-[a-z]{2,3}\/)?track\/([A-Za-z0-9]{22})/.exec(text);
+      if (found && TRACK_ID_RE.test(found[1])) {
+        trace('song.resolve', { ok: true, via: 'body', hops, ms: t.total() });
+        return found[1];
+      }
+    }
+
+    trace('song.resolve', {
+      ok: false,
+      via: 'none',
+      hops,
+      status: String(landed?.status ?? 0),
+      ms: t.total(),
     });
-
-    /* THE FINAL URL FIRST. `res.url` is where the chain ended, and running the
-       strict parser on it means a shortlink is only ever a longer route to exactly
-       the same accepted shape. */
-    const viaRedirect = extractTrackId(res.url);
-    if (viaRedirect) {
-      trace('song.resolve', { ok: true, via: 'redirect', ms: t.total() });
-      return viaRedirect;
-    }
-
-    /* THE BODY, for the interstitial case. Read with a cap: this is somebody else's
-       document and there is no reason to hold megabytes of it in a function's
-       memory to find 22 characters. */
-    const text = (await res.text()).slice(0, RESOLVE_MAX_BYTES);
-    const found =
-      /spotify:track:([A-Za-z0-9]{22})/.exec(text) ??
-      /open\.spotify\.com\/(?:intl-[a-z]{2,3}\/)?track\/([A-Za-z0-9]{22})/.exec(text);
-    if (found && TRACK_ID_RE.test(found[1])) {
-      trace('song.resolve', { ok: true, via: 'body', ms: t.total() });
-      return found[1];
-    }
-
-    trace('song.resolve', { ok: false, via: 'none', status: String(res.status), ms: t.total() });
     return null;
   } catch {
     /* Timed out, unreachable, or a redirect loop. The paste is simply unusable this
@@ -482,7 +537,13 @@ async function resolveViaWebApi(id: string): Promise<Metadata | null> {
       // credentials rotated). Dropping it means the NEXT post mints a fresh one
       // instead of failing for the rest of the container's life.
       if (res.status === 401) cachedToken = null;
-      console.error(`[us] spotify track HTTP ${res.status} for ${id} — falling back to oEmbed.`);
+      /* THE TRACK ID IS NOT LOGGED, and it used to be.
+         A 22-character Spotify id resolves to an exact title and artist through a
+         public, unauthenticated oEmbed call — so an id in a log IS the song in the
+         log, which is the precise thing trace.ts is built to make impossible. This
+         line reached a raw console.error and bypassed all of it. The status is the
+         only actionable part; the id told a debugger nothing the status did not. */
+      console.error(`[us] spotify track HTTP ${res.status} — falling back to oEmbed.`);
       return null;
     }
 
@@ -573,7 +634,8 @@ export async function resolveMetadata(id: string): Promise<Metadata> {
       signal: AbortSignal.timeout(3000),
     });
     if (!res.ok) {
-      console.error(`[us] spotify oembed HTTP ${res.status} for ${id} — storing without metadata.`);
+      // Same reason as above: the id is the song, so only the status is printed.
+      console.error(`[us] spotify oembed HTTP ${res.status} — storing without metadata.`);
       return empty;
     }
 
