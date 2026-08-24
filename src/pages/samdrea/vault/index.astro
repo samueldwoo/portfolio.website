@@ -1327,10 +1327,31 @@ const vapidKey = pushReady ? pushConfig().publicKey ?? '' : '';
             there&rsquo;s something waiting for you.
         </p>
 
-        <p class="tg-empty" id="notify-on" hidden>
-            They&rsquo;re on for this device. You&rsquo;ll get a nudge when
-            something new lands, and nothing else.
-        </p>
+        {/* THE SETTLED STATE IS ONE ROW, NOT A PARAGRAPH AND A BUTTON.
+
+            It used to be the eyebrow, a two-line sentence and a full 48px button,
+            which is a lot of permanent furniture for a setting that is already
+            decided. A control panel earns its space while there is a decision to
+            make; afterwards it should get out of the way and leave only enough to
+            see the state and change it.
+
+            AND IT NOW ACTUALLY SHOWS THE STATE. Before, "on" was carried entirely
+            by prose, and the only visible control was a button reading "turn them
+            off" — styled identically to "turn them on", because both were a bare
+            .tg-btn. So the one pixel of the interface that should have encoded
+            current state instead described an action, and the two states were
+            indistinguishable at a glance. The dot is the indicator: filled and blue
+            means on, and it is the same accent used everywhere else in the wing for
+            something live.
+
+            The dot is aria-hidden and the word "on" is real text beside it, so the
+            state is never carried by colour alone — a screen reader and a
+            colourblind reader both get the word. */}
+        <div class="tg-state" id="notify-on" hidden>
+            <span class="tg-dot" aria-hidden="true"></span>
+            <span class="tg-state-word">on for this phone</span>
+            <button class="tg-btn tg-btn--quiet" id="notify-off-btn" type="button">turn them off</button>
+        </div>
 
         {/* DENIED IS TERMINAL and the copy says so plainly instead of offering a
             button that would be silently refused. `requestPermission()` never
@@ -1362,11 +1383,18 @@ const vapidKey = pushReady ? pushConfig().publicKey ?? '' : '';
             block's say() for the long version of that. */}
         <p class="tg-notice" id="notify-say" role="status" aria-live="polite" hidden></p>
 
-        {/* TWO BUTTONS RATHER THAN ONE WITH A CHANGING LABEL, so both words live
-            in the markup with the rest of the copy. `type="button"`: neither is
-            in a form and neither should ever navigate. */}
-        <button class="tg-btn" id="notify-on-btn" type="button" hidden>turn them on</button>
-        <button class="tg-btn" id="notify-off-btn" type="button" hidden>turn them off</button>
+        {/* STILL TWO BUTTONS RATHER THAN ONE WITH A CHANGING LABEL, so both words
+            live in the markup with the rest of the copy — but they are no longer
+            siblings, and they no longer look alike.
+
+            "turn them on" stays here as the call to action and carries the accent,
+            because in the `ask` state it is the only thing on the page asking for a
+            decision. "turn them off" has moved up inside the settled row and is
+            deliberately quiet: it is a way out, not an invitation, and giving it
+            equal weight was what made the two states look the same.
+
+            `type="button"`: neither is in a form and neither should ever navigate. */}
+        <button class="tg-btn tg-btn--go" id="notify-on-btn" type="button" hidden>turn them on</button>
     </section>
     )}
 
@@ -1759,7 +1787,14 @@ const vapidKey = pushReady ? pushConfig().publicKey ?? '' : '';
                 if (el) el.hidden = N_STATES[i] !== which;
             }
             /* The buttons follow the state rather than being set alongside it, so
-               there is no arrangement where "blocked" is showing over a button. */
+               there is no arrangement where "blocked" is showing over a button.
+
+               The off button now lives INSIDE #notify-on, so the loop above already
+               hides it with the row and this line is redundant. It is kept because
+               the invariant it states — that button visibility is a function of
+               state and nothing else — is the thing that was worth writing down, and
+               a future move of either button out of its row should not silently
+               reintroduce the bug. */
             if (nOnBtn) nOnBtn.hidden = which !== 'ask';
             if (nOffBtn) nOffBtn.hidden = which !== 'on';
             nBlock.hidden = false;

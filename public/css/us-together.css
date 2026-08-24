@@ -233,6 +233,88 @@
     outline: 2px solid var(--blue-light);
     outline-offset: 2px;
 }
+/* ---------------------------------------------------------------------------
+   EMPHASIS, WHICH IS THE PART THAT WAS MISSING
+
+   Both notification buttons were a bare .tg-btn, so "turn them on" and "turn them
+   off" were the same object in two states of the world and the interface encoded
+   no difference between them. The fix is not a colour swap — it is that one of
+   them is a call to action and the other is an escape hatch, and they should not
+   look alike.
+   --------------------------------------------------------------------------- */
+
+/* THE CALL TO ACTION. Blue border and a blue-tinted fill rather than a solid blue
+   button with white text: a filled --blue-light behind white lands near 3:1, which
+   is under the 4.5:1 floor for the 16px label. Tinting the dark surface instead
+   keeps the label on near-black and reads as accent at a glance. */
+.tg-btn--go {
+    border-color: var(--blue-light);
+    background: color-mix(in srgb, var(--blue-light) 14%, var(--machine-2));
+}
+.tg-btn--go:hover {
+    background: color-mix(in srgb, var(--blue-light) 22%, var(--machine-2));
+}
+
+/* THE WAY OUT. No fill and a dim border, so it reads as available rather than
+   suggested. Still a real 44px target — the emphasis comes off the border and the
+   colour, never off the hit area, which is the usual way a "subtle" control
+   becomes an unusable one on a phone. */
+.tg-btn--quiet {
+    min-height: 44px;
+    padding: 10px 14px;
+    background: transparent;
+    /* --concrete-2 (4.0:1 on the page), NOT --concrete-1, which measured 1.5:1
+       and failed WCAG 1.4.11's 3:1 floor for a control boundary. At that ratio the
+       border is not subtle, it is absent — the button would have read as a run of
+       plain text, which is the usual way a "quiet" control becomes an undiscoverable
+       one. The emphasis gap against .tg-btn--go is carried by the missing fill and
+       the dimmer label instead, both of which are free. */
+    border-color: var(--concrete-2);
+    color: var(--chalk-dim);
+    font-size: 0.94rem;
+}
+.tg-btn--quiet:hover {
+    background: var(--machine);
+    border-color: var(--concrete-2);
+    color: var(--chalk);
+}
+
+/* ---------------------------------------------------------------------------
+   THE SETTLED ROW
+
+   One line holding the indicator, the word and the way out. `wrap` because at
+   320px the three do not fit side by side and the alternative to wrapping is a
+   horizontal scrollbar on the hub.
+   --------------------------------------------------------------------------- */
+.tg-state {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px 14px;
+    margin: 14px 0 0;
+}
+
+/* Blue and filled means on. The glow is the same treatment the wing uses for
+   anything live; it is decoration on top of a shape that is already legible
+   without it. Never the only carrier of the state — the word sits beside it. */
+.tg-dot {
+    flex: 0 0 auto;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--blue-light);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue-light) 18%, transparent);
+}
+
+.tg-state-word {
+    font-family: var(--us-display);
+    font-size: 1rem;
+    color: var(--chalk);
+    /* Pushes the way-out button to the far end on a wide row, and does nothing
+       once the row wraps. */
+    margin-right: auto;
+}
+
 .tg-btn[disabled] {
     color: var(--concrete-4);
     border-color: var(--concrete-1);
