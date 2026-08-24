@@ -99,7 +99,7 @@ import { isTimeZone, isWingDate, putReply, wingDate, type ReplyRecord } from '..
 // The one parser, the one metadata resolver, the one text cleaner, and the SAME
 // field caps as his side — a shorter note on her card would be an asymmetry
 // nobody chose. See the header.
-import { MAX_ARTIST, MAX_NOTE, cleanText, extractTrackId, resolveMetadata } from './song';
+import { MAX_ARTIST, MAX_NOTE, cleanText, resolveMetadata, resolveTrackId } from './song';
 
 export const prerender = false;
 
@@ -239,7 +239,11 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
     return answer(false, 400, 'bad-request');
   }
 
-  const id = extractTrackId(rawUrl);
+  /* resolveTrackId, not extractTrackId: it tries the strict synchronous parse
+     first and only asks Spotify where a link goes when that fails. A canonical
+     paste therefore costs nothing, and a shortlink — which carries no track id at
+     all — stops being rejected as though it were invalid. */
+  const id = await resolveTrackId(rawUrl);
   if (!id) return answer(false, 400, 'bad-url');
 
   // ---- resolve + store --------------------------------------------------

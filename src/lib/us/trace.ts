@@ -93,6 +93,11 @@ const STRING_KEYS = new Set([
   'tier',
   'status',
   'backend',
+  /* `via` was missing and the first real trace line printed `via=len:4` instead of
+     `via=none` — the allowlist doing exactly its job, on a value that genuinely is
+     an enum. Adding a key here is the deliberate act the design intends; the cost
+     of forgetting is an unreadable field, never a leak. */
+  'via',
 ]);
 
 function render(value: Field, key = ''): string | null {

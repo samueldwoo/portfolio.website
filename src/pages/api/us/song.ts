@@ -92,6 +92,7 @@ import { readCookie, verify } from '../../../lib/us/session';
 import { clientKey, hit } from '../../../lib/us/ratelimit';
 import { notify } from '../../../lib/us/push';
 import { crossSite, identify } from '../../../lib/us/together';
+import { timer, trace } from '../../../lib/us/trace';
 import {
   StoreError,
   emptyPair,
@@ -174,6 +175,12 @@ function isJsonRequest(request: Request): boolean {
  *   https://open.spotify.com/intl-de/track/<22>    (the localized share links
  *                                                   the iOS app now produces)
  *
+ * Shortlinks — `open.spotify.com/s/<code>` and `spotify.link/<code>` — are NOT
+ * accepted here and cannot be, because they contain no track id to extract. They are
+ * handled by resolveTrackId() below, which asks Spotify where they go and then comes
+ * back through this function. Keeping this one synchronous and network-free is what
+ * makes the accept/reject decision testable.
+ *
  * Written as URL parsing rather than one big regex on purpose. A regex over a raw
  * string is where host-confusion bugs live — `https://open.spotify.com.evil.tld/`
  * and `https://evil.tld/?x=open.spotify.com/track/aaaa` both contain the literal
@@ -217,6 +224,119 @@ export function extractTrackId(raw: unknown): string | null {
 
   const id = segments[trackAt + 1] ?? '';
   return TRACK_ID_RE.test(id) ? id : null;
+}
+
+/**
+ * Spotify hosts a shortlink may legitimately start on.
+ *
+ * THE ALLOWLIST IS THE SSRF BOUNDARY. Resolving a shortlink means the server makes
+ * a request to a URL somebody pasted, which is the shape of every SSRF bug ever
+ * written. Only these three are ever fetched, so a pasted link to an internal
+ * address, a cloud metadata endpoint or a file scheme is refused before any request
+ * happens rather than being caught afterwards.
+ *
+ * `spotify.link` is included because it is what the iOS share sheet now produces,
+ * and it redirects onward to `spotify.app.link` — Branch.io's deep-link service,
+ * which is a third party but is Spotify's own choice of one, not a caller's.
+ */
+const SHORTLINK_HOSTS = new Set(['open.spotify.com', 'spotify.link', 'spotify.app.link']);
+
+/** Bounded, because a redirect loop is somebody else's bug and our hang. */
+const RESOLVE_TIMEOUT_MS = 4000;
+
+/** Enough for an interstitial's <head>; a track id is never deep in a document. */
+const RESOLVE_MAX_BYTES = 96 * 1024;
+
+/**
+ * Resolve a share link that carries no track id of its own, then parse it strictly.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THIS IS SEPARATE FROM extractTrackId AND ASYNC
+ *
+ * `open.spotify.com/s/<code>` and `spotify.link/<code>` are real links from real
+ * Spotify share sheets, and they were being rejected as invalid — which reads as
+ * "the site is broken" when you have just copied a link the app gave you. But there
+ * is nothing in them to parse: the track id genuinely is not present, and the only
+ * way to learn it is to ask Spotify where the link goes.
+ *
+ * extractTrackId stays synchronous, pure and total, because it is the thing that
+ * decides what is ACCEPTED and that decision should be testable without a network.
+ * This wraps it instead: one network hop, then the same strict parser on whatever
+ * came back. A shortlink cannot widen what is accepted — the final URL still has to
+ * satisfy the host-equality and path checks in full.
+ *
+ * CANONICAL LINKS NEVER REACH HERE, so the ordinary paste costs nothing: the caller
+ * tries extractTrackId first and only falls through on a miss.
+ *
+ * TWO WAYS TO LEARN THE DESTINATION, because Spotify uses both. Usually the
+ * shortlink 30x-redirects and `res.url` after following is the real track URL. Some
+ * of them instead serve an interstitial page, so the body is scanned for a track id
+ * as a fallback — and only a 22-character alphanumeric id is taken from it, which is
+ * then re-validated and rebuilt into a canonical URL by us. Nothing from that
+ * document is trusted or echoed.
+ *
+ * Total: every failure returns null, which the callers already render as "that link
+ * did not work", the same as any other unusable paste.
+ */
+export async function resolveTrackId(raw: unknown): Promise<string | null> {
+  const direct = extractTrackId(raw);
+  if (direct) return direct;
+
+  const input = typeof raw === 'string' ? raw.trim() : '';
+  if (!input || input.length > 500) return null;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(input);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return null;
+  if (!SHORTLINK_HOSTS.has(parsed.hostname.toLowerCase())) return null;
+
+  const t = timer();
+  try {
+    const res = await fetch(parsed.toString(), {
+      redirect: 'follow',
+      headers: {
+        /* Spotify serves a different (and often useless) response to something that
+           does not look like a browser. This is not evasion — it is asking for the
+           page a person clicking the link would get. */
+        'User-Agent': 'Mozilla/5.0 (compatible; us-private-wing/1.0)',
+        Accept: 'text/html,application/xhtml+xml',
+      },
+      signal: AbortSignal.timeout(RESOLVE_TIMEOUT_MS),
+    });
+
+    /* THE FINAL URL FIRST. `res.url` is where the chain ended, and running the
+       strict parser on it means a shortlink is only ever a longer route to exactly
+       the same accepted shape. */
+    const viaRedirect = extractTrackId(res.url);
+    if (viaRedirect) {
+      trace('song.resolve', { ok: true, via: 'redirect', ms: t.total() });
+      return viaRedirect;
+    }
+
+    /* THE BODY, for the interstitial case. Read with a cap: this is somebody else's
+       document and there is no reason to hold megabytes of it in a function's
+       memory to find 22 characters. */
+    const text = (await res.text()).slice(0, RESOLVE_MAX_BYTES);
+    const found =
+      /spotify:track:([A-Za-z0-9]{22})/.exec(text) ??
+      /open\.spotify\.com\/(?:intl-[a-z]{2,3}\/)?track\/([A-Za-z0-9]{22})/.exec(text);
+    if (found && TRACK_ID_RE.test(found[1])) {
+      trace('song.resolve', { ok: true, via: 'body', ms: t.total() });
+      return found[1];
+    }
+
+    trace('song.resolve', { ok: false, via: 'none', status: String(res.status), ms: t.total() });
+    return null;
+  } catch {
+    /* Timed out, unreachable, or a redirect loop. The paste is simply unusable this
+       time, which is a state the form already has copy for. */
+    trace('song.resolve', { ok: false, via: 'error', ms: t.total() });
+    return null;
+  }
 }
 
 /** The canonical share URL for an id. Used for the oEmbed lookup. */
@@ -697,7 +817,11 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
     return answer(false, 400, 'bad-request');
   }
 
-  const id = extractTrackId(rawUrl);
+  /* resolveTrackId, not extractTrackId: it tries the strict synchronous parse
+     first and only asks Spotify where a link goes when that fails. A canonical
+     paste therefore costs nothing, and a shortlink — which carries no track id at
+     all — stops being rejected as though it were invalid. */
+  const id = await resolveTrackId(rawUrl);
   if (!id) return answer(false, 400, 'bad-url');
 
   // ---- resolve + store --------------------------------------------------
