@@ -317,7 +317,7 @@ const reachAxisTicks = AXIS_TICKS.map((t) => `M${vbX(t)} 0.6 V5.4`).join(' ');
                             <article class="interest-block reveal" aria-labelledby="int-food-title">
                                 <span class="interest-index" aria-hidden="true">02</span>
                                 <h3 id="int-food-title" class="interest-heading">Food &amp; Restaurants</h3>
-                                <p class="interest-copy">I keep a running list of places to try and happily plan a trip around one good meal. Six I recommend often — which, once you check, turn out to be nowhere near each other.</p>
+                                <p class="interest-copy">I keep a running list of places to try and happily plan a trip around one good meal. Six I recommend often:</p>
 
                                 {/* THE REACH STRIP. Was six `.bubble` chips carrying nothing but
                                      the names. The six places are now drawn against a real
@@ -345,7 +345,16 @@ const reachAxisTicks = AXIS_TICKS.map((t) => `M${vbX(t)} 0.6 V5.4`).join(' ');
                                         <span class="reach-span">{metroLine}</span>
                                     </figcaption>
 
-                                    <p class="reach-note">Position is straight-line distance from Sunnyvale on a log scale — distance, not direction. The six sit in three metros on two coasts, so there is no single honest map to draw. A bar rather than a dot means several locations, and it covers all of them.</p>
+                                    {/* ONE LINE. This was three sentences explaining the log
+                                         scale, why a map would be dishonest, and what a bar
+                                         means — all of which the diagram already says: every row
+                                         prints its own distance or range, the axis is labelled
+                                         1/10/100/1,000 mi, and a bar visibly spans several dots.
+                                         The origin is the only fact a reader cannot get from the
+                                         picture, so it is the only fact left here.
+                                         Reviewed: "a user doesn't really need to know all that
+                                         information, they can just read it from the diagram." */}
+                                    <p class="reach-note">Distance from Sunnyvale — not direction.</p>
 
                                     <ol class="reach-list">
                                         {reach.map((p) => (
@@ -387,14 +396,11 @@ const reachAxisTicks = AXIS_TICKS.map((t) => `M${vbX(t)} 0.6 V5.4`).join(' ');
                                         </span>
                                     </div>
 
-                                    {/* The tie to Travel, and the reason the two long rows are
-                                         worth plotting at all: the only two places on this strip
-                                         that are not in the Bay Area are San Diego and New York,
-                                         and travel.astro's boarding-pass wall carries real stubs
-                                         for both (two San Diego, one New York). So this sentence
-                                         is checkable against another page rather than being a
-                                         flourish. Directory-format URL, root-absolute. */}
-                                    <p class="reach-foot">The two long hauls are real trips — San Diego and New York both have a boarding pass on the <a href="/travel/">travel page</a>.</p>
+                                    {/* The tie to Travel. The prose that used to justify it
+                                         (which places are outside the Bay, which stubs exist)
+                                         was the reasoning, not the point — the link is the point.
+                                         Directory-format URL, root-absolute. */}
+                                    <p class="reach-foot">Both long hauls have a <a href="/travel/">boarding pass</a>.</p>
                                 </figure>
                             </article>
 
@@ -681,7 +687,7 @@ const reachAxisTicks = AXIS_TICKS.map((t) => `M${vbX(t)} 0.6 V5.4`).join(' ');
                                 <p class="form-status" id="contact-status" role="status" aria-live="polite"></p>
                             </form>
                             {!formConfigured && (
-                                <p class="form-note">No form backend wired up yet — Send will open your mail app with the message ready to go.</p>
+                                <p class="form-note">Send opens your mail app with the message ready.</p>
                             )}
                             {/* Inline, not in script.js: this is page-specific behaviour for one
                                 form, and script.js is the shared site layer.
