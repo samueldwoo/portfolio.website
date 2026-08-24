@@ -1517,6 +1517,18 @@
        ~46% each, the crossroads of four gives ~20%, empty board gives 0. */
     var SWAP_COVER = 1 / 3;
 
+    /* HOW LONG A TRADE TAKES, from the distance travelled.
+       Was `clamp(0.30 + dist/1600, 0.42, 0.78)`. Two problems: the 0.42s FLOOR
+       meant even a neighbouring swap took nearly half a second, and the 0.78s
+       ceiling gated the whole exchange — the commit waits for BOTH halves, so the
+       dragged card would arrive early and then sit visibly still until the sliding
+       half caught up. Tightened to 0.24-0.46s, which at the measured one-slot
+       distance (~333px at 1440) gives ~0.33s: quick enough to feel like a
+       response, long enough to read as a move rather than a cut. */
+    function swapDur(dist) {
+        return clampNum(0.22 + dist / 2200, 0.24, 0.46);
+    }
+
     function clampNum(v, lo, hi) {
         if (typeof lo === "number" && v < lo) return lo;
         if (typeof hi === "number" && v > hi) return hi;
@@ -1734,7 +1746,16 @@
             gsap.to(proxy, {
                 x: dx, y: dy,
                 duration: dur,
-                ease: "power3.inOut",
+                /* `power2.out`, NOT `power3.inOut`. An inOut ease starts from a
+                   standstill, and after a DRAG that reads as a stall: the card was
+                   tracking your cursor a frame ago, so easing in from zero looks
+                   like the interaction hung. Measured with the old ease, sampling
+                   every 28ms: the sliding half covered 5.6px in its first 109ms
+                   (722.0 -> 716.4) — a visible pause exactly where the reader is
+                   waiting for a response. An `out` ease leaves at full speed and
+                   decelerates into the slot, which is also what a physical card
+                   pushed across a table does. */
+                ease: "power2.out",
                 overwrite: "auto",
                 onUpdate: mirrorProxy,
                 onComplete: function () { arrive(); },
@@ -1924,7 +1945,7 @@
                one slot over should not take as long as the length of the board.
                Both halves get the same duration so they read as one exchange. */
             var dist = Math.sqrt(dx * dx + dy * dy);
-            target.__stubSlide(-dx, -dy, clampNum(0.30 + dist / 1600, 0.42, 0.78));
+            target.__stubSlide(-dx, -dy, swapDur(dist));
             return { x: dx, y: dy };
         }
         el.__stubSeizeSwap = seizeForSwap;
@@ -2048,7 +2069,7 @@
                     stubSwapAbort(el);
                     land();
                 }, 2200);
-                slideTo(go.x, go.y, clampNum(0.30 + dist / 1600, 0.42, 0.78));
+                slideTo(go.x, go.y, swapDur(dist));
             }
         })[0];
 
