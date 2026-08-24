@@ -53,6 +53,7 @@ import {
   withUrls,
   type VisibleDayFrames,
 } from '../../../lib/us/frames';
+import { pickSlots } from '../../../lib/us/slots';
 
 export const prerender = false;
 
@@ -77,10 +78,15 @@ const available = framesAvailable();
 const week: VisibleDayFrames[] = available ? await withUrls(stored) : [];
 
 const todayRow = week[0] ?? { date: today, her: null, him: null };
-const earlier = week.slice(1).filter((d) => d.her || d.him);
 
-const mine = todayRow[viewer];
-const theirs = todayRow[them];
+/* The window is newest-first and the slot takes each person's most recent frame
+   rather than strictly today's — see pickSlots in slots.ts for the timezone
+   arithmetic that forces it, and for why the carry is two days and not seven. */
+const { mine, theirs, mineFrom, theirsFrom, earlier } = pickSlots(week, today, viewer);
+
+/* Whether anything at all exists before today, asked of the RAW window rather than
+   of `earlier` — see the strip's empty message for why the difference matters. */
+const anyHistory = week.slice(1).some((d) => d.her || d.him);
 
 /* ---- outcomes from the no-JavaScript path ---------------------------------
    Both paths land back here as a 303 with ?ok= or ?e=, written in her language
@@ -111,6 +117,22 @@ function clockOf(atMs: number, tz: string): string {
     return new Intl.DateTimeFormat('en-GB', {
       timeZone: tz, hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
     }).format(new Date(atMs));
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * The weekday of an instant, in the POSTER'S own zone.
+ *
+ * A weekday rather than a date: "Thu" is what a person reads at a glance, and the
+ * carry window is two days, so there is no ambiguity a full date would resolve.
+ * See the caption for why this is anchored to the taker and not to the wing.
+ */
+function dayOf(atMs: number, tz: string): string {
+  if (!atMs) return '';
+  try {
+    return new Intl.DateTimeFormat('en-GB', { timeZone: tz, weekday: 'short' }).format(new Date(atMs));
   } catch {
     return '';
   }
@@ -260,20 +282,36 @@ const whoWord = (w: Who): string => (w === viewer ? 'you' : w === 'her' ? (her |
                                     src={f.url}
                                     alt={f.note
                                         ? `${whoWord(w)}: ${f.note}`
-                                        : `a photograph ${w === viewer ? 'you' : whoWord(w)} posted today`}
+                                        : `a photograph ${w === viewer ? 'you' : whoWord(w)} put up${
+                                              (w === viewer ? mineFrom : theirsFrom) ? '' : ' today'}`}
                                     loading="eager"
                                     decoding="async"
                                 >
                                 <figcaption class="fr-cap">
                                     {f.note && <span class="fr-note">{f.note}</span>}
                                     {clockOf(f.atMs, tz) && (
-                                        /* "their time" ONLY on the other person's
-                                           frame. On her own it read "04:11 their
-                                           time" about herself, which is both wrong
-                                           and confusing — she does not need her own
-                                           timezone named, so it is simply the time. */
+                                        /* "their time" ONLY on the other person's frame. On her own it
+                                           read "04:11 their time" about herself, which is both wrong and
+                                           confusing — she does not need her own timezone named, so it is
+                                           simply the time.
+                                    
+                                           THE DAY IS NAMED, NEVER "YESTERDAY", and it is the poster's own
+                                           day rather than the wing's. Relative words cannot survive nine
+                                           hours: the wing day rolls at 21:00 his time, so between 21:00 and
+                                           midnight his local date and the wing's disagree, and a frame
+                                           labelled "yesterday" would be describing something he would call
+                                           today. That window is his whole evening — the one he posts in.
+                                           Hers only misaligns between midnight and 06:00 Paris, while she
+                                           is asleep.
+                                    
+                                           Anchoring to the taker's own clock takes the reader out of the
+                                           question entirely: it says when the photograph was taken from the
+                                           point of view of whoever took it, which is the same sentence no
+                                           matter which of them is looking. */
                                         <span class="fr-time">
-                                            {clockOf(f.atMs, tz)}{w === viewer ? '' : ' their time'}
+                                            {(w === viewer ? mineFrom : theirsFrom)
+                                                ? `${dayOf(f.atMs, tz)}, ${clockOf(f.atMs, tz)}`
+                                                : clockOf(f.atMs, tz)}{w === viewer ? '' : ' their time'}
                                         </span>
                                     )}
                                 </figcaption>
@@ -432,7 +470,13 @@ const whoWord = (w: Who): string => (w === viewer ? 'you' : w === 'her' ? (her |
         </>
     )}
 
-    {available && earlier.length === 0 && (todayRow.her || todayRow.him) && (
+    {/* `anyHistory`, NOT `earlier.length === 0`. Since the slot carries a frame
+        forward, `earlier` is the strip AFTER the promoted frames are removed — so a
+        photograph he put up yesterday empties the strip by being promoted out of
+        it, and testing the strip would announce "nothing before today yet" while
+        his yesterday photograph sat in the slot directly above the sentence. This
+        asks the real question: has anything at all been posted before today. */}
+    {available && !anyHistory && (todayRow.her || todayRow.him) && (
         <p class="fr-week-empty">Nothing before today yet. This is the first one.</p>
     )}
 

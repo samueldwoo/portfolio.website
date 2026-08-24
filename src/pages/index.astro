@@ -590,6 +590,23 @@ const reachAxisTicks = AXIS_TICKS.map((t) => `M${vbX(t)} 0.6 V5.4`).join(' ');
                                 <span class="exp-date">February 2024 – Present</span>
                             </div>
                             <p class="exp-company">Amazon Lab126</p>
+                            {/* THE PROMOTION, as one subtle line rather than a second block.
+                                The heading carries the CURRENT level and the span above carries
+                                the whole tenure, which together read as "SDE II since 2024" —
+                                not true. Splitting the entry in two would say it accurately and
+                                cost the single role description, so the rungs go on one mono
+                                line instead: same register as `.exp-date`, no new hierarchy.
+                                NO ARROW AND NO HIDDEN TEXT. The first version was
+                                "SDE I Feb 2024 → SDE II Jul 2026" with the arrow
+                                `aria-hidden` and ", promoted to" in a `.visually-hidden`
+                                span. Chrome's AX tree showed only the two visible
+                                fragments, so the relationship a sighted reader gets from
+                                the glyph may simply not reach a screen reader — and
+                                meaning should not depend on hidden text when plain
+                                wording does the same job. "Since" carries it for both,
+                                and Feb 2024 is not repeated because the date span above
+                                already states it. */}
+                            <p class="exp-rungs">Started SDE I · SDE II since Jul 2026</p>
                             <p>Building the high-throughput data pipeline for autonomous delivery robots — a C++ edge appliance that ingests self-encrypting drives of vehicle sensor data into S3, moving 40+ Gbps across drives uploading in parallel. Owns the drive security lifecycle end to end: keyless cloud auth, encrypted-drive unlock, and audited crypto-erase.</p>
                             <p>Before this, was the SME for the camera stack on Amazon's smart delivery glasses — drove camera failure rates from 30.7% down to 0.5% and shipped hardware dewarp that cut CPU ~80%, across 244 devices and 270k+ deliveries.</p>
                         </article>

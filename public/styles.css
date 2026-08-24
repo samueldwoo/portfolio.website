@@ -1231,6 +1231,20 @@ a.bubble.ticker:hover::after { transform: translate(2px, -2px); opacity: 1; }
     font-weight: 600;
     margin: 4px 0 12px;
 }
+/* The two rungs of one role. Same mono micro register as `.exp-date` so it reads
+   as metadata about the entry rather than as a second heading — the whole point
+   is to show the promotion WITHOUT splitting the entry into two blocks and
+   duplicating the description. Sits between the company and the prose, where the
+   eye is already travelling. Tabular figures so the two dates align. */
+.exp-rungs {
+    font-family: var(--mono);
+    font-size: .66rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--mut);
+    font-variant-numeric: tabular-nums;
+    margin: -6px 0 12px;
+}
 /* MEASURE. This was the site's worst line length: 68ch realized 89 real
    characters per line from 1024 up (87 at 820), against a 60-85 comfortable
    band. It is font-relative, so it read the same at 1512 and at 3840 and was
