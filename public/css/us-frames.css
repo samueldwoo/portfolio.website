@@ -34,6 +34,13 @@
    SHARED
    ------------------------------------------------------------ */
 
+/* The hand, declared locally. us-board.css declares its own on the board's
+   root; relying on that one from here would be the exact bug this file just
+   fixed — a var() that resolves on one page and silently falls back on another. */
+.studio {
+    --bo-hand: "Caveat", "Bradley Hand", "Segoe Script", cursive;
+}
+
 .fr-eyebrow {
     font-family: var(--us-mono);
     font-size: 0.68rem;
@@ -119,10 +126,27 @@
        pasting one into a text box is not an edge case. */
     overflow-wrap: anywhere;
 
-    font-family: var(--letter-serif, ui-serif, Georgia, serif);
-    font-size: 1rem;
-    line-height: 1.5;
-    color: var(--chalk-dim);
+    /* CAVEAT, AND THE OLD VALUE WAS NOT A FONT CHOICE AT ALL.
+       This said `var(--letter-serif, ui-serif, Georgia, serif)` — but
+       `--letter-serif` is declared on `.letters`, which is a different page. On
+       THIS page the variable is undefined, so every note fell through to the
+       generic `ui-serif` fallback: New York on iOS, something bland on macOS,
+       Georgia on Windows. Nobody picked it; it was what was left.
+
+       Caveat is the right register and it is already the wing's hand — the board
+       uses it for its caption band via `--bo-hand`, so the two photo surfaces now
+       agree instead of one being a system serif and the other handwriting. It is
+       requested in the same Google Fonts call as the other two faces, so this
+       costs no extra round trip.
+
+       BIGGER AND LOOSER THAN THE SERIF IT REPLACES, because a script face needs
+       it: Caveat's x-height is small for its point size, so 1rem read as tiny and
+       cramped. 1.3rem with 1.35 leading matches the optical size of the body text
+       around it. The board independently landed on 1.16rem for a shorter string. */
+    font-family: var(--bo-hand, "Caveat", "Bradley Hand", "Segoe Script", cursive);
+    font-size: 1.3rem;
+    line-height: 1.35;
+    color: var(--chalk);
 }
 
 .fr-time {
