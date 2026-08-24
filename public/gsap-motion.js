@@ -1061,7 +1061,7 @@
 
     /* ============================================================
        7b. THE STUB BOARD IS PICK-UP-AND-THROWABLE
-           (Draggable + InertiaPlugin, 3.13.0)
+           (Draggable 3.13.0)
 
        You can lift a boarding pass off the wall, move it around the board,
        and throw it: it leaves the cursor at the velocity you released it with,
@@ -1081,7 +1081,8 @@
        `clearProps: "all"` undoes it, which is why §7's entrance can absorb
        and restore the tilt on every pass without anyone noticing.
 
-       A Draggable with `inertia: true` makes it PERMANENT. InertiaPlugin's
+       A Draggable with `inertia: true` made it PERMANENT (inertia is now off,
+       but the fold itself is why Draggable still drives a proxy). InertiaPlugin's
        velocity tracker samples the target's x/y every single frame for as
        long as the Draggable exists, so the cache never goes cold and the
        fold is re-applied immediately after any attempt to clear it.
@@ -1108,7 +1109,8 @@
        velocity tracker samples the proxy, the throw physics happen on the
        proxy, `zIndexBoost` writes the proxy's z-index, and the pass's
        transform cache is never touched by any of it. `onDrag` and
-       `onThrowUpdate` mirror the proxy's x/y onto the pass.
+       `onDrag` and the release tween's `onUpdate` mirror the proxy's x/y onto
+       the pass.
 
        ---- AND IT MIRRORS ONTO `translate`, NOT `transform` ----
        `transform` on `.pass` is the most contested property in this project.
@@ -1506,7 +1508,7 @@
        ONE trade at a time, for the whole board. `stubSwapLock` is either null
        or `{ a, b, aIn, bIn, dx, dy }`: `a` is the stub that was thrown, `b` the
        one it landed on, the two `In` flags are the join — the commit runs when
-       both halves have stopped moving — and `dx`/`dy` is the answer swapSnap
+       both halves have stopped moving — and `dx`/`dy` is the answer decideSwap
        gave, kept only so it can answer the same way twice. */
     var stubSwapLock = null;
 
@@ -1822,15 +1824,27 @@
         }
 
         /* ---- THE SWAP DECISION ----
-           InertiaPlugin calls this exactly once per throw while it builds the
-           tween, with `point` = the UNCLAMPED natural landing offset the release
-           velocity projects to, and `this` = the Draggable. It returns the offset
-           the throw will actually land on, and it can only return two things:
-           {0,0} (this stub's own slot — byte-for-byte the old behaviour) or the
-           offset that parks this stub on the target's slot. Everything the trade
-           needs is set up here, synchronously, so the decision and its
-           consequences cannot come apart. See the header. */
-        function swapSnap(point) {
+           WHERE THE CARD IS, NOT WHERE A FLING WOULD SEND IT.
+
+           The first version asked InertiaPlugin for the projected landing point
+           and decided from that. It was defensible — it is a throw, so aim where
+           it lands — but it made the interaction unteachable: a hard fling aimed
+           dead at a card sailed past it and came home, so you had to LEAD the
+           throw, and there was no way to discover that from the screen. Reviewed:
+           "ideally we don't compute fling, but if the card is pulled over another
+           card, just those swap. we don't need to calculate the velocity."
+
+           So the rule is now positional and self-evident: whatever you have
+           dragged the card OVER at the moment you let go is what it trades with.
+           Velocity is not consulted anywhere. Called once from onRelease with the
+           live drag offset, so the geometry it judges is exactly the geometry on
+           screen under the reader's cursor.
+
+           Returns the offset this stub should travel to: {0,0} for its own slot,
+           or the offset that parks it on the target's. Everything the trade needs
+           is set up here, synchronously, so the decision and its consequences
+           cannot come apart. */
+        function decideSwap(curX, curY, drag) {
             var home = { x: 0, y: 0 };
             /* `moved` excludes the catch-and-release case: Draggable also rebuilds
                a throw when a press interrupts one and is released without
@@ -1856,11 +1870,13 @@
             var wall = el.parentNode;
             if (!w || !h || !wall) return home;
 
-            /* Where the fling is AIMED. Clamped to this gesture's own limits
-               because that is as far as the stub can physically travel. */
+            /* Where the card ACTUALLY IS, as the reader sees it. Still clamped
+               to this gesture's own limits, because Draggable clamps the live
+               position to them too — so this is the on-screen rectangle, not a
+               prediction of one. */
             var landing = {
-                x: restCentre.x + clampNum(point.x, this.minX, this.maxX),
-                y: restCentre.y + clampNum(point.y, this.minY, this.maxY)
+                x: restCentre.x + clampNum(curX, drag.minX, drag.maxX),
+                y: restCentre.y + clampNum(curY, drag.minY, drag.maxY)
             };
 
             /* Most-covered wins, and it has to clear SWAP_COVER. Seeding `best`
@@ -1892,7 +1908,7 @@
                card BETWEEN slots. That is the one thing this must never do, and
                the case it catches is a target scrolled mostly off screen. Give
                the stub straight back and throw normally. */
-            if (dx < this.minX || dx > this.maxX || dy < this.minY || dy > this.maxY) {
+            if (dx < drag.minX || dx > drag.maxX || dy < drag.minY || dy > drag.maxY) {
                 if (target.__stubHome) target.__stubHome();
                 return home;
             }
@@ -1903,14 +1919,10 @@
                own tween, its own proxy, its own paint — the two halves never
                share a writer, and the commit waits for whichever finishes last.
 
-               Duration from the DISTANCE, deliberately not from the throw's.
-               `this.tween` is NOT usable here: this function runs from inside
-               InertiaPlugin's init, i.e. during the `gsap.to()` call that creates
-               the throw, so Draggable has not assigned it yet (it does so on the
-               line after) and the property still holds null from the press. A
-               distance ramp also reads better than copying the throw: the target
-               is not being thrown, it is getting out of the way, and one slot
-               over should not take as long as the length of the board. */
+               Duration from the DISTANCE. There is no throw to copy a duration
+               from any more, and a distance ramp is the right shape regardless:
+               one slot over should not take as long as the length of the board.
+               Both halves get the same duration so they read as one exchange. */
             var dist = Math.sqrt(dx * dx + dy * dy);
             target.__stubSlide(-dx, -dy, clampNum(0.30 + dist / 1600, 0.42, 0.78));
             return { x: dx, y: dy };
@@ -1922,25 +1934,17 @@
             /* The pass is what you press; the proxy is what moves. */
             trigger: el,
             type: "x,y",
-            inertia: true,
-            /* THE THROW. `snap` is applied to the LANDING value, so
-               InertiaPlugin still builds its tween from the real release
-               velocity and merely redirects the destination — the stub flies
-               out, decelerates and curves into a slot as ONE tween. One tween is
-               also one owner: there is no second "and now go there" stage for an
-               interruption to strand half-done, and swapSnap can only return a
-               SLOT (its own, or the target's), which is what makes "a thrown
-               stub always ends up in a slot" a property of the physics rather
-               than of cleanup code.
-
-               `points`, not `x`/`y`: the swap decision is two-dimensional and
-               cannot be made one axis at a time. Draggable's function form of
-               `snap.points` sets InertiaPlugin's `linkedProps`, which hands the
-               function BOTH natural landing values in one point object and calls
-               it exactly once. Verified in the vendored 3.13.0 — see the header.
-               With no target found it returns {0,0}, which is the old
-               `zeroSnap` behaviour unchanged. */
-            snap: { points: swapSnap },
+            /* NO INERTIA, AND NO `snap`. The card follows the cursor and stops
+               where you let go; the trade (or the trip home) is a tween we own,
+               started from onRelease. Removing the throw removed the only reason
+               this file needed InertiaPlugin at all, and with it the whole class
+               of "the landing value Inertia clamps is not the value the decision
+               was made on" problems — the decision is now made on the position
+               that is already on screen.
+               `dragResistance` stays at 0: any resistance means the card lags the
+               cursor, and the whole rule is now "what is it sitting on top of",
+               which the reader judges from the card, not from the pointer. */
+            inertia: false,
             minDuration: 0.45,
             maxDuration: 1.05,
             /* NO `bounds` HERE ON PURPOSE — see onPressInit. Anything static
@@ -1977,7 +1981,7 @@
                 /* A hand on either half of a pending trade calls it off, and it
                    has to happen BEFORE applyBounds: new bounds can re-clamp an
                    in-flight throw, which makes Draggable rebuild it and run
-                   swapSnap again. With the lock already dropped that rebuild
+                   decideSwap again. With the lock already dropped that rebuild
                    returns "home", which is what an abort wants anyway. */
                 if (stubSwapInvolves(el)) stubSwapAbort(el);
                 var w = wall.getBoundingClientRect();
@@ -2016,7 +2020,6 @@
                 paint(this.x, this.y);
             },
             onDrag: function () { paint(this.x, this.y); },
-            onThrowUpdate: function () { paint(this.x, this.y); },
 
             onRelease: function () {
                 if (!held) return;
@@ -2026,27 +2029,27 @@
                     homeAndLand();
                     return;
                 }
-                /* The throw tween is created around now. Check on the next
-                   frame rather than trusting callback order: a drag that ends
-                   exactly on the landing value has nothing to snap to and makes
-                   no tween, and waiting on an onThrowComplete that never comes
-                   would leave this pass hover-deaf for good.
-                   arrive(), not land(): if swapSnap set up a trade this pass has
-                   to report to the join instead of landing on its own. */
-                var self = this;
-                /* Hard backstop. It also has to call the trade off — landing one
-                   half without the reorder would leave the other half holding an
-                   inline `translate` for the rest of the visit. */
+                /* DECIDE, THEN MOVE — one place, one order, no callback race.
+                   The old version handed the decision to InertiaPlugin's init and
+                   then waited a frame to find out whether a throw tween had even
+                   been created (a release exactly on the landing value made none,
+                   and waiting on an onThrowComplete that never came left the pass
+                   hover-deaf for good). With the throw gone there is nothing to
+                   wait for: decide from the current offset, start the tween, and
+                   let its own onComplete report to arrive(). */
+                var go = decideSwap(this.x, this.y, this);
+                var dist = Math.sqrt(go.x * go.x + go.y * go.y);
+                /* Hard backstop, unchanged in purpose: if a tween is killed by
+                   something we did not anticipate, land anyway rather than leave
+                   a stub holding an inline `translate` for the rest of the visit.
+                   It also has to call the trade off, or the other half would be
+                   left holding one too. */
                 guard = setTimeout(function () {
                     stubSwapAbort(el);
                     land();
                 }, 2200);
-                window.requestAnimationFrame(function () {
-                    if (!self.isThrowing) arrive();
-                });
-            },
-
-            onThrowComplete: function () { arrive(); }
+                slideTo(go.x, go.y, clampNum(0.30 + dist / 1600, 0.42, 0.78));
+            }
         })[0];
 
         drag = d;
@@ -2083,8 +2086,12 @@
         stubGate = false;
 
         var Drag = window.Draggable;
-        var Inertia = window.InertiaPlugin;
-        if (typeof Drag !== "function" || !Inertia) return stubGate;
+        /* InertiaPlugin is NO LONGER REQUIRED. The throw is gone — the swap is
+           decided from where the card sits when you let go, and the trip to its
+           slot is a tween this file owns — so Draggable alone is the dependency.
+           The vendored public/InertiaPlugin.min.js and its <script> tag were
+           removed with it rather than left loading for nothing. */
+        if (typeof Drag !== "function") return stubGate;
 
         /* No touch input AT ALL. `(pointer: fine)` is not sufficient: a
            touchscreen laptop satisfies it and would still hand eleven big cards
@@ -2095,7 +2102,7 @@
         if (mm("(any-pointer: coarse)").matches) return stubGate;
         if ((navigator.maxTouchPoints | 0) > 0) return stubGate;
 
-        gsap.registerPlugin(Inertia, Drag);
+        gsap.registerPlugin(Drag);
         document.documentElement.classList.add("stub-throw");
         stubGate = true;
         return stubGate;
