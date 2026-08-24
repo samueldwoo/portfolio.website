@@ -45,7 +45,6 @@ import { wingDate, wingDateLabel } from '../../../lib/us/kv';
 import { touch } from '../../../lib/us/presence';
 import { identify, type Who } from '../../../lib/us/together';
 import {
-  FRAME_DAYS,
   MAX_BYTES,
   NOTE_MAX,
   framesAvailable,
@@ -53,7 +52,7 @@ import {
   withUrls,
   type VisibleDayFrames,
 } from '../../../lib/us/frames';
-import { pickSlots } from '../../../lib/us/slots';
+import { CARRY_DAYS, pickSlots } from '../../../lib/us/slots';
 
 export const prerender = false;
 
@@ -68,25 +67,25 @@ await touch(viewer);
 const her = HER_NAME();
 const today = wingDate();
 
-/* ---- the week -------------------------------------------------------------
+/* ---- the window -----------------------------------------------------------
+   CARRY_DAYS, not FRAME_DAYS: this reads exactly as many days as the slot can
+   draw. It used to read seven to render two, which was the tell that the page and
+   the strip below it disagreed about what this feature was — the strip could show
+   a photograph the slot had already refused to promote, so the same picture was
+   both too old to headline and recent enough to display.
+
    One pipelined read for the metadata, then the presigns in parallel. `reachable`
    is carried through rather than swallowed: "nothing here yet" and "I could not
    ask" are different sentences and she should never be shown the first one when
    the second is true. */
-const { days: stored, reachable } = await getDaysSafe(today, FRAME_DAYS);
+const { days: stored, reachable } = await getDaysSafe(today, CARRY_DAYS);
 const available = framesAvailable();
 const week: VisibleDayFrames[] = available ? await withUrls(stored) : [];
-
-const todayRow = week[0] ?? { date: today, her: null, him: null };
 
 /* The window is newest-first and the slot takes each person's most recent frame
    rather than strictly today's — see pickSlots in slots.ts for the timezone
    arithmetic that forces it, and for why the carry is two days and not seven. */
-const { mine, theirs, mineFrom, theirsFrom, earlier } = pickSlots(week, today, viewer);
-
-/* Whether anything at all exists before today, asked of the RAW window rather than
-   of `earlier` — see the strip's empty message for why the difference matters. */
-const anyHistory = week.slice(1).some((d) => d.her || d.him);
+const { mine, theirs, mineFrom, theirsFrom } = pickSlots(week, today, viewer);
 
 /* ---- outcomes from the no-JavaScript path ---------------------------------
    Both paths land back here as a 303 with ?ok= or ?e=, written in her language
@@ -418,67 +417,29 @@ const whoWord = (w: Who): string => (w === viewer ? 'you' : w === 'her' ? (her |
         </>
     )}
 
-    {earlier.length > 0 && (
-        <>
-            <hr class="studio-rule">
-
-            {/* ============================================================
-                THE WEEK BEHIND
-
-                Small, and only the last few days — see frames.ts on why
-                the window is a week while the retention is forever. This
-                is a glance backward, not an archive; the studio is the
-                archive and it is a different room.
-                ============================================================ */}
-            <section class="fr-week" aria-labelledby="week-head">
-                <p class="fr-eyebrow" id="week-head">the days before this one</p>
-
-                <ul class="fr-week-list">
-                    {earlier.map((d) => (
-                        <li class="fr-day">
-                            <p class="fr-day-label">{wingDateLabel(d.date)}</p>
-                            <div class="fr-day-pair">
-                                {[viewer, them].map((w) => {
-                                    const f = d[w];
-                                    return f && f.url ? (
-                                        <figure class="fr-thumb">
-                                            <img
-                                                class="fr-thumb-img"
-                                                src={f.url}
-                                                alt={f.note
-                                                    ? `${whoWord(w)}, ${wingDateLabel(d.date)}: ${f.note}`
-                                                    : `${whoWord(w)}, ${wingDateLabel(d.date)}`}
-                                                loading="lazy"
-                                                decoding="async"
-                                            >
-                                            <figcaption class="fr-thumb-cap">
-                                                {whoWord(w)}{f.note ? ` — ${f.note}` : ''}
-                                            </figcaption>
-                                        </figure>
-                                    ) : (
-                                        /* A held box, so a day where only one of
-                                           them posted does not reflow the row and
-                                           make the other's picture jump sideways. */
-                                        <div class="fr-thumb fr-thumb--none" aria-hidden="true"></div>
-                                    );
-                                })}
-                            </div>
-                        </li>
-                    ))}
-                </ul>
-            </section>
-        </>
-    )}
-
-    {/* `anyHistory`, NOT `earlier.length === 0`. Since the slot carries a frame
-        forward, `earlier` is the strip AFTER the promoted frames are removed — so a
-        photograph he put up yesterday empties the strip by being promoted out of
-        it, and testing the strip would announce "nothing before today yet" while
-        his yesterday photograph sat in the slot directly above the sentence. This
-        asks the real question: has anything at all been posted before today. */}
-    {available && !anyHistory && (todayRow.her || todayRow.him) && (
-        <p class="fr-week-empty">Nothing before today yet. This is the first one.</p>
-    )}
+    {/* THE WEEK STRIP IS GONE, AND SO IS THE "nothing before today" LINE.
+    
+        This page is now only ever the two big frames. The strip below them showed up
+        to seven days of thumbnails, which made this an archive with a headline on top
+        rather than a photograph of the day — and an archive is a different feature
+        with different questions attached (how far back, what happens at the end of it,
+        who can delete). None of those questions were being answered; the strip just
+        grew.
+    
+        THE WINDOW NOW MATCHES THE SLOT. Reading seven days to render two was the
+        tell that the two halves disagreed about what the page was for: the strip could
+        show a photograph the slot had already refused to promote, so the same picture
+        was simultaneously too old to headline and recent enough to display. One number
+        governs both now, and it is CARRY_DAYS.
+    
+        NOTHING IS DELETED. The R2 objects and the Redis day hashes are untouched and
+        still carry every frame either of them has ever posted — this is a change to
+        what the page draws, not to what is kept. There is deliberately no expiry on
+        either, which means storage grows forever; that is a known open item and a
+        separate decision from this one. If a way back to old frames is ever wanted,
+        the missing piece is an index: the keys are generated by walking back from
+        today, so a frame older than the window is not merely hidden, it is
+        unaddressable. */}
 
     <hr class="studio-rule">
 
