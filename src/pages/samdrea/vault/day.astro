@@ -313,6 +313,32 @@ const whoWord = (w: Who): string => (w === viewer ? 'you' : w === 'her' ? (her |
                                                 : clockOf(f.atMs, tz)}{w === viewer ? '' : ' their time'}
                                         </span>
                                     )}
+                                    {f.lat !== null && f.lon !== null && (
+                                        /* THE PIN IS SHOWN ON PURPOSE, AND THAT IS AN ETHICAL CHOICE RATHER THAN
+                                           A FEATURE.
+                                    
+                                           The coordinates are kept so a map of everywhere she photographed across
+                                           France can exist at the end of the long-distance stretch. That is a
+                                           lovely thing to be given and a grim thing to have done TO you without
+                                           knowing, and the whole difference between those two is whether she can
+                                           see it happening. So it is on the page, under the photograph, from the
+                                           very first one rather than revealed later.
+                                    
+                                           COORDINATES RATHER THAN A PLACE NAME. Turning 48.8582, 2.2945 into
+                                           'Paris 11e' needs a reverse-geocoding service, which means sending her
+                                           location to a third party on every render — strictly worse for privacy
+                                           than the thing this line exists to be honest about. Four decimals is
+                                           about eleven metres: enough to recognise where you stood, short enough
+                                           to read under a photograph.
+                                    
+                                           aria-hidden on the glyph, with the digits as real text beside it. A pin
+                                           emoji read aloud is either silence or 'round pushpin', and neither is
+                                           the information. */
+                                        <span class="fr-where">
+                                            <span class="fr-where-pin" aria-hidden="true">📍</span>
+                                            <span class="fr-where-num">{f.lat.toFixed(4)}, {f.lon.toFixed(4)}</span>
+                                        </span>
+                                    )}
                                 </figcaption>
                             </>
                         ) : f && !f.url ? (
@@ -556,6 +582,38 @@ const whoWord = (w: Who): string => (w === viewer ? 'you' : w === 'her' ? (her |
             body.append('photo', small, 'frame.jpg');
             var note = form.querySelector('input[name=note]');
             if (note) body.append('note', note.value);
+
+            /* ---- WHERE IT WAS TAKEN, SENT AS THE HEAD OF THE ORIGINAL --------
+
+               There is meant to be a map at the end of all this, of everywhere she
+               photographed across France. The coordinates for it live in EXIF, and
+               EXIF is exactly what shrink() above has just destroyed — a canvas
+               holds pixels, so the re-encode drops every byte of metadata. By the
+               time `small` exists the location is gone, and the server has no way
+               to recover it.
+
+               SO THE FIRST 64KB OF THE ORIGINAL GOES TOO, and the server parses it
+               with the same reader it already uses on a no-JavaScript upload. The
+               alternative was parsing EXIF here and posting a latitude and
+               longitude, which means a SECOND parser over hostile byte formats
+               living in an inline script — untested, and in the one place where a
+               thrown error costs her the photograph. One parser on the server is
+               strictly better, and this is the thing that makes it possible.
+
+               64KB because APP1 sits at the very start of a JPEG, ahead of any
+               pixel data, and carries its own thumbnail inside itself. `slice` is a
+               view: nothing is copied, nothing is decoded, and nothing is read into
+               memory here.
+
+               ENTIRELY OPTIONAL AND SILENT WHEN IT FAILS. All of it is inside a
+               try — a browser without File.slice, a revoked handle, anything —
+               and the upload then proceeds without the pin. A missing point on a
+               map is not worth a failed photograph. */
+            try {
+                if (original && original.slice) {
+                    body.append('exifhead', original.slice(0, 65536), 'head.bin');
+                }
+            } catch (err) { /* no pin, and nothing else changes */ }
 
             say('sending…');
             /* A DEADLINE. Every FAILURE branch here falls back to submitting the

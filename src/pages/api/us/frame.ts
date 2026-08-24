@@ -41,6 +41,7 @@ import type { APIRoute } from 'astro';
 import { SESSION_SECRET } from '../../../lib/us/config';
 import { clientKey, hit } from '../../../lib/us/ratelimit';
 import { wingDate } from '../../../lib/us/kv';
+import { readCoords } from '../../../lib/us/exif';
 import { notify } from '../../../lib/us/push';
 import { crossSite, identify } from '../../../lib/us/together';
 import {
@@ -67,6 +68,19 @@ const RATE_WINDOW_SEC = 600;
 
 const PAGE = '/samdrea/vault/day';
 const FRAGMENT = '#post';
+
+/**
+ * The largest `exifhead` part that will be read.
+ *
+ * 64KB, and generous rather than tight: EXIF lives in the JPEG's APP1 segment
+ * before any pixel data, and even with an embedded thumbnail it is a few tens of
+ * kilobytes. Anything beyond this is not a metadata block, so refusing it costs
+ * nothing and stops a client making the server read four megabytes twice.
+ *
+ * Not counted against MAX_BYTES, which measures the PHOTOGRAPH — conflating them
+ * would make a legitimate 3.9MB upload fail for carrying its own metadata.
+ */
+const EXIF_HEAD_MAX = 64 * 1024;
 
 const PRIVACY: Record<string, string> = {
   'X-Robots-Tag': 'noindex, nofollow, noarchive',
@@ -192,6 +206,48 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
 
   const note = tidyNote(form.get('note'));
 
+  /* ---------------------------------------------------------------------------
+     WHERE IT WAS TAKEN, PARSED HERE AND NOWHERE ELSE
+
+     For the map that is meant to exist at the end of the long-distance stretch. The
+     coordinates are stored as numbers on the day hash rather than left inside the
+     file — exif.ts carries that argument in full.
+
+     THE HARD PART IS THAT BY THE TIME THE BYTES ARRIVE, THE LOCATION IS USUALLY
+     GONE. The page shrinks a photograph through a canvas before uploading it, and a
+     canvas holds pixels; the re-encode discards every scrap of metadata. So on the
+     ordinary path `bytes` has no EXIF at all, and there is nothing here to read.
+
+     THE OBVIOUS FIX WAS WORSE. Parsing EXIF in the page and posting a latitude and
+     longitude means a SECOND parser, written in the inline script, over the same
+     hostile byte formats — duplicated logic, untested, in the one place where a
+     thrown error costs her the upload.
+
+     So the page posts the first 64KB of the ORIGINAL file instead, and the parser
+     stays here: one implementation, unit-tested, running where a failure is a
+     missing pin rather than a broken form. EXIF sits at the very start of a JPEG
+     (APP1, before the pixel data) so the head is enough, thumbnail included.
+
+     ORDER MATTERS AND IS DELIBERATE. The uploaded bytes are tried FIRST, because on
+     the no-JavaScript path they ARE the original and are strictly better evidence
+     than a truncated copy. The head is the fallback for the resized path. Both
+     absent, or both unreadable, is the ordinary answer: null.
+
+     `coords` can never make this request fail. readCoords() is total — every branch
+     returns null rather than throwing — and a null simply means no pin. */
+  let coords = readCoords(bytes);
+  if (!coords) {
+    const head = form.get('exifhead');
+    if (head instanceof File && head.size > 0 && head.size <= EXIF_HEAD_MAX) {
+      try {
+        coords = readCoords(new Uint8Array(await head.arrayBuffer()));
+      } catch {
+        /* A truncated or unreadable part. The photograph is already validated and
+           is about to be saved; losing the pin is not worth losing that. */
+      }
+    }
+  }
+
   /* ONE clock reading, taken here and passed down, so the day it files under and
      the timestamp it records cannot straddle midnight and disagree. */
   const nowMs = Date.now();
@@ -199,7 +255,7 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
 
   let frame;
   try {
-    frame = await putFrame({ date: today, who, bytes, sniffed, note, atMs: nowMs });
+    frame = await putFrame({ date: today, who, bytes, sniffed, note, atMs: nowMs, coords });
   } catch (err) {
     /* The bytes-first order in putFrame() means the worst case here is an
        orphaned object in R2 that nothing points at — invisible, harmless, and

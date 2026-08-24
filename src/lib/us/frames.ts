@@ -76,6 +76,7 @@
  */
 
 import { AwsClient } from 'aws4fetch';
+import { validCoords } from './exif';
 import { hasKV, hasR2, kvConfig, r2Config, r2Endpoint } from './config';
 import { presignedUrl } from './photos';
 import { WING_TZ, shiftDate, wingDate } from './kv';
@@ -178,6 +179,22 @@ export interface Frame {
   atMs: number;
   /** Her or his words under it. '' when there are none, which is common. */
   note: string;
+  /**
+   * Where it was taken, in decimal degrees, or null — the ordinary answer, not a
+   * failure.
+   *
+   * NUMBERS HERE RATHER THAN EXIF LEFT INSIDE THE FILE, for the map that is meant
+   * to exist at the end of the long-distance stretch: a list of points is what a
+   * map wants, and re-parsing every JPEG ever posted at that moment is not. The
+   * client resizer also cannot preserve an EXIF block through its canvas
+   * re-encode, so the page reads the coordinates off the ORIGINAL file and posts
+   * them beside the bytes. exif.ts carries the whole argument.
+   *
+   * Both or neither. A latitude without a longitude is not half a location, it is
+   * a bug — so a reader can test one field and trust the other.
+   */
+  lat: number | null;
+  lon: number | null;
 }
 
 /** One day, both sides. Either may be absent. */
@@ -316,10 +333,17 @@ function frameFrom(h: Record<string, string>, who: Who): Frame | null {
   const ext = h[`${who}Ext`] ?? '';
   if (!/^(jpg|png|webp)$/.test(ext)) return null;
   const atMs = Number(h[`${who}At`] ?? 0);
+  /* Re-validated on the way OUT, not trusted as stored. These arrived from a
+     phone through a form field, and the store is not a validation boundary — a pin
+     in the Gulf of Guinea would be forever, so the check is on both sides. */
+  const at = validCoords(h[`${who}Lat`], h[`${who}Lon`]);
+
   return {
     ext,
     atMs: Number.isFinite(atMs) && atMs > 0 ? atMs : 0,
     note: h[`${who}Note`] ?? '',
+    lat: at ? at.lat : null,
+    lon: at ? at.lon : null,
   };
 }
 
@@ -361,8 +385,10 @@ export async function putFrame(input: {
   sniffed: Sniffed;
   note: string;
   atMs: number;
+  /** Where it was taken, if the page or the server could work it out. */
+  coords?: { lat: number; lon: number } | null;
 }): Promise<Frame> {
-  const { date, who, bytes, sniffed, note, atMs } = input;
+  const { date, who, bytes, sniffed, note, atMs, coords = null } = input;
 
   const bucket = r2();
   if (!bucket) throw new FramesError('r2 is not configured, so there is nowhere to put a photograph');
@@ -393,7 +419,13 @@ export async function putFrame(input: {
   }
   if (!res.ok) throw new FramesError(`r2 PUT HTTP ${res.status}`);
 
-  const frame: Frame = { ext: sniffed.ext, atMs, note };
+  const frame: Frame = {
+    ext: sniffed.ext,
+    atMs,
+    note,
+    lat: coords ? coords.lat : null,
+    lon: coords ? coords.lon : null,
+  };
 
   if (!hasKV()) {
     // Dev without Upstash. The bytes are safely in R2 either way.
@@ -406,15 +438,29 @@ export async function putFrame(input: {
   /* HSET of that person's fields only — never a whole-object write. Both of them
      posting within the same second is the case this feature is designed to
      produce, and a read-modify-write would make one of the two disappear. */
-  await redis([
-    [
-      'HSET',
-      DAY_KEY(date),
-      `${who}Ext`, frame.ext,
-      `${who}At`, String(frame.atMs),
-      `${who}Note`, frame.note,
-    ],
-  ]);
+  /* THE COORDINATES ARE ONLY WRITTEN WHEN THERE ARE COORDINATES — AND THEIR
+     ABSENCE IS AN EXPLICIT DELETE, not an omission.
+
+     Posting again the same day overwrites the first photograph; that is the "swap
+     it for another one" affordance. If the replacement has no location — a
+     screenshot, or Location Services off that afternoon — an HSET that merely
+     omitted the two fields would leave the FIRST photograph's coordinates attached
+     to the second one. That is a confidently wrong pin rather than a missing one,
+     and on a map a wrong point is worse than a gap. So the empty case deletes the
+     pair, in the same pipeline as the write. */
+  const fields: (string | number)[] = [
+    'HSET',
+    DAY_KEY(date),
+    `${who}Ext`, frame.ext,
+    `${who}At`, String(frame.atMs),
+    `${who}Note`, frame.note,
+  ];
+  if (frame.lat !== null && frame.lon !== null) {
+    fields.push(`${who}Lat`, String(frame.lat), `${who}Lon`, String(frame.lon));
+    await redis([fields]);
+  } else {
+    await redis([fields, ['HDEL', DAY_KEY(date), `${who}Lat`, `${who}Lon`]]);
+  }
   return frame;
 }
 
