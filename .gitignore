@@ -114,3 +114,10 @@ __pycache__/
 /*.jpeg
 /*.jpg
 /*.webp
+
+# Working notes for Claude Code. Deliberately NOT committed: it is a personal
+# scratchpad for how to work in this repo, not documentation of the project, and
+# this repo is public. It still loads in every session because the mechanism reads
+# it off the filesystem rather than out of git — so ignoring it costs nothing
+# except its survival through a fresh clone.
+CLAUDE.md
