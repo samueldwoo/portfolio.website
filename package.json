@@ -27,7 +27,8 @@
     "aws4fetch": "^1.0.20",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "three": "^0.185.1"
+    "three": "^0.185.1",
+    "web-push": "^3.6.7"
   },
   "overrides": {
     "path-to-regexp": "^6.3.0"

@@ -41,6 +41,7 @@ import type { APIRoute } from 'astro';
 import { SESSION_SECRET } from '../../../lib/us/config';
 import { clientKey, hit } from '../../../lib/us/ratelimit';
 import { wingDate } from '../../../lib/us/kv';
+import { notify } from '../../../lib/us/push';
 import { crossSite, identify } from '../../../lib/us/together';
 import {
   FramesError,
@@ -196,14 +197,9 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
   const nowMs = Date.now();
   const today = wingDate(new Date(nowMs));
 
+  let frame;
   try {
-    const frame = await putFrame({ date: today, who, bytes, sniffed, note, atMs: nowMs });
-    return answer(true, 200, 'posted', {
-      date: today,
-      who,
-      note: frame.note,
-      bytes: bytes.byteLength,
-    });
+    frame = await putFrame({ date: today, who, bytes, sniffed, note, atMs: nowMs });
   } catch (err) {
     /* The bytes-first order in putFrame() means the worst case here is an
        orphaned object in R2 that nothing points at — invisible, harmless, and
@@ -211,6 +207,28 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
     console.error('[us] frame write failed:', err instanceof Error ? err.message : err);
     return answer(false, err instanceof FramesError ? 502 : 500, 'store');
   }
+
+  /* ---- THE NOTIFICATION -----------------------------------------------
+     OUTSIDE the try, and that placement is the point rather than tidiness.
+
+     Inside it, a notification that somehow threw would land in the catch above
+     and be reported as `store` — a 502 over a photograph that is already in R2,
+     which is the exact failure this feature is forbidden from causing. push.ts
+     guarantees notify() cannot throw; putting the call where a throw would have
+     nowhere to go means that guarantee is not the only thing holding.
+
+     "Sam put a picture up", and that is the whole of it. `frame.note` is the
+     caption and it is on the next line being returned to the caller — it is NOT
+     passed here, and notify() has no argument it could be passed as. A caption
+     is exactly the kind of thing somebody standing next to her must not read. */
+  await notify(who, 'photo');
+
+  return answer(true, 200, 'posted', {
+    date: today,
+    who,
+    note: frame.note,
+    bytes: bytes.byteLength,
+  });
 };
 
 /** Anything but POST. Named so the 405 is a sentence rather than a default. */

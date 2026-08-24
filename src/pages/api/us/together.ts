@@ -83,6 +83,7 @@ import type { APIRoute } from 'astro';
 import { SESSION_SECRET } from '../../../lib/us/config';
 import { clientKey, hit } from '../../../lib/us/ratelimit';
 import { isWingDate, wingDate } from '../../../lib/us/kv';
+import { notify } from '../../../lib/us/push';
 import {
   ANSWER_MAX,
   ITEM_MAX,
@@ -386,6 +387,28 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
        and broken in the JSON. `theirs` below is absent rather than hidden whenever
        `revealed` is false. */
     const state = visibleDay(record, who, today);
+
+    /* ---- THE NOTIFICATION ---------------------------------------------
+       ON THE REVEAL ONLY, NEVER ON THE FIRST ANSWER, and this is the one wiring
+       decision in the whole feature that is a privacy rule rather than a
+       preference.
+
+       `state.revealed` is true only when BOTH answers are in — this request
+       carried the second one. Notifying on the first would tell the other person
+       "she has answered", which is a fact the seal exists to withhold: the whole
+       mechanic is that you answer blind, and knowing she has already gone changes
+       what you write. It would leak nothing about the WORDS and still break the
+       thing the words are for.
+
+       So the trigger is the reveal, the copy is "you both answered", and it goes
+       to the one who answered FIRST — notify() sends to otherOne(actor), and the
+       actor here is the second answerer, who is already looking at the reveal on
+       screen and does not need telling.
+
+       Neither answer is passed. `state.theirs` and `state.mine` are both in scope
+       on this line and notify() has no parameter either could occupy. */
+    if (state.revealed) await notify(who, 'revealed');
+
     return answer(true, 200, state.revealed ? 'revealed' : 'answered', {
       date: state.date,
       revealed: state.revealed,

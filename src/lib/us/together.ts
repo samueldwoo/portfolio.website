@@ -516,223 +516,32 @@ export function apartLine(c: TwoClocks, viewer: Who): string {
 }
 
 /* ============================================================================
-   THE OVERLAP WINDOW
+   THE OVERLAP WINDOW — REMOVED
 
-   ---------------------------------------------------------------------------
-   THE TWO CLOCKS SAY WHERE EACH OF YOU IS. THIS SAYS WHEN YOU CAN BOTH BE HERE.
+   There was a feature here that turned HER_TZ, HIS_TZ and a hardcoded 08:00-23:30
+   window into a sentence: "you are both awake — for the next five and a half hours",
+   or "he is asleep. he is up again in seven hours."
 
-   Nine hours is the kind of gap where the actual problem is not knowing the
-   other person's time — it is arithmetic. She looks at 03:29 and 18:29 and has
-   to work out, from two numbers and a bedtime she is guessing at, whether
-   messaging him now reaches a person or a phone on a nightstand. Everybody in a
-   long-distance relationship does this sum several times a day and gets it wrong
-   often enough to have learned not to try.
+   The arithmetic was careful — an integer sweep rather than wrap-around interval
+   maths, tested across all 1440 minutes of a day from both sides — and the premise
+   underneath it was wrong. Two people's sleep does not hold to a window, and a page
+   that states a guess in the same voice it states a fact teaches the reader to
+   discount both.
 
-   So the site does the sum. Two states, and only two:
+   The tell, in hindsight, was the patch it needed: when presence reported "he is in
+   here too, right now" directly above "he is asleep", the guess had to be suppressed.
+   A line that must yield whenever real evidence appears is a line the real evidence
+   should have replaced.
 
-       you are both awake — for the next three hours
-       he is asleep. you overlap again in four hours, for six and a half
+   WHAT DOES THE JOB NOW, all of it observed rather than inferred: the two clocks
+   (where each of them actually is), presence (a real page render, in presence.ts),
+   and each song's and photo's timestamp in the POSTER'S own timezone — so when
+   somebody is awake is visible from what they did.
 
-   That second sentence is the one that matters. "He is asleep" on its own is a
-   closed door; the same fact with a time attached is a plan.
-
-   ---------------------------------------------------------------------------
-   NO STORAGE, NO ENDPOINT, NO INPUT
-
-   Everything here is derived from HER_TZ, HIS_TZ and the awake window below.
-   Nothing is written, nothing is read, and there is nothing either of them can
-   set — which is why this is the cheapest feature in the wing and also why it
-   cannot break in a way that loses data.
-
-   ---------------------------------------------------------------------------
-   WHY AN INTEGER SWEEP AND NOT INTERVAL ARITHMETIC
-
-   Both windows wrap midnight in at least one of the two zones (hers, in his
-   time, runs 23:00 to 14:30), the two can overlap in TWO separate bands a day,
-   and the bands are different lengths. Closed-form interval intersection across
-   a wrap is the kind of code that is correct for the case you tested and off by
-   a day for the other one.
-
-   So: read each person's local wall clock ONCE — from clocks(), which the hub
-   has already computed — and then step a pure integer minute counter forward.
-   `(m + step) % 1440` needs no timezone database and no Intl call, so the sweep
-   costs nothing measurable and is auditable by reading it.
-
-   The one imprecision: a DST shift between now and a boundary moves that
-   boundary by an hour, because the sweep assumes each zone's offset holds for
-   the length of the window. Twice a year, "for the next three hours" is off by
-   one. That is a fair price for not shipping wrap-around interval arithmetic.
-   ========================================================================= */
-
-/**
- * When each of them is reachable, as local minutes from midnight.
- *
- * ONE WINDOW FOR BOTH, deliberately: two windows invites tuning it into a
- * timetable, and the honest precision available here is "roughly daytime".
- * 08:00 to 23:30 is a guess about two people, and it is the only guess in this
- * block — everything else is derived. If it reads wrong, this is the line.
- *
- * It is intentionally generous at the end. The failure that matters is telling
- * her he is asleep when he is awake, so the window errs toward "reachable".
- */
-export const AWAKE_FROM_MIN = 8 * 60;
-export const AWAKE_UNTIL_MIN = 23 * 60 + 30;
-
-/** How far ahead to look for the next overlap before giving up. */
-const OVERLAP_HORIZON_MIN = 48 * 60;
-/** Sweep granularity. Matches the resolution of the sentence it produces. */
-const OVERLAP_STEP_MIN = 15;
-
-export interface Overlap {
-  /** True when both wall clocks are inside the awake window right now. */
-  bothAwake: boolean;
-  /**
-   * Minutes of shared time left, when `bothAwake`. Zero otherwise.
-   *
-   * Counted to whichever window closes FIRST, which is the whole point — the
-   * shared time ends when either of them goes, not when the reader does.
-   */
-  remainingMin: number;
-  /**
-   * Minutes until THE OTHER PERSON's window opens, when they are outside it.
-   * Zero when they are already inside.
-   *
-   * Deliberately not "minutes until the next time both windows intersect". That
-   * was the first version and it was wrong in a way worth recording: with nine
-   * hours between them the two windows intersect in two separate bands a day, and
-   * the nearer band is THIRTY MINUTES long (her 08:00 is his 23:00). So at 02:00
-   * her time the honest intersection answer was "you overlap again in six hours,
-   * for 30 minutes" — accurate, and useless. She would have planned around it and
-   * found him going to bed.
-   *
-   * The other person waking up is the fact she can actually act on, it is never a
-   * sliver, and it needs no forward search at all.
-   */
-  theirsOpensInMin: number;
-  /** Who is outside the window. Empty when both are inside. */
-  asleep: Who[];
-}
-
-/** `18:29` -> 1109. The clock face is already computed, so this is free. */
-function minuteOfDay(hhmm: string): number {
-  const [h, m] = hhmm.split(':').map(Number);
-  return (h % 24) * 60 + (m % 60);
-}
-
-function insideWindow(minute: number): boolean {
-  const m = ((minute % 1440) + 1440) % 1440;
-  return m >= AWAKE_FROM_MIN && m < AWAKE_UNTIL_MIN;
-}
-
-/** Minutes from `minute` forward to the next AWAKE_FROM_MIN. */
-function untilOpens(minute: number): number {
-  const m = ((minute % 1440) + 1440) % 1440;
-  return ((AWAKE_FROM_MIN - m) % 1440 + 1440) % 1440;
-}
-
-/**
- * The shared-time facts, from two wall clocks and nothing else.
- *
- * Takes `TwoClocks` rather than an instant so that the hub computes the pair
- * once and both the clock strip and this line describe the SAME moment. Two
- * independent Date.now() calls a few milliseconds apart would almost always
- * agree and would disagree exactly at a boundary, which is the only time anybody
- * would be looking closely.
- */
-export function overlap(c: TwoClocks): Overlap {
-  const herNow = minuteOfDay(c.her.time);
-  const himNow = minuteOfDay(c.him.time);
-
-  const herIn = insideWindow(herNow);
-  const himIn = insideWindow(himNow);
-
-  const asleep: Who[] = [];
-  if (!herIn) asleep.push('her');
-  if (!himIn) asleep.push('him');
-
-  let remainingMin = 0;
-  if (herIn && himIn) {
-    // Sweep to the FIRST close rather than computing two remainders and trusting
-    // the smaller — the window wraps midnight in at least one of the two zones,
-    // and `(m + step) % 1440` needs no timezone database to get that right.
-    let step = 0;
-    while (step < OVERLAP_HORIZON_MIN) {
-      const next = step + OVERLAP_STEP_MIN;
-      if (!insideWindow(herNow + next) || !insideWindow(himNow + next)) break;
-      step = next;
-    }
-    remainingMin = step + OVERLAP_STEP_MIN;
-  }
-
-  return {
-    bothAwake: herIn && himIn,
-    remainingMin,
-    // Filled in per-reader by overlapLine, which is the only thing that knows
-    // which of the two "the other person" is.
-    theirsOpensInMin: 0,
-    asleep,
-  };
-}
-
-/**
- * Minutes as something you would say out loud: `three hours`, `six and a half
- * hours`, `forty minutes`.
- *
- * Rounds to the half hour above an hour, because "3h 12m" is a measurement and
- * this is meant to be a remark. Under an hour it stays in minutes, where the
- * precision is the useful part.
- */
-export function spanWords(min: number): string {
-  if (min < 60) {
-    const rounded = Math.max(5, Math.round(min / 5) * 5);
-    return `${rounded} minutes`;
-  }
-  const halves = Math.round(min / 30);
-  const hours = Math.floor(halves / 2);
-  const half = halves % 2 === 1;
-  const name = hours <= 12 ? spell(hours) : String(hours);
-  if (half) return `${name} and a half hours`;
-  return `${name} ${hours === 1 ? 'hour' : 'hours'}`;
-}
-
-/**
- * The sentence, from the reader's side.
- *
- * THE READER IS AWAKE. They are holding a phone, looking at this. So the line
- * never tells them anything about their own state that they could see by looking
- * up — the four cases are about the other person, except the one case where
- * being up at 03:00 is itself the remark.
- *
- * Needs the clocks again because "when does he wake up" is a fact about HIS wall
- * clock, and which of the two that is depends on who is reading.
- */
-export function overlapLine(o: Overlap, c: TwoClocks, viewer: Who): string {
-  const them = otherOne(viewer);
-  const theirName = them === 'her' ? 'she' : 'he';
-  const theirClock = them === 'her' ? c.her : c.him;
-
-  if (o.bothAwake) {
-    return `you are both awake — for the next ${spanWords(o.remainingMin)}`;
-  }
-
-  const theyAreAsleep = o.asleep.includes(them);
-  const youAreUp = !o.asleep.includes(viewer);
-
-  if (theyAreAsleep) {
-    const opens = untilOpens(minuteOfDay(theirClock.time));
-    const wake = `${theirName} is up again in ${spanWords(opens)}`;
-    // Both outside the window: she is reading this at 03:00, which is the more
-    // interesting half of the sentence, so it leads.
-    return youAreUp ? `${theirName} is asleep. ${wake}.` : `you are both up too late. ${wake}.`;
-  }
-
-  // They are awake and the reader is outside the window — up late, or up early.
-  const hour = minuteOfDay(viewer === 'her' ? c.her.time : c.him.time) / 60;
-  const late = hour >= AWAKE_UNTIL_MIN / 60 || hour < 5;
-  return late
-    ? `${theirName} is up. you are the one who should be asleep.`
-    : `${theirName} is up, and you are up early.`;
-}
+   Removed with it: overlap(), overlapLine(), spanWords(), the Overlap interface,
+   AWAKE_FROM_MIN, AWAKE_UNTIL_MIN, OVERLAP_HORIZON_MIN, OVERLAP_STEP_MIN,
+   minuteOfDay(), insideWindow() and untilOpens(). HER_TZ, HIS_TZ, clocks() and
+   apartLine() all STAY — the clock strip is factual and is not going anywhere. */
 
 /* ============================================================================
    PART TWO — "THINKING OF YOU"

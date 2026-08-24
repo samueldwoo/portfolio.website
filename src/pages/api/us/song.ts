@@ -90,6 +90,7 @@ import type { APIRoute } from 'astro';
 import { SESSION_SECRET } from '../../../lib/us/config';
 import { readCookie, verify } from '../../../lib/us/session';
 import { clientKey, hit } from '../../../lib/us/ratelimit';
+import { notify } from '../../../lib/us/push';
 import { crossSite, identify } from '../../../lib/us/together';
 import {
   StoreError,
@@ -733,6 +734,19 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
     console.error('[us] song POST could not write to the store:', err);
     return answer(false, 502, 'store');
   }
+
+  /* ---- THE NOTIFICATION -----------------------------------------------
+     AFTER putSong has resolved, never before, and it goes to HER because
+     notify() sends to otherOne(actor) and `who` is 'him' by the check above.
+
+     It says "Sam picked a song" and nothing else. The title, the artist and the
+     note are all sitting in `song` two lines up and NONE of them is passed —
+     notify() takes two enums and has no parameter one of them could occupy. See
+     push.ts's header for why that is a shape rather than a habit.
+
+     Awaited and unable to throw, so a push service having a bad minute cannot
+     turn a saved song into a 502. */
+  await notify(who, 'song');
 
   // `degraded` tells the dj page to say "Spotify did not give us a title" out
   // loud, instead of leaving me to wonder why the card looks half-empty.

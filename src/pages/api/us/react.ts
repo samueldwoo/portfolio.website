@@ -97,6 +97,7 @@
 import type { APIRoute } from 'astro';
 import { SESSION_SECRET } from '../../../lib/us/config';
 import { clientKey, hit } from '../../../lib/us/ratelimit';
+import { notify } from '../../../lib/us/push';
 import { crossSite, identify, type Who } from '../../../lib/us/together';
 import {
   MAX_REACTIONS_PER_DAY,
@@ -296,6 +297,17 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
   // Not checked against the store, though: that would cost an extra round trip to
   // prevent something only our own markup can cause.
 
+  /* HOISTED OUT OF THE try FOR THE NOTIFICATION, and it is worth saying why
+     rather than leaving a `let` that looks like an accident.
+
+     A tap on a reaction that is ALREADY on is idempotent — the store ends up
+     exactly where it started — so it is not an event, and notifying on it would
+     put a second identical row on his lock screen for one thing happening. The
+     cap check below is already computing precisely that fact, so it is read out
+     here instead of paying for a second round trip to re-derive it. */
+  let already = false;
+  let list: string[] = [];
+
   try {
     /* THE CAP, CHECKED BEFORE THE WRITE.
 
@@ -312,7 +324,7 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
     if (on) {
       const before = await getReactions([date]);
       const current = (side === 'his' ? before[date]?.onHis : before[date]?.onHers) ?? [];
-      const already = current.includes(reaction);
+      already = current.includes(reaction);
       if (!already && current.length >= MAX_REACTIONS_PER_DAY) {
         return answer(false, 409, 'too-many');
       }
@@ -324,20 +336,38 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
     // echoing the store's actual state is the only honest answer — and it is what
     // lets the client repaint every button on that side from one response.
     const after = await getReactions([date]);
-    const list = (side === 'his' ? after[date]?.onHis : after[date]?.onHers) ?? [];
-    return answer(true, 200, null, {
-      date,
-      side,
-      reactions: list,
-      // Which sentence the no-JS page shows. Not derived from `on` by the page,
-      // because the page does not know what was asked for — only what happened.
-      // NOT named `ok`: see the comment in answer().
-      outcome: on ? 'reacted' : 'unreacted',
-    });
+    list = (side === 'his' ? after[date]?.onHis : after[date]?.onHers) ?? [];
   } catch (err) {
     console.error('[us] react could not write to the store:', err);
     return answer(false, 502, 'store');
   }
+
+  /* ---- THE NOTIFICATION -----------------------------------------------
+     OUTSIDE the try, so a notification could not be reported as a store failure
+     over a reaction that saved. Same placement and same reason as frame.ts.
+
+     TWO CONDITIONS, and each one removes a different wrong notification:
+
+       on         taking a reaction BACK is not a thing to be told about. "Sam
+                  un-reacted to your song" is a sentence nobody should receive.
+       !already   re-tapping one that is already on changed nothing, so there is
+                  no event. One event, at most one notification.
+
+     The recipient needs no working out: the rule enforced thirty lines up is
+     that you only react to the OTHER one's song, so the song's owner is
+     otherOne(who), which is exactly where notify() sends. The emoji is not
+     passed — "Sam reacted to your song" says the fact and not the feeling. */
+  if (on && !already) await notify(who, 'reaction');
+
+  return answer(true, 200, null, {
+    date,
+    side,
+    reactions: list,
+    // Which sentence the no-JS page shows. Not derived from `on` by the page,
+    // because the page does not know what was asked for — only what happened.
+    // NOT named `ok`: see the comment in answer().
+    outcome: on ? 'reacted' : 'unreacted',
+  });
 };
 
 /** Anything other than POST. Explicit, so a stray GET is a 405 and not a crash. */

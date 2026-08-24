@@ -89,6 +89,47 @@ export function hasR2(): boolean {
   return Boolean(c.accountId && c.accessKeyId && c.secretAccessKey && c.bucket);
 }
 
+/**
+ * Web Push (VAPID). OPTIONAL, exactly like the two above.
+ *
+ * ---------------------------------------------------------------------------
+ * THE PUBLIC KEY IS PUBLIC. THE PRIVATE KEY IS THE WHOLE CONTROL.
+ *
+ * `publicKey` is handed to the browser as `applicationServerKey` and there is no
+ * version of this feature where it stays secret — it is in the subscription the
+ * push service issues. Nothing is lost by rendering it into a page.
+ *
+ * `privateKey` signs the VAPID JWT on every send. It never leaves the server, it
+ * is never rendered, and it is never logged. Anyone holding it can push to any
+ * subscription minted under the public key, which on a lock screen is the same
+ * as being able to write to her phone.
+ *
+ * `subject` is the `mailto:` a push service contacts if we misbehave. It is
+ * REQUIRED by every real push service, so a missing one means no feature rather
+ * than a degraded one — hence it is part of hasPush() and not optional.
+ * ---------------------------------------------------------------------------
+ */
+export function pushConfig() {
+  return {
+    publicKey: env('VAPID_PUBLIC_KEY'),
+    privateKey: env('VAPID_PRIVATE_KEY'),
+    subject: env('VAPID_SUBJECT'),
+  };
+}
+
+/**
+ * True only when a notification could actually be signed and sent.
+ *
+ * Note what it does NOT check: Upstash. Subscriptions live in Redis, so without
+ * it there is nowhere to keep one — but that is hasKV()'s question and push.ts
+ * asks both. Collapsing them here would make "the keys are missing" and "the
+ * store is missing" the same diagnosis, and they need different fixes.
+ */
+export function hasPush(): boolean {
+  const c = pushConfig();
+  return Boolean(c.publicKey && c.privateKey && c.subject);
+}
+
 /** S3 endpoint for the account's R2. Null when unconfigured. */
 export function r2Endpoint(): string | null {
   const { accountId } = r2Config();

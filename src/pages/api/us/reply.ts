@@ -93,6 +93,7 @@ import type { APIRoute } from 'astro';
 import { SESSION_SECRET } from '../../../lib/us/config';
 import { readCookie, verify } from '../../../lib/us/session';
 import { clientKey, hit } from '../../../lib/us/ratelimit';
+import { notify } from '../../../lib/us/push';
 import { crossSite, identify } from '../../../lib/us/together';
 import { isTimeZone, isWingDate, putReply, wingDate, type ReplyRecord } from '../../../lib/us/kv';
 // The one parser, the one metadata resolver, the one text cleaner, and the SAME
@@ -285,6 +286,17 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
     console.error('[us] reply could not write to the store:', err);
     return answer(false, 502, 'store');
   }
+
+  /* ---- THE NOTIFICATION -----------------------------------------------
+     The SAME event key as his side. A song is a song: the wire carries
+     `{"e":"song","a":"her"}` and public/sw.js turns the actor into the pronoun,
+     so he reads "She picked a song" where she reads "Sam picked a song". Two
+     event keys for one kind of thing would have meant two entries in the
+     worker's table saying the same sentence twice.
+
+     `who` is 'her' by the guard above, so notify() sends to him. Awaited, and it
+     cannot throw — see push.ts. */
+  await notify(who, 'song');
 
   // `degraded` lets her page say "Spotify would not give us a title" out loud
   // instead of leaving a card that looks half-broken for no stated reason.

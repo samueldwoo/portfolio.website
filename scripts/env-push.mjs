@@ -50,6 +50,18 @@ const KEYS = [
   'R2_BUCKET',
   'UPSTASH_REDIS_REST_URL',
   'UPSTASH_REDIS_REST_TOKEN',
+  /* Web Push. VAPID_PUBLIC_KEY is public by construction — the push service
+     embeds it in every subscription it issues, and the hub renders it into the
+     page for `applicationServerKey` — but it still belongs here: the browser and
+     the server have to agree on it, and a deployment holding the private half of
+     one pair and the public half of another rejects every subscription it ever
+     minted. The three travel together or not at all.
+
+     VAPID_PRIVATE_KEY is the real secret in this group. Anyone holding it can put
+     words on her lock screen. */
+  'VAPID_PUBLIC_KEY',
+  'VAPID_PRIVATE_KEY',
+  'VAPID_SUBJECT',
 ];
 
 const TARGETS = ['production', 'preview', 'development'];

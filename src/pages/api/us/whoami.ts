@@ -51,6 +51,7 @@ import { TTL, clearCookie, sign, writeCookie } from '../../../lib/us/session';
 import { clientKey, hit } from '../../../lib/us/ratelimit';
 import { crossSite, identify } from '../../../lib/us/together';
 import { forget } from '../../../lib/us/presence';
+import { dropDevices } from '../../../lib/us/push';
 
 export const prerender = false;
 
@@ -160,7 +161,14 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
      presence.ts resolves rather than rejects. A store that is down means the
      record expires on its own inside the hour instead of now, which is a late fix
      rather than a broken response. */
-  if (want !== current) await forget(current);
+  /* AND THE PUSH SUBSCRIPTIONS, for the same reason and with the same timing.
+     Presence makes the hub say the wrong sentence; a stale push row sends HER
+     notification to HIS phone, so she stops being told anything while a device
+     she does not hold answers for her. Both are records keyed by who the reader
+     was at write time, and this is the only moment either can be known stale.
+     Both resolve rather than reject, so a store that is down delays the fix
+     rather than failing the switch. */
+  if (want !== current) await Promise.all([forget(current), dropDevices(current)]);
 
   return answer(true, 200, 'switched', { who: want });
 };

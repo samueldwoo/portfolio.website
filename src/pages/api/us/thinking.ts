@@ -67,6 +67,7 @@ import type { APIRoute } from 'astro';
 import { SESSION_SECRET } from '../../../lib/us/config';
 import { clientKey, hit } from '../../../lib/us/ratelimit';
 import { wingDate } from '../../../lib/us/kv';
+import { notify } from '../../../lib/us/push';
 import {
   HER_TZ,
   HIS_TZ,
@@ -229,6 +230,22 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
     console.error(`[us] thinking could not write for ${who}:`, err);
     return answer(false, 502, 'store');
   }
+
+  /* ---- THE NOTIFICATION -----------------------------------------------
+     AFTER the write, and only when the write actually sent something.
+
+     `result.sent` is false when the thirty-minute debounce coalesced this tap
+     into the one that already landed. That is a SUCCESS (see the header) and it
+     is emphatically not a second event, so notifying here would mean one thing
+     happening and two rows appearing on her lock screen — the exact opposite of
+     what the debounce is for.
+
+     AWAITED, and it cannot throw. push.ts's header carries both halves: awaited
+     because a serverless function that returns before its work lands does not
+     finish it, and swallowing because a notification that failed must never cost
+     the tap that caused it. There is no `if` around the result and no error to
+     handle, on purpose. */
+  if (result.sent) await notify(who, 'thinking');
 
   /**
    * The relative phrase, rendered SERVER-SIDE and returned as a string.

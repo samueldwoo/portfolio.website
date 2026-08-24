@@ -59,7 +59,7 @@
  * a state this page renders correctly on purpose.
  * ---------------------------------------------------------------------------
  */
-import { HER_NAME, SESSION_SECRET } from '../../../lib/us/config';
+import { HER_NAME, SESSION_SECRET, hasKV, hasPush, pushConfig } from '../../../lib/us/config';
 import { readCookie, verify } from '../../../lib/us/session';
 import { getSongs, wingDate, wingDateLabel, type SongRecord } from '../../../lib/us/kv';
 import { countVisitSafe, getMarksSafe } from '../../../lib/us/marks';
@@ -82,8 +82,6 @@ import {
   identify,
   isWeekPrompt,
   otherOne,
-  overlap,
-  overlapLine,
   sentLine,
   thinkingLine,
   togetherTier,
@@ -220,8 +218,6 @@ const twoClocks = clocks(nowMs);
    The clocks say where each of you is; this says whether reaching the other one
    right now reaches a person or a phone on a nightstand. Nine hours apart, that
    sum is the one both of them were doing in their heads and getting wrong. */
-const shared = overlap(twoClocks);
-const sharedLine = overlapLine(shared, twoClocks, viewer);
 
 /* AND WHETHER THEY ARE BOTH HERE *NOW*. One pipelined Upstash call that stamps
    the reader's clock and reads the other's. Resolves to null on any failure and
@@ -519,6 +515,30 @@ const rooms = [
        decoration rather than information. The page itself is one tap away. */
   },
 ];
+
+/* ---------------------------------------------------------------------------
+   NOTIFICATIONS — the two things the SERVER gets to decide.
+
+   1. WHETHER THE FEATURE EXISTS. Without VAPID keys nothing can be signed and
+      without Upstash there is nowhere to keep a subscription, so the block is
+      not rendered at all rather than rendered as a button that turns on and then
+      never does anything. Same contract every optional backing service in this
+      wing has (see kvConfig / r2Config in config.ts).
+
+   2. THE PUBLIC KEY. `pushManager.subscribe()` needs it as
+      `applicationServerKey`, and it is PUBLIC by definition — it is inside the
+      subscription the push service issues. Rendering it costs nothing. The
+      private key is never read on this page and never leaves the server.
+
+   EVERYTHING ELSE IS THE BROWSER'S TO ANSWER, and it has to be: whether the app
+   is installed to the home screen, whether this device supports push at all, and
+   whether she has already said yes, no, or nothing yet. The server cannot know
+   any of those, which is why the whole block below starts `hidden` and the script
+   is what reveals the one true state. With JavaScript off it stays hidden, so she
+   is shown nothing rather than a control that could not work.
+   --------------------------------------------------------------------------- */
+const pushReady = hasPush() && hasKV();
+const vapidKey = pushReady ? pushConfig().publicKey ?? '' : '';
 ---
 
 <!DOCTYPE html>
@@ -672,17 +692,28 @@ const rooms = [
         <p class="tg-seen" data-together={seen?.together ? 'yes' : 'no'}>{seenLine}</p>
     )}
 
-    {/* SUPPRESSED WHEN PRESENCE ALREADY CONTRADICTS IT.
-        These two lines render together, and they could disagree out loud:
-        "he is in here too, right now" directly above "he is asleep. he is up
-        again in six hours." The awake window is a pure clock GUESS; presence is
-        an OBSERVED visit. When he is genuinely up at 2am his time, both fired and
-        the page read as though it knew nothing about either of them.
-        Observation beats inference, so the guess yields to it — and only in that
-        exact case, because the awake line is useful every other time. */}
-    {!(seen?.together && shared.asleep.includes(them)) && (
-        <p class="tg-shared" data-both={shared.bothAwake ? 'yes' : 'no'}>{sharedLine}</p>
-    )}
+    {/* THE AWAKE-WINDOW LINE IS GONE, and it should never have been a guess.
+    
+        It read "you are both awake — for the next five and a half hours" or "he is
+        asleep. he is up again in seven hours", derived from HER_TZ, HIS_TZ and one
+        hardcoded 08:00–23:30 window. The arithmetic was right and the premise was
+        not: two people's sleep does not hold to a window, and a page that states a
+        guess in the same voice it states a fact teaches you to discount both.
+    
+        I had already patched the worst symptom — presence overrode the guess when
+        the two disagreed out loud — which in hindsight was the tell. A line that
+        needs suppressing whenever real evidence shows up is a line the real
+        evidence should have replaced.
+    
+        WHAT REMAINS IS ALL OBSERVED, not inferred:
+          the two clocks    where each of you actually is, right now
+          .tg-seen          "he is in here too, right now" — a real page render
+          post timestamps   each song and photo carries the poster's own local
+                            time, so when somebody is awake is visible from what
+                            they did rather than asserted by a constant
+    
+        overlap(), overlapLine(), spanWords() and AWAKE_FROM_MIN/AWAKE_UNTIL_MIN are
+        removed from together.ts with this — they had no other caller. */}
 
     {/* ONE HONEST BANNER, above everything it qualifies.
         getAllSafe returns an EMPTY snapshot when the store cannot be read, and an
@@ -1257,45 +1288,113 @@ const rooms = [
         )}
     </section>
 
+    {/* ============================================================
+        NOTIFICATIONS
+
+        LAST BLOCK ON THE PAGE, and that is where a setting belongs. Everything
+        above it is something one of them said; this is a switch.
+
+        THE WHOLE SECTION STARTS `hidden` AND THE RULE IS INSIDE IT. Three
+        consequences, all of them wanted:
+
+          * With JavaScript off, nothing appears — not a dead button, not a
+            heading over an empty space, and not a stray horizontal rule where a
+            block used to be.
+          * The script reveals it only once it knows which single state is true,
+            so she never sees "turn them on" flick to "your phone blocks these".
+          * Exactly ONE of the five paragraphs below is ever unhidden.
+
+        Every sentence is in the markup rather than in the script, so the copy is
+        escaped by Astro and can be read in one place. The script only ever flips
+        `hidden` and writes `textContent`; nothing here is built from a string,
+        and there is no `set:html` anywhere near it.
+        ============================================================ */}
+    {pushReady && (
+    <section class="tg-block" id="notify" aria-labelledby="notify-head" hidden>
+        {/* Inside the section on purpose — see above. A sibling rule would
+            survive the block being hidden and leave two rules in a row. */}
+        <hr class="studio-rule">
+
+        <p class="tg-eyebrow" id="notify-head">a nudge when something lands</p>
+
+        {/* --- one of these five, ever --- */}
+
+        {/* SHE HAS NOT BEEN ASKED YET. Also the state after she turns them off,
+            because a granted permission with no subscription means off. */}
+        <p class="tg-empty" id="notify-ask" hidden>
+            Want your phone to tell you when something new turns up in here?
+            Nothing from inside ever reaches your lock screen, only that
+            there&rsquo;s something waiting for you.
+        </p>
+
+        <p class="tg-empty" id="notify-on" hidden>
+            They&rsquo;re on for this device. You&rsquo;ll get a nudge when
+            something new lands, and nothing else.
+        </p>
+
+        {/* DENIED IS TERMINAL and the copy says so plainly instead of offering a
+            button that would be silently refused. `requestPermission()` never
+            prompts again once it has been denied — the only way back is the
+            system settings, so those are named. */}
+        <p class="tg-empty" id="notify-blocked" hidden>
+            Your phone is set to block these, and that isn&rsquo;t something this
+            page can undo. If you change your mind, it&rsquo;s in Settings,
+            then Notifications, then [us].
+        </p>
+
+        {/* iOS WILL NOT DO THIS IN A SAFARI TAB. Said out loud with the actual
+            taps, rather than showing a switch that fails the moment she uses it. */}
+        <p class="tg-empty" id="notify-install" hidden>
+            On an iPhone these only work once [us] is on your home screen. Tap
+            Share, then Add to Home Screen, then open it from there.
+        </p>
+
+        <p class="tg-empty" id="notify-nope" hidden>
+            This browser can&rsquo;t do notifications. On an iPhone you&rsquo;ll
+            want iOS 16.4 or newer, with [us] added to your home screen.
+        </p>
+
+        {/* The script's one channel for something that just happened. Visible
+            rather than screen-reader-only, because unlike the thinking block
+            there is no other element here that shows the outcome. `role=status`
+            announces it without stealing focus; it is unhidden BEFORE its text is
+            written or the mutation is not announced at all — see the answer
+            block's say() for the long version of that. */}
+        <p class="tg-notice" id="notify-say" role="status" aria-live="polite" hidden></p>
+
+        {/* TWO BUTTONS RATHER THAN ONE WITH A CHANGING LABEL, so both words live
+            in the markup with the rest of the copy. `type="button"`: neither is
+            in a form and neither should ever navigate. */}
+        <button class="tg-btn" id="notify-on-btn" type="button" hidden>turn them on</button>
+        <button class="tg-btn" id="notify-off-btn" type="button" hidden>turn them off</button>
+    </section>
+    )}
+
     <hr class="studio-rule">
 
     <div class="studio-foot">
         <span class="studio-tag">Love you.</span>
-        {/* WHO THE SITE THINKS YOU ARE, stated out loud.
+        {/* THE IDENTITY LABEL THAT USED TO SIT HERE IS GONE, and it was the last
+            piece of the identity machinery still on the page.
 
-            Not decoration and not a debug aid. Identity here decides which half
-            of every mutual feature a write lands in, and it used to be able to be
-            WRONG with nothing on screen admitting it: Sam's admin cookie expired
-            in 12 hours while his session cookie lasted 30 days, so overnight the
-            wing decided he was Andrea and filed his photographs as hers. The
-            cookie split in session.ts fixes the cause; this line means that if
-            anything like it ever happens again it is visible in one glance
-            instead of discovered in the data weeks later.
+            It earned its place while identity was DECLARED rather than proved:
+            there was a one-tap switch beside it, and the label was the only thing
+            that made a wrong answer visible in a glance instead of discovered in
+            the data weeks later. That was a real job while the overnight bug
+            existed — his admin cookie expired at 12 hours while his session lived
+            30 days, so the wing silently reclassified him as her and filed his
+            photographs on her side.
 
-            Rendered for BOTH of them rather than only for him, because a line
-            that appears only in the broken state is a line nobody recognises when
-            it appears. For her it reads "you are Andrea", which is true and
-            unremarkable — which is exactly the point. */}
-        {/* THE LABEL ONLY. THE SWITCH IS GONE, AND ITS REMOVAL IS THE POINT.
-        
-            There used to be a "not Sam?" / "not Andrea?" button here, because
-            identity is declared rather than proved and this was where you declared
-            it. But a one-tap button that reassigns who you are, sitting on the page
-            she uses every day, is the wrong shape for that: it lets anyone through
-            the gate become Sam with a tap, and it lets HER become him by accident.
-            A mis-tap files her photograph as his.
-        
-            Declaring identity now happens at the DOOR instead — /samdrea?me plus the
-            admin passcode, which mints the identity in the same pass as the session.
-            That is a real credential rather than a button, and it is invisible on her
-            gate. /api/us/whoami still exists and still works; nothing links to it.
-        
-            THE LABEL STAYS. It is the thing that made the overnight identity bug
-            visible in one glance instead of found in the data weeks later, and it
-            reads "you are Andrea" for her, which is true and unremarkable. */}
-        <span class="studio-who" data-who={viewer}>
-            you are {viewer === 'her' ? (her || 'her') : 'Sam'}
-        </span>
+            None of that is reachable now. Being Sam takes the passcode at the
+            gate, `whoami` outlives the session so it cannot expire underneath
+            him, and the switch is gone — so there is no path by which either of
+            them becomes the other. A label describing a state that can no longer
+            be wrong is chrome.
+
+            THE COST, stated plainly: if identity ever does go wrong again it will
+            be less visible. The pronouns still give it away — the greeting, the
+            clock strip, and whose posting form appears on 01 all follow the
+            reader — so it is quieter, not silent. */}
         <form class="studio-out" method="post" action="/api/us/out"><button class="studio-out-btn" type="submit">sign out</button></form>
     </div>
 </div>
@@ -1304,7 +1403,14 @@ const rooms = [
     renders for whichever of them holds the cookie, so a literal "he" in a success
     message is wrong half the time. It is one of `she` / `he` — never user text —
     so there is nothing here that could carry a payload into the script context. */}
-<script is:inline define:vars={{ serverNowMs: nowMs, themWord }}>
+{/* `vapidKey` is the PUBLIC half of the VAPID pair and nothing else from
+    config.ts comes near this script. It is public by construction — the push
+    service embeds it in the subscription it issues — so there is no secret being
+    rendered here, and the private key is never read on this page at all. It is
+    base64url from `web-push`'s own generator, so there is no character in it that
+    could close a string and start a statement. Empty string when the feature is
+    unconfigured, in which case the block above never rendered either. */}
+<script is:inline define:vars={{ serverNowMs: nowMs, themWord, vapidKey }}>
 /* --------------------------------------------------------------------------
    THREE JOBS, AND DELIBERATELY NO MORE.
 
@@ -1586,6 +1692,301 @@ const rooms = [
                 window.location.assign('/samdrea/vault?ok=' + (data.revealed ? 'revealed' : 'answered') + '#question');
             }, 700);
         });
+    }
+
+    /* ====================================================================
+       4. NOTIFICATIONS.
+
+       ---------------------------------------------------------------------
+       IT NEVER ASKS BY ITSELF. NOT ONCE.
+
+       `Notification.requestPermission()` is only ever reached from a real tap on
+       the button. Calling it on load is refused outright by some platforms, and
+       on the ones where it works it is a modal system dialog thrown at somebody
+       who was reading — which is exactly the behaviour that trains people to
+       press Don't Allow, and Don't Allow is PERMANENT. One ask, on her terms, is
+       also the only ask that has a decent chance of being a yes.
+
+       There is no reminder, no second prompt, no badge, and no state where this
+       block asks twice. If she leaves it alone it stays alone.
+
+       ---------------------------------------------------------------------
+       FIVE STATES, ONE TRUE AT A TIME, ALL OF THEM HONEST
+
+         nope       this browser cannot do it. iOS needs 16.4 or newer.
+         install    iOS, and not running from the home screen. Push does NOT
+                    work in a Safari tab, so a switch here would fail the moment
+                    she used it. It says what to tap instead.
+         blocked    permission denied. Terminal in the browser — requestPermission
+                    resolves 'denied' forever without prompting — so there is no
+                    button, and the copy names the system setting.
+         ask        not asked yet, OR granted with no subscription (which is what
+                    "she turned them off" looks like on the next page load).
+         on         granted, and this device is registered.
+
+       ---------------------------------------------------------------------
+       WHY "GRANTED WITH NO SUBSCRIPTION" IS THE OFF SWITCH
+
+       Turning them off cannot un-grant the permission — no API can. So if this
+       read `permission === 'granted'` as "on", the next page load would re-register
+       the device she had just turned off, and the off button would be a button that
+       undoes itself. Asking the browser whether a SUBSCRIPTION exists is the real
+       question, and it needs no localStorage and no server round trip to answer.
+
+       ---------------------------------------------------------------------
+       AND IT RE-REGISTERS SILENTLY WHEN IT IS ALREADY ON
+
+       Not a nag — nothing is shown and nothing is asked. It is one idempotent POST
+       that heals the one failure she could never diagnose: a subscription the
+       browser still has and the store does not, which looks exactly like working
+       notifications that never arrive. /api/us/push keys on the endpoint, so
+       re-sending the same device is a no-op.
+       ==================================================================== */
+    var nBlock = document.getElementById('notify');
+    if (nBlock && vapidKey) {
+        var nSay = document.getElementById('notify-say');
+        var nOnBtn = document.getElementById('notify-on-btn');
+        var nOffBtn = document.getElementById('notify-off-btn');
+
+        /* The five paragraphs. Exactly one is ever unhidden, so `state` hides all
+           of them first — otherwise a transition would leave two true-sounding
+           sentences stacked on top of each other. */
+        var N_STATES = ['ask', 'on', 'blocked', 'install', 'nope'];
+
+        var state = function (which) {
+            for (var i = 0; i < N_STATES.length; i++) {
+                var el = document.getElementById('notify-' + N_STATES[i]);
+                if (el) el.hidden = N_STATES[i] !== which;
+            }
+            /* The buttons follow the state rather than being set alongside it, so
+               there is no arrangement where "blocked" is showing over a button. */
+            if (nOnBtn) nOnBtn.hidden = which !== 'ask';
+            if (nOffBtn) nOffBtn.hidden = which !== 'on';
+            nBlock.hidden = false;
+        };
+
+        /* Same shape as the answer block's say(): unhide FIRST so the live region
+           is already in the accessibility tree, then write, or the screen reader
+           sees one subtree appear rather than a change inside a region it was
+           watching, and says nothing. */
+        var nsay = function (kind, text) {
+            if (!nSay) return;
+            nSay.dataset.kind = kind;
+            nSay.hidden = false;
+            nSay.textContent = (kind === 'bad' ? 'hm — ' : '') + text;
+        };
+
+        var nquiet = function () {
+            if (nSay) { nSay.hidden = true; nSay.textContent = ''; }
+        };
+
+        /* base64url to the Uint8Array that applicationServerKey wants. The key is
+           standard base64url with no padding, so the padding has to be put back
+           before atob will look at it. */
+        var keyBytes = function (b64) {
+            var padded = (b64 + '===='.slice(0, (4 - (b64.length % 4)) % 4))
+                .replace(/-/g, '+').replace(/_/g, '/');
+            var raw = atob(padded);
+            var out = new Uint8Array(raw.length);
+            for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+            return out;
+        };
+
+        /* THE SCOPE IS '/' AND IT HAS TO BE. The worker must be able to control
+           /samdrea/* and a worker's scope cannot be broader than its own path, so
+           it is served from the ROOT as /sw.js. It registers no fetch handler, so
+           a root scope buys it nothing except the ability to be notified — see the
+           comment at the top of public/sw.js, which is the whole argument. */
+        var enroll = async function () {
+            var reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+            /* register() resolves before the worker is active, and pushManager on a
+               registration with no active worker can reject. */
+            await navigator.serviceWorker.ready;
+
+            var sub = await reg.pushManager.getSubscription();
+            if (!sub) {
+                /* userVisibleOnly: true is REQUIRED — Chrome rejects the
+                   subscription without it, and it is also the truth here: every
+                   push this wing sends shows a notification. */
+                sub = await reg.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: keyBytes(vapidKey)
+                });
+            }
+
+            var res = await fetch('/api/us/push', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify({ action: 'subscribe', subscription: sub.toJSON() })
+            });
+            var data = await res.json();
+            if (!res.ok || !data || data.ok !== true) {
+                throw new Error((data && data.code) || 'no');
+            }
+        };
+
+        var N_MSG = {
+            unauthorized: 'your session ran out. Answer the questions again and you are back in.',
+            unconfigured: 'something is unplugged on the server. Not your fault.',
+            'cross-site': 'that came from the wrong place, so nothing changed.',
+            rate: 'give it a minute, then try again.',
+            'bad-subscription': "your phone handed over something the server couldn't read."
+        };
+
+        /* hasOwnProperty, not a bare `N_MSG[code]`, because `code` here can be a
+           DOMException message from subscribe() rather than one of our own codes.
+           A bare lookup of an inherited key ('toString', 'constructor') returns a
+           function, which is truthy, and she would be shown source code. */
+        var nmsg = function (code) {
+            return typeof code === 'string' && Object.prototype.hasOwnProperty.call(N_MSG, code)
+                ? N_MSG[code]
+                : '';
+        };
+
+        /* ---- turn them on -------------------------------------------------
+           The ONLY place requestPermission() is called, and it is inside a click
+           handler so it is inside a user gesture. */
+        if (nOnBtn) {
+            nOnBtn.addEventListener('click', async function () {
+                nquiet();
+                nOnBtn.disabled = true;
+                var label = nOnBtn.textContent;
+                nOnBtn.textContent = 'just a second';
+
+                try {
+                    /* Skipped when it is already granted — which is the case after
+                       she has turned them off and is turning them back on. Calling
+                       it again would be harmless and would also be a second ask. */
+                    var perm = Notification.permission;
+                    if (perm !== 'granted') perm = await Notification.requestPermission();
+
+                    if (perm === 'denied') {
+                        state('blocked');
+                        return;
+                    }
+                    if (perm !== 'granted') {
+                        /* She closed the dialog without choosing. Nothing has been
+                           decided, so it goes back to the way it was and says
+                           nothing at all. */
+                        state('ask');
+                        return;
+                    }
+
+                    await enroll();
+                    state('on');
+                    nsay('ok', 'done. Your phone will let you know.');
+                } catch (err) {
+                    state('ask');
+                    nsay('bad', nmsg(err && err.message) ||
+                        "that didn't take. Nothing has changed, and you can try again.");
+                } finally {
+                    nOnBtn.disabled = false;
+                    nOnBtn.textContent = label;
+                }
+            });
+        }
+
+        /* ---- turn them off ------------------------------------------------
+           BOTH SIDES, and the local one is the one that matters. Dropping only the
+           server's copy would leave the browser holding a live subscription that
+           the silent re-register above would put straight back — an off switch
+           that turns itself on again on the next page load. */
+        if (nOffBtn) {
+            nOffBtn.addEventListener('click', async function () {
+                nquiet();
+                nOffBtn.disabled = true;
+                var label = nOffBtn.textContent;
+                nOffBtn.textContent = 'just a second';
+
+                try {
+                    var reg = await navigator.serviceWorker.getRegistration('/');
+                    var sub = reg ? await reg.pushManager.getSubscription() : null;
+
+                    if (sub) {
+                        /* The server FIRST, while the endpoint is still readable.
+                           If this half fails the local half still happens, and the
+                           store's copy is then a dead endpoint that gets pruned the
+                           first time anything is pushed to it. */
+                        try {
+                            await fetch('/api/us/push', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                credentials: 'same-origin',
+                                body: JSON.stringify({ action: 'unsubscribe', endpoint: sub.endpoint })
+                            });
+                        } catch (err) { /* see above — the local unsubscribe carries it */ }
+
+                        await sub.unsubscribe();
+                    }
+
+                    state('ask');
+                    nsay('ok', 'off. Nothing will buzz.');
+                } catch (err) {
+                    nsay('bad', "that didn't take. They're still on — try again?");
+                } finally {
+                    nOffBtn.disabled = false;
+                    nOffBtn.textContent = label;
+                }
+            });
+        }
+
+        /* ---- what is true right now --------------------------------------- */
+        (async function () {
+            /* Notification AND serviceWorker AND PushManager. All three, because
+               iOS before 16.4 has the first two and not the third, and a browser
+               with PushManager but no Notification cannot show anything. */
+            var able = 'serviceWorker' in navigator &&
+                'PushManager' in window &&
+                'Notification' in window;
+            if (!able) { state('nope'); return; }
+
+            /* IS THIS THE INSTALLED APP? `navigator.standalone` is Safari's own
+               answer and the only reliable one on iOS; display-mode covers
+               everywhere else. iOS is detected by platform rather than by feature
+               because the thing being detected IS a platform rule: push does not
+               work in a Safari tab, full stop, and no feature test reports that
+               until subscribe() has already failed. MacIntel with touch points is
+               an iPad, which reports itself as a Mac. */
+            var standalone = window.navigator.standalone === true ||
+                (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+            var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+                (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+            if (isIOS && !standalone) { state('install'); return; }
+
+            if (Notification.permission === 'denied') { state('blocked'); return; }
+            if (Notification.permission !== 'granted') { state('ask'); return; }
+
+            /* Granted. So the question is whether this device is actually
+               subscribed, and the worker has to be registered to be asked. */
+            try {
+                var reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+                await navigator.serviceWorker.ready;
+                var sub = await reg.pushManager.getSubscription();
+
+                if (!sub) {
+                    /* Permission granted, no subscription. She turned them off, or
+                       the browser dropped it. Either way it is OFF, and turning it
+                       back on from here will not prompt her again. */
+                    state('ask');
+                    return;
+                }
+
+                /* Shown before the re-register, not after: it is already true, and
+                   making her wait on a network round trip to be told so would put a
+                   spinner on a settled state. */
+                state('on');
+                /* THE SILENT RE-REGISTER. Awaited so a failure is caught, and the
+                   only thing a failure does is add one honest line. */
+                await enroll();
+            } catch (err) {
+                /* The worker would not register, or the store would not take it.
+                   Say so rather than showing "they're on" over notifications that
+                   will never arrive. */
+                state('ask');
+                nsay('bad', "your phone is willing, but this didn't reach the server. Try the button?");
+            }
+        })();
     }
 })();
 </script>

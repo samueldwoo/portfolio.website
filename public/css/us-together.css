@@ -354,8 +354,7 @@
    day table.
    ------------------------------------------------------------ */
 
-.tg-seen,
-.tg-shared {
+.tg-seen {
     margin: 8px 0 0;
     font-family: var(--us-mono);
     font-size: 0.68rem;
@@ -364,15 +363,6 @@
     color: var(--concrete-3);
 }
 
-/* Sits tighter to the clocks than to each other: the clocks and
-   presence are one thought, the awake window is the next. */
-.tg-seen {
-    margin-top: 10px;
-}
-
-.tg-shared {
-    margin-top: 4px;
-}
 
 /* The one line on the hub that can interrupt her reading. It gets
    the accent and slightly more weight, and nothing else does. */
@@ -381,9 +371,6 @@
     font-weight: 600;
 }
 
-.tg-shared[data-both='yes'] {
-    color: var(--chalk-dim);
-}
 
 /* ============================================================
    2. THINKING OF YOU
@@ -853,23 +840,6 @@
     }
 }
 
-/* ============================================================
-   WHO THE SITE THINKS YOU ARE
-
-   The quietest line on the page, and it earns its place: this
-   value decides which half of every mutual feature a write
-   lands in, and it was once able to be wrong silently (see the
-   comment in index.astro's footer). Small, grey, always
-   present — a line that only appeared when something was broken
-   would be a line nobody recognised.
-   ============================================================ */
-.studio-who {
-    font-family: var(--us-mono);
-    font-size: 0.62rem;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--concrete-3);
-}
 
 /* The identity switch that used to sit here is gone — see the comment in
    index.astro's footer. Declaring identity moved to the gate (/samdrea?me),
