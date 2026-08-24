@@ -302,6 +302,40 @@
 }
 .crude-msg[hidden] { display: none; }
 
+/* ===========================================================================
+   THE [hidden] ATTRIBUTE, MADE TO ACTUALLY WORK — ONE RULE FOR THE WHOLE WING
+   ===========================================================================
+
+   `hidden` hides an element through exactly one UA rule, `[hidden] {display:none}`,
+   and that rule is the weakest thing in the cascade. ANY author rule that sets
+   `display` on the same element beats it. So a component styled
+   `display: inline-flex` is permanently visible no matter how many times
+   JavaScript sets `.hidden = true`, and nothing anywhere reports an error.
+
+   THIS HAS NOW SHIPPED TWICE. The hub's notification buttons are `.tg-btn`, which
+   is `display: inline-flex`, so "turn them on" and "turn them off" were BOTH on
+   screen at all times — the state machine hid them correctly and the stylesheet
+   silently un-hid them. It looked like a control that did not track its own state,
+   and it let a subscribed device keep re-enrolling because the button it should no
+   longer have been able to reach was still there. `.tg-state` had the same hole the
+   day it was written.
+
+   The wing had been patching this one class at a time — eleven `X[hidden]` rules
+   across four files — and still got bitten, because the fix has to be remembered at
+   the moment a `display` is added, which is exactly when nobody is thinking about
+   it. So it is one rule here instead, and the per-class ones become redundant
+   rather than wrong.
+
+   `!important` IS LOAD-BEARING, not defensive habit. Without it this loses on
+   specificity to any single class selector, and being declared in the base sheet it
+   would also lose on source order to every sheet loaded after it. It is the one
+   place in the wing where `!important` is the correct tool: the rule means "hidden
+   means hidden", and there is no case where an author rule should win that argument.
+   =========================================================================== */
+[hidden] {
+    display: none !important;
+}
+
 .crude-noscript { margin: 0 0 1em; font-weight: bold; }
 
 /* The caret. A literal blinking underscore, resting VISIBLE so
