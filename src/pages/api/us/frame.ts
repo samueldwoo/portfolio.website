@@ -111,12 +111,20 @@ function wantsJson(request: Request): boolean {
 }
 
 export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect, url }) => {
-  /* THE STOPWATCH STARTS BEFORE EVERYTHING, including the guards, because a cold
-     function boot happens before this line and shows up as the gap between her tap
-     and `readMs` starting to accumulate. `readMs` is the leg that matters: on Vercel
-     the body is streamed as it is awaited, so the time to read it IS her upload
-     crossing the network. That was the unanswerable question — 615KB on a Paris
-     connection, or the R2 write, or a boot. */
+  /* THE STOPWATCH STARTS BEFORE EVERYTHING, including the guards, so the legs add up
+     to something she would recognise as "how long that took".
+
+     `readMs` DID NOT MEAN WHAT IT SAID, and this comment used to be the thing
+     asserting that it did. It was one lap taken at the end of a run that had already
+     awaited the rate limiter, and `hit()` is an HTTP round trip to Upstash with a
+     two-second ceiling before it gives up and fails open. So a degraded store was
+     reported as a slow upload: the single question this instrumentation exists to
+     answer — "was it her connection?" — would have been answered wrong, confidently,
+     with a number that looked measured. The limiter has its own leg now.
+
+     A cold boot is still invisible from in here. It happens before this line and
+     nothing in the process can observe it; Vercel's own duration minus `totalMs` is
+     where it shows up. */
   const t = timer();
   const asJson = wantsJson(request);
 
@@ -129,8 +137,14 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
   ): Response => {
     /* EVERY exit is traced, from inside the one function they all go through —
        adding a line at each `return answer(...)` would have missed one eventually,
-       and the refusals are exactly the cases nobody thinks to instrument. */
-    if (!ok) trace('frame.post', { ok: false, code, status, totalMs: t.total() });
+       and the refusals are exactly the cases nobody thinks to instrument.
+
+       `who` reads as undefined on the two exits that run before identity is known and
+       is therefore simply absent from those lines, which is the right answer: it is
+       the only field here that says whose upload failed, and "her photograph would not
+       go up" is a different report from "his did not". No leg breakdown, because a
+       refusal by definition did not get far enough to have legs. */
+    if (!ok) trace('frame.post', { ok: false, code, status, who, totalMs: t.total() });
     if (asJson) return json({ ok, ...(code ? { code } : {}), ...extra }, status);
     const query = ok
       ? `?ok=${encodeURIComponent(code ?? 'posted')}`
@@ -166,6 +180,16 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
      more than it covers JSON, and reading four megabytes off the wire to then
      refuse it is the one thing a rate limiter is supposed to prevent. */
   const limit = await hit(`frame:${clientKey(request, clientAddress)}`, RATE_LIMIT, RATE_WINDOW_SEC);
+  /* THE LIMITER'S OWN LEG, because it is a NETWORK leg and was being counted as hers.
+     `hit()` is an HTTP round trip to Upstash — three commands, a two-second ceiling,
+     and it fails OPEN when that expires, so a sick store adds up to two silent seconds
+     here and then allows the request anyway. Charging that to `readMs` meant the log
+     said "her connection" about our own dependency.
+
+     The two guards above it are in this leg too. They are an HMAC verification and a
+     header comparison, both synchronous and both immeasurable at this resolution, so
+     naming the leg after the limiter is honest rather than approximate. */
+  const limitMs = t.lap();
   if (!limit.ok) return answer(false, 429, 'rate', { retryAfter: limit.retryAfter });
 
   /* R2 is the only place bytes can go, so no bucket means no feature — said
@@ -201,10 +225,17 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
     return answer(false, 413, 'too-big', { max: MAX_BYTES });
   }
 
-  /* The read leg. `formData()` above and this line together are where her upload
-     actually crosses the wire, so this is the number to compare against the file
-     size when the question is "why did that feel slow". */
   const bytes = new Uint8Array(await file.arrayBuffer());
+  /* THE READ LEG, and now it is only that: everything since the limiter answered.
+     `formData()` above is where the body genuinely crosses the wire — the runtime
+     consumes the whole stream to parse the multipart, so by the time it resolves every
+     byte has arrived and the `arrayBuffer()` on the line above is a copy of something
+     already in memory.
+
+     The multipart PARSE is inside this number too and is not separable without
+     instrumenting the runtime, which is not worth it: at these sizes it is single-digit
+     milliseconds against hundreds. Compare this against `bytes` when the question is
+     "why did that feel slow". */
   const readMs = t.lap();
   /* Measured, not trusted. A multipart part can claim any size it likes; this is
      the length of what actually arrived. */
@@ -271,6 +302,17 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
   const nowMs = Date.now();
   const today = wingDate(new Date(nowMs));
 
+  /* CLOSED OFF SO `storeMs` CANNOT ABSORB IT. lap() moves its own mark, which means a
+     leg is whatever happened since the LAST lap and not since the thing its name
+     mentions — so without this line the sniff, the caption tidy, the EXIF parse and the
+     exifhead copy were all being reported as time spent in the store.
+
+     It is a few milliseconds in practice (fromJpeg walks segment headers and stops at
+     the scan; the head is at most 64KB already in memory) and that is exactly the
+     argument for measuring it: a small number in the right place is how you know it is
+     small, and a small number in the wrong place is how a name stops being true. */
+  const prepMs = t.lap();
+
   let frame;
   let storeMs = 0;
   try {
@@ -283,23 +325,6 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
     console.error('[us] frame write failed:', err instanceof Error ? err.message : err);
     return answer(false, err instanceof FramesError ? 502 : 500, 'store');
   }
-
-  /* ONE LINE PER SUCCESSFUL UPLOAD, with the legs separated so the next "it felt
-     slow" is answerable instead of arguable. `head` says whether the 64KB EXIF slice
-     was sent, which is only true when the resizer re-encoded; `coords` says whether
-     a location was found. Neither the note, the coordinates nor the place name can
-     appear here — trace() refuses strings with spaces or over 24 characters. */
-  trace('frame.post', {
-    ok: true,
-    who,
-    ext: sniffed.ext,
-    bytes: bytes.byteLength,
-    head: hadHead,
-    coords: coords !== null,
-    readMs,
-    storeMs,
-    totalMs: t.total(),
-  });
 
   /* ---- THE PLACE LABEL IS NOT RESOLVED HERE, AND THAT IS THE SECOND VERSION.
 
@@ -329,6 +354,41 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
      passed here, and notify() has no argument it could be passed as. A caption
      is exactly the kind of thing somebody standing next to her must not read. */
   await notify(who, 'photo');
+  const pushMs = t.lap();
+
+  /* ONE LINE PER SUCCESSFUL UPLOAD, with the legs separated so the next "it felt slow"
+     is answerable instead of arguable. `head` says whether the fallback EXIF slice was
+     READ — not merely sent, since it is only looked at when the uploaded bytes had no
+     coordinates of their own — and `coords` says whether a location was found at all.
+     Neither the note, the coordinates nor the place name can appear here; trace()
+     refuses strings with spaces or over 24 characters.
+
+     AFTER THE NOTIFICATION, WHICH IS A MOVE RATHER THAN A PLACEMENT. It used to sit
+     above, and `totalMs` therefore stopped at the store and omitted the push entirely —
+     several hundred milliseconds of web-push on a leg the whole file agrees is hers
+     (`await notify` is on her critical path by design; push.ts's header argues that at
+     length). A number called `totalMs` that excludes part of the wait is the same defect
+     as `readMs` including the rate limiter, in the other direction.
+
+     THE REJECTED ALTERNATIVE was leaving it above, so a saved photograph is logged even
+     if the push hangs. It buys little: notify() is bounded and cannot throw, and a
+     function killed mid-push leaves Vercel's own error for that invocation, so the
+     upload is not actually unobservable — whereas a `totalMs` that quietly understates
+     what she waited for is wrong on every single successful upload. */
+  trace('frame.post', {
+    ok: true,
+    who,
+    ext: sniffed.ext,
+    bytes: bytes.byteLength,
+    head: hadHead,
+    coords: coords !== null,
+    limitMs,
+    readMs,
+    prepMs,
+    storeMs,
+    pushMs,
+    totalMs: t.total(),
+  });
 
   return answer(true, 200, 'posted', {
     date: today,

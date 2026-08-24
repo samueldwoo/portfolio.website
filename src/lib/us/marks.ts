@@ -66,6 +66,7 @@
 import { AwsClient } from 'aws4fetch';
 import { hasKV, hasR2, kvConfig, r2Config, r2Endpoint } from './config';
 import { MEMORIES } from './photos';
+import { countCommands, timer } from './trace';
 
 /** Thrown for transport problems only. A missing mark is a DEFAULT, not an error. */
 export class MarkError extends Error {
@@ -471,6 +472,7 @@ type Command = (string | number)[];
 async function redis(url: string, token: string, cmds: Command[]): Promise<unknown[]> {
   if (cmds.length === 0) return [];
 
+  const t = timer();
   let res: Response;
   try {
     res = await fetch(`${url.replace(/\/+$/, '')}/pipeline`, {
@@ -490,6 +492,11 @@ async function redis(url: string, token: string, cmds: Command[]): Promise<unkno
     // both become one error type.
     throw new MarkError('upstash unreachable', { cause: err });
   }
+
+  /* THE COMMAND COUNT. getMarks() is one HGETALL per memory in the manifest, so the
+     gallery costs as many commands as there are photographs on it — a number that grows
+     silently every time one is added. See countCommands in trace.ts. */
+  countCommands('marks', cmds.length, res.status, t.total());
 
   if (!res.ok) throw new MarkError(`upstash HTTP ${res.status}`);
 

@@ -50,6 +50,7 @@
  */
 
 import { kvConfig, hasKV } from './config';
+import { countCommands, timer } from './trace';
 import type { Who } from './together';
 
 /** `us:presence:` — distinct from us:song:, us:mark:, us:letter:, us:together:. */
@@ -96,6 +97,7 @@ async function redis(cmds: (string | number)[][]): Promise<unknown[] | null> {
   const { url, token } = kvConfig();
   if (!hasKV() || !url || !token) return null;
 
+  const t = timer();
   try {
     const res = await fetch(`${url.replace(/\/+$/, '')}/pipeline`, {
       method: 'POST',
@@ -105,6 +107,10 @@ async function redis(cmds: (string | number)[][]): Promise<unknown[] | null> {
       // never allowed to be the reason the page is slow.
       signal: AbortSignal.timeout(1500),
     });
+    /* THE COMMAND COUNT, and presence is the one worth watching most closely: it is
+       written on EVERY authenticated render, so it is the per-page-view floor that
+       everything else is added to. See countCommands in trace.ts. */
+    countCommands('presence', cmds.length, res.status, t.total());
     if (!res.ok) return null;
     const parsed = (await res.json()) as Array<{ result?: unknown; error?: string }>;
     if (!Array.isArray(parsed)) return null;

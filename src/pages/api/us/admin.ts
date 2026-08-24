@@ -55,6 +55,7 @@ import { crossSite } from '../../../lib/us/together';
 import { ADMIN_PASSCODE_DIGEST, ANSWER_PEPPER, SESSION_SECRET, checkAdminPasscode } from '../../../lib/us/config';
 import { TTL, sign, writeCookie } from '../../../lib/us/session';
 import { clientKey, hit } from '../../../lib/us/ratelimit';
+import { timer, trace } from '../../../lib/us/trace';
 
 export const prerender = false;
 
@@ -99,6 +100,7 @@ function isJsonRequest(request: Request): boolean {
 }
 
 export const POST: APIRoute = async ({ request, cookies, url, clientAddress, redirect }) => {
+  const t = timer();
   const wantsJson = isJsonRequest(request);
 
   /** One exit point, so the two response shapes can never drift apart. */
@@ -108,6 +110,14 @@ export const POST: APIRoute = async ({ request, cookies, url, clientAddress, red
     error: string | null,
     extra: Record<string, unknown> = {},
   ): Response => {
+    /* ONE LINE PER ATTEMPT AT THE PASSCODE, from inside the funnel. Nothing recorded a
+       success here before, and a successful admin login is the moment write access is
+       granted — the one event most worth being able to place in time afterwards.
+
+       NOTHING DERIVED FROM THE PASSCODE, on either branch: not the value, not its
+       length, not how close it was. `ok` and `error` are the entire disclosure, which is
+       the same rule the existing console.warn on the reject path already follows. */
+    trace('admin.login', { ok, code: error, status, ms: t.total() });
     if (wantsJson) {
       return json({ ok, ...(error ? { error } : {}), ...extra }, status);
     }
@@ -146,6 +156,23 @@ export const POST: APIRoute = async ({ request, cookies, url, clientAddress, red
 
   const limit = await hit(`admin:${clientKey(request, clientAddress)}`, RATE_LIMIT, RATE_WINDOW_SEC);
   if (!limit.ok) {
+    /* TRACED HERE AND NOT IN answer(), BECAUSE THIS BRANCH DOES NOT GO THROUGH IT. The
+       two returns below bypass the funnel deliberately — one to set `Retry-After`, one to
+       carry `&s=` — so a line in answer() alone would have silently missed every 429 at
+       the passcode door. That is precisely the miss frame.ts's funnel comment warns
+       about, and it is the one refusal here that matters most: eight failures in ten
+       minutes against a credential whose only defence is being unguessable.
+
+       `backend=failed-open` means Upstash was unreachable, the limiter allowed the
+       request, and this door currently has no counter at all. */
+    trace('admin.login', {
+      ok: false,
+      code: 'rate',
+      status: 429,
+      backend: limit.backend,
+      retryAfter: limit.retryAfter,
+      ms: t.total(),
+    });
     if (wantsJson) {
       return json({ ok: false, error: 'rate', retryAfter: limit.retryAfter }, 429, {
         'Retry-After': String(limit.retryAfter),

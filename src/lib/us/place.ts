@@ -193,7 +193,17 @@ export async function lookupPlace(
       headers: { 'User-Agent': UA, Accept: 'application/json' },
       signal: AbortSignal.timeout(Math.max(200, timeoutMs)),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      /* THE ONE FAILURE THIS FILE ALREADY PREDICTED, AND IT WAS THE ONE WITH NO LINE.
+         The header says a generic User-Agent is the documented way to get blocked and
+         that being blocked "would be silent — the label would simply stop appearing".
+         It was: this exit returned null without logging, so a 403 or a 429 from
+         Nominatim was indistinguishable from a photograph taken somewhere with nothing
+         named nearby. `status` is the whole difference between "we are banned", "slow
+         down" and "there is genuinely nothing there". */
+      trace('place.lookup', { hit: false, status: res.status, ms: t.total() });
+      return null;
+    }
 
     const body = (await res.json()) as {
       address?: Record<string, unknown>;
@@ -201,7 +211,15 @@ export async function lookupPlace(
       category?: unknown;
     };
     const addr = body && typeof body.address === 'object' && body.address ? body.address : null;
-    if (!addr) return null;
+    if (!addr) {
+      /* A 200 with no address hierarchy: open water, or the middle of a field. An
+         ordinary answer rather than a fault, but it was also unlogged, and "Nominatim
+         answered and had nothing" needs to be tellable from "Nominatim never answered"
+         — otherwise the only evidence is an absent line, which is also what a code path
+         that never ran looks like. */
+      trace('place.lookup', { hit: false, reason: 'no-address', ms: t.total() });
+      return null;
+    }
 
     const label = labelFrom(addr, clean(body.name), clean(body.category));
     const out = label && label.length > 1 ? label : null;

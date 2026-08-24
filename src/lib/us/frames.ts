@@ -79,6 +79,7 @@ import { AwsClient } from 'aws4fetch';
 import { validCoords } from './exif';
 import { hasKV, hasR2, kvConfig, r2Config, r2Endpoint } from './config';
 import { presignedUrl } from './photos';
+import { countCommands, timer, trace } from './trace';
 import { WING_TZ, shiftDate, wingDate } from './kv';
 import type { Who } from './together';
 
@@ -301,6 +302,7 @@ async function redis(cmds: (string | number)[][]): Promise<unknown[]> {
   const { url, token } = kvConfig();
   if (!url || !token) throw new FramesError('upstash is not configured');
 
+  const t = timer();
   let res: Response;
   try {
     res = await fetch(`${url.replace(/\/+$/, '')}/pipeline`, {
@@ -312,6 +314,7 @@ async function redis(cmds: (string | number)[][]): Promise<unknown[]> {
   } catch (err) {
     throw new FramesError('upstash unreachable', { cause: err });
   }
+  countCommands('frames', cmds.length, res.status, t.total());
   if (!res.ok) throw new FramesError(`upstash HTTP ${res.status}`);
 
   let parsed: Array<{ result?: unknown; error?: string }>;
@@ -402,6 +405,15 @@ export async function putFrame(input: {
 }): Promise<Frame> {
   const { date, who, bytes, sniffed, note, atMs, coords = null } = input;
 
+  /* THE TWO WRITES ARE TIMED SEPARATELY, because one number for both cannot be acted
+     on. The endpoint reports a single `storeMs` and it covers an R2 PUT of up to four
+     megabytes AND a two-command Upstash pipeline — a byte-proportional write to one
+     vendor and a fixed tiny round trip to another, with different timeouts (15s and 4s),
+     different failure modes and different fixes. `storeMs=1900` is unactionable;
+     `r2Ms=1850 kvMs=50` says resize harder, and `r2Ms=60 kvMs=1840` says the metadata
+     store is sick and the photograph was never the problem. */
+  const t = timer();
+
   const bucket = r2();
   if (!bucket) throw new FramesError('r2 is not configured, so there is nowhere to put a photograph');
 
@@ -430,6 +442,7 @@ export async function putFrame(input: {
     throw new FramesError('r2 unreachable', { cause: err });
   }
   if (!res.ok) throw new FramesError(`r2 PUT HTTP ${res.status}`);
+  const r2Ms = t.lap();
 
   const frame: Frame = {
     ext: sniffed.ext,
@@ -448,6 +461,10 @@ export async function putFrame(input: {
     const day = memory.get(date) ?? { date, her: null, him: null };
     day[who] = frame;
     memory.set(date, day);
+    /* `tier` is on the line rather than assumed, because the two tiers make the SAME
+       upload cost wildly different amounts of time and a reader comparing two log lines
+       has no other way to know which one they are looking at. */
+    trace('frame.store', { who, bytes: bytes.byteLength, r2Ms, tier: 'memory' });
     return frame;
   }
 
@@ -481,6 +498,10 @@ export async function putFrame(input: {
   } else {
     await redis([fields, ['HDEL', DAY_KEY(date), `${who}Lat`, `${who}Lon`, `${who}Place`]]);
   }
+  /* Only on the way out, so a thrown FramesError leaves this line ABSENT rather than
+     misleading — the endpoint already reports that failure as `code=store`, and a
+     half-written timing would look like a write that happened. */
+  trace('frame.store', { who, bytes: bytes.byteLength, r2Ms, kvMs: t.lap(), tier: 'upstash' });
   return frame;
 }
 

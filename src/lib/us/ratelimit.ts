@@ -30,6 +30,14 @@
  * ---------------------------------------------------------------------------
  */
 
+/* The ONE import this file has, and it is deliberate rather than an erosion of the
+   rule above. The reason ratelimit.ts reads its own env is that config.ts and this file
+   could disagree about whether Upstash exists; trace.ts holds no configuration, reads
+   no environment and cannot throw, so importing it creates none of that coupling. It is
+   here because this file spends three commands on EVERY write in the wing, which makes
+   it a large share of a 50,000/month tier and the last place anyone would look. */
+import { countCommands, timer } from './trace';
+
 export interface Verdict {
   ok: boolean;
   /** Seconds until the caller may retry. 0 when ok. */
@@ -101,6 +109,7 @@ async function hitUpstash(
   // at the first attempt and is not extended by later ones. An unconditional
   // EXPIRE would restart the window on every request, so a client that kept
   // hammering would never be let back in — including her, on a shared IP.
+  const t = timer();
   const res = await fetch(`${url}/pipeline`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -111,6 +120,10 @@ async function hitUpstash(
     ]),
     signal: AbortSignal.timeout(2000),
   });
+
+  // Three, literally — the body above. A constant rather than a length because there is
+  // no array to measure, and it must be corrected by hand if a command is ever added.
+  countCommands('ratelimit', 3, res.status, t.total());
 
   if (!res.ok) throw new Error(`upstash ${res.status}`);
 

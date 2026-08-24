@@ -86,6 +86,7 @@ import { SESSION_SECRET, hasKV, hasR2, kvConfig, r2Config, r2Endpoint } from './
    would disagree twice a year at the DST boundaries, and the symptom would be a new
    question appearing an hour before or after the new song. */
 import { isWingDate, wingDate, wingDateLabel } from './kv';
+import { countCommands, timer } from './trace';
 import { readCookie, verify } from './session';
 
 /** Thrown for transport problems only. A day nobody answered is a DEFAULT. */
@@ -1676,6 +1677,7 @@ type Command = (string | number)[];
 async function redis(url: string, token: string, cmds: Command[]): Promise<unknown[]> {
   if (cmds.length === 0) return [];
 
+  const t = timer();
   let res: Response;
   try {
     res = await fetch(`${url.replace(/\/+$/, '')}/pipeline`, {
@@ -1690,6 +1692,13 @@ async function redis(url: string, token: string, cmds: Command[]): Promise<unkno
     // An abort is indistinguishable from a network failure to every caller.
     throw new TogetherError('upstash unreachable', { cause: err });
   }
+
+  /* THE COMMAND COUNT, and this file is the reason it exists. getAll() is two round
+     trips and around thirty-five commands for ONE hub render — four for the first leg
+     plus one per day of HUB_DAY_WINDOW — so a handful of authenticated page loads is
+     hundreds of commands against a 50,000/month tier. From the outside it is two
+     `fetch` calls and looks like nothing. */
+  countCommands('together', cmds.length, res.status, t.total());
 
   if (!res.ok) throw new TogetherError(`upstash HTTP ${res.status}`);
 

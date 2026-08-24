@@ -52,6 +52,7 @@ import {
 } from '../../../lib/us/config';
 import { TTL, clearCookie, readCookie, sign, verify, writeCookie } from '../../../lib/us/session';
 import { clientKey, hit } from '../../../lib/us/ratelimit';
+import { timer, trace } from '../../../lib/us/trace';
 
 export const prerender = false;
 
@@ -101,7 +102,47 @@ function json(body: unknown, status = 200, headers: Record<string, string> = {})
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/* ---------------------------------------------------------------------------
+   WHAT THIS ENDPOINT IS ALLOWED TO WRITE DOWN
+
+   Failed attempts at the only door in the wing are security-relevant, and until now
+   nothing recorded them: a wordlist that burned through the 12/600s limit produced
+   exactly zero log lines, because a rate-limit trip returns a 429 and says nothing.
+   "Has anybody tried?" was unanswerable, which for the wing's one authentication
+   boundary is the wrong answer to be unable to give.
+
+   SO THERE IS A LINE PER ATTEMPT, AND ITS FIELDS ARE PICKED BY SUBTRACTION. Not what
+   would be useful — what cannot possibly be a credential:
+
+     step      WHICH question, an index. The questions themselves are in
+               questions.mjs, in this repository, and are not the secret.
+     misses    HOW MANY times that question has been missed. A count, not a guess.
+     ok        whether it was accepted.
+     ms        how long the attempt took.
+
+   AND EXPLICITLY NOT, none of these being oversights:
+
+     the answer            obviously.
+     its LENGTH            a wrong guess's length leaks nothing, but the same field on
+                           an ACCEPTED attempt is the length of the real answer, which
+                           is most of the way to a wordlist filter. One field cannot be
+                           safe on one branch and not the other, so there is no field.
+     any similarity score  a near-miss is the single most dangerous thing that could be
+                           written here: "you were one character away" in a log file is
+                           a guessing oracle for whoever can read logs.
+     the passcode          not its value, not its length, not whether it was close.
+                           `provedHim` is a boolean and that is the entire disclosure.
+
+   `step` IS ALWAYS PRESENT AND IS -1 WHEN THE STEP WAS NOT A REAL QUESTION, so the
+   line has a fixed shape. The header promises that "no such question" and "wrong
+   answer" are indistinguishable from outside; a field that appears on one branch and
+   not the other would make the two paths differ in the work they do, which is the
+   thing REJECT_DELAY_MS exists to flatten. Cheaper to keep the shape constant than to
+   reason about whether a shorter log line is measurable.
+   --------------------------------------------------------------------------- */
+
 export const POST: APIRoute = async ({ request, cookies, url, clientAddress }) => {
+  const t = timer();
   // ---- 1. Fail closed on misconfiguration -------------------------------
   if (!isConfigured()) {
     const missing = missingConfig();
@@ -132,11 +173,28 @@ export const POST: APIRoute = async ({ request, cookies, url, clientAddress }) =
      compares HOST rather than full origin so a proxy hop cannot break it, and
      refuses only on a positive mismatch. */
   if (crossSite(request, url)) {
+    trace('gate.answer', { ok: false, code: 'cross-site', ms: t.total() });
     return json({ ok: false, error: 'cross-site' }, 403);
   }
 
   const limit = await hit(`gate:${clientKey(request, clientAddress)}`, RATE_LIMIT, RATE_WINDOW_SEC);
   if (!limit.ok) {
+    /* THE LINE THAT WAS MOST MISSING. Somebody exhausting twelve attempts in ten
+       minutes is the only signal this wing gets that it is being guessed at, and it was
+       going nowhere at all.
+
+       `backend` is the reason this is not merely a counter. It says which limiter
+       answered, and `failed-open` means Upstash was unreachable and the request was
+       ALLOWED — the state in which the quiz is defended by nothing but the answers and
+       a 350ms pause. That is worth being able to grep for after the fact, and it is
+       invisible in every other record. */
+    trace('gate.answer', {
+      ok: false,
+      code: 'rate',
+      backend: limit.backend,
+      retryAfter: limit.retryAfter,
+      ms: t.total(),
+    });
     return json({ ok: false, error: 'rate', retryAfter: limit.retryAfter }, 429, {
       'Retry-After': String(limit.retryAfter),
     });
@@ -160,6 +218,9 @@ export const POST: APIRoute = async ({ request, cookies, url, clientAddress }) =
     answer = typeof body?.answer === 'string' ? body.answer : '';
     passcode = typeof body?.passcode === 'string' ? body.passcode : '';
   } catch {
+    /* A body that is not JSON. Her browser cannot produce this, so it is either a probe
+       or a client bug, and both are worth one line. */
+    trace('gate.answer', { ok: false, code: 'bad-request', ms: t.total() });
     return json({ ok: false, error: 'bad-request' }, 400);
   }
 
@@ -209,6 +270,18 @@ export const POST: APIRoute = async ({ request, cookies, url, clientAddress }) =
     const hints = stepValid ? questions[step].hints : ['', ''];
     const hint = missCount >= 2 ? hints[1] : missCount === 1 ? hints[0] : undefined;
 
+    /* AFTER the sleep, so this cannot become the thing that distinguishes two rejection
+       paths from each other by timing. The hint is NOT logged: it is question copy and
+       therefore not secret, but it is also the one field here that varies with how close
+       somebody is getting, and a log is the wrong place to start that habit. */
+    trace('gate.answer', {
+      ok: false,
+      step: stepValid ? step : -1,
+      misses: missCount,
+      solved: progress.solved.length,
+      ms: t.total(),
+    });
+
     return json({ ok: false, misses: missCount, hint, giveUp: missCount >= 3 });
   }
 
@@ -225,6 +298,14 @@ export const POST: APIRoute = async ({ request, cookies, url, clientAddress }) =
 
     // The next unsolved question, so the client never has to guess the order.
     const next = questions.findIndex((_, i) => !solved.includes(i));
+    trace('gate.answer', {
+      ok: true,
+      step,
+      misses: progress.tries[step] ?? 0,
+      solved: solved.length,
+      done: false,
+      ms: t.total(),
+    });
     return json({ ok: true, done: false, next, solved });
   }
 
@@ -260,6 +341,7 @@ export const POST: APIRoute = async ({ request, cookies, url, clientAddress }) =
     // is a genuinely bad afternoon. Same call admin.ts makes.
     if (!ADMIN_PASSCODE_DIGEST()) {
       console.error('[us] gate got a passcode but US_ADMIN_PASSCODE_DIGEST is missing.');
+      trace('gate.answer', { ok: false, code: 'unconfigured', ms: t.total() });
       return json({ ok: false, error: 'passcode-unconfigured' }, 503);
     }
 
@@ -272,6 +354,18 @@ export const POST: APIRoute = async ({ request, cookies, url, clientAddress }) =
       PASSCODE_WINDOW_SEC,
     );
     if (!pass.ok) {
+      /* A DIFFERENT COUNTER FROM THE ONE ABOVE, and the line says so. This is the shared
+         `admin:<ip>` budget, so a trip here means the passcode specifically has been
+         guessed at eight times in ten minutes through either door — a much sharper
+         signal than the gate's own limit, which she could plausibly trip herself by
+         mistyping a restaurant name. */
+      trace('gate.passcode', {
+        ok: false,
+        code: 'rate',
+        backend: pass.backend,
+        retryAfter: pass.retryAfter,
+        ms: t.total(),
+      });
       return json({ ok: false, error: 'rate', retryAfter: pass.retryAfter }, 429, {
         'Retry-After': String(pass.retryAfter),
       });
@@ -282,6 +376,12 @@ export const POST: APIRoute = async ({ request, cookies, url, clientAddress }) =
       // Never the attempt itself. A near-miss in a log file is most of a credential
       // in a log file.
       console.warn('[us] gate passcode rejected — refusing to open as her instead.');
+      /* The existing warning already says this happened; the line adds the timing and
+         puts it in the same greppable stream as everything else, so counting rejections
+         over a window does not mean parsing prose. Nothing about the attempt itself is
+         on it — see the header block: not the value, not its length, not how close it
+         was. `ok=0 code=bad-passcode` is the entire disclosure. */
+      trace('gate.passcode', { ok: false, code: 'bad-passcode', ms: t.total() });
 
       /* NO SESSION IS MINTED, and that is the point of the feature rather than a
          side effect of it. Falling through to "well, you answered the questions, so
@@ -315,6 +415,19 @@ export const POST: APIRoute = async ({ request, cookies, url, clientAddress }) =
   }
 
   clearCookie(cookies, 'progress');
+
+  /* THE SESSION WAS MINTED, which is the single most important event in the wing and had
+     no record of any kind. `who` is the honest answer to "who just got in": the passcode
+     proves him, and its absence means her by construction rather than by claim — which
+     is also exactly the ambiguity the optional field exists to remove, so the line is
+     worth having for that reason alone. */
+  trace('gate.answer', {
+    ok: true,
+    done: true,
+    who: provedHim ? 'him' : 'her',
+    solved: solved.length,
+    ms: t.total(),
+  });
 
   return json({ ok: true, done: true, redirect: '/samdrea/vault' });
 };

@@ -98,6 +98,7 @@ const STRING_KEYS = new Set([
      an enum. Adding a key here is the deliberate act the design intends; the cost
      of forgetting is an unreadable field, never a leak. */
   'via',
+  'hops',
 ]);
 
 function render(value: Field, key = ''): string | null {
@@ -144,6 +145,54 @@ export function trace(op: string, data: Record<string, Field> = {}): void {
   } catch {
     // A logger must never be the reason a request fails.
   }
+}
+
+/**
+ * ONE LINE PER UPSTASH ROUND TRIP, BECAUSE THE BILL IS COUNTED IN COMMANDS.
+ *
+ * ---------------------------------------------------------------------------
+ * WHAT THIS EXISTS TO MAKE VISIBLE
+ *
+ * The free tier is 50,000 commands a month and development spent 19,000 of it in a
+ * few days, almost none of it real usage. Nothing in the wing could see a command,
+ * so the only evidence was a dashboard number going up after the fact — which tells
+ * you that you overspent and not where.
+ *
+ * A pipeline is ONE HTTP request and MANY billed commands, and that gap is exactly
+ * where the surprise lives. `getAll()` on the hub is two round trips and around
+ * thirty-five commands; the frame strip is one round trip and one command PER DAY of
+ * window; the rate limiter is three commands on every write. All of those look
+ * identical from the outside — one `fetch` — and differ by an order of magnitude on
+ * the invoice. `cmds` is the number that separates them.
+ *
+ * ---------------------------------------------------------------------------
+ * PER CALL, NOT PER REQUEST, AND THAT WAS THE REAL DECISION
+ *
+ * The obvious design is one total per request: an AsyncLocalStorage scope opened in
+ * middleware.ts (which already wraps every wing request and would need no new seam),
+ * each helper incrementing it, one line at the end. It was rejected for two reasons.
+ *
+ *   1. IT CANNOT BE VERIFIED WITHOUT THE LIVE STORE. Astro streams a page response,
+ *      so `await next()` in middleware resolves BEFORE the frontmatter's store reads
+ *      have run, and the total would be read too early — for page renders, which are
+ *      precisely the expensive thing here. Proving otherwise means watching real
+ *      counts against real Upstash, and pointing anything at the live store to test
+ *      an observability feature is how this project already lost a photograph.
+ *
+ *   2. A TOTAL ANSWERS THE WRONG QUESTION. "This request cost 41 commands" does not
+ *      say which read to fix. `kind` plus `cmds` does, and it comes with the latency
+ *      of that specific round trip for free.
+ *
+ * Vercel groups stdout by invocation, so the per-request total is still there: it is
+ * the sum of the `op=redis` lines under one request. Summing by eye is a small price
+ * for machinery that cannot be wrong.
+ *
+ * Deliberately silent when the request never landed. A timeout or a dead socket costs
+ * no commands, and the modules already log unreachability loudly; counting an attempt
+ * that executed nothing would make this number stop meaning "the bill".
+ */
+export function countCommands(kind: string, cmds: number, status: number, ms: number): void {
+  trace('redis', { kind, cmds, status, ms });
 }
 
 /**

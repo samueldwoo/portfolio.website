@@ -124,6 +124,7 @@
 
 import { AwsClient } from 'aws4fetch';
 import { hasKV, hasR2, kvConfig, r2Config, r2Endpoint } from './config';
+import { countCommands, timer } from './trace';
 
 /** Thrown for transport problems only. A missing record is `null`, not an error. */
 export class StoreError extends Error {
@@ -951,6 +952,7 @@ type Command = (string | number)[];
 async function redis(url: string, token: string, cmds: Command[]): Promise<unknown[]> {
   if (cmds.length === 0) return [];
 
+  const t = timer();
   let res: Response;
   try {
     res = await fetch(`${url.replace(/\/+$/, '')}/pipeline`, {
@@ -967,6 +969,12 @@ async function redis(url: string, token: string, cmds: Command[]): Promise<unkno
     // failure to every caller, so both are normalized into one error type.
     throw new StoreError('upstash unreachable', { cause: err });
   }
+
+  /* THE COMMAND COUNT, and it goes HERE — after the round trip landed, before the
+     status is judged. A pipeline is one request and `cmds.length` billed commands, and
+     the free tier counts the second number. See countCommands in trace.ts for why this
+     is per call rather than a per-request total. */
+  countCommands('kv', cmds.length, res.status, t.total());
 
   if (!res.ok) throw new StoreError(`upstash HTTP ${res.status}`);
 

@@ -123,6 +123,7 @@ import { hasKV, hasR2, kvConfig, r2Config, r2Endpoint } from './config';
    starts. Two implementations of that would disagree twice a year at the DST
    boundaries, and the symptom would be a sealed letter opening a day early. */
 import { isWingDate, wingDate } from './kv';
+import { countCommands, timer } from './trace';
 
 /** Thrown for transport problems only. A letter she has never opened is a DEFAULT. */
 export class LetterError extends Error {
@@ -953,6 +954,7 @@ type Command = (string | number)[];
 async function redis(url: string, token: string, cmds: Command[]): Promise<unknown[]> {
   if (cmds.length === 0) return [];
 
+  const t = timer();
   let res: Response;
   try {
     res = await fetch(`${url.replace(/\/+$/, '')}/pipeline`, {
@@ -967,6 +969,10 @@ async function redis(url: string, token: string, cmds: Command[]): Promise<unkno
     // An abort is indistinguishable from a network failure to every caller.
     throw new LetterError('upstash unreachable', { cause: err });
   }
+
+  /* THE COMMAND COUNT. getStates() is one HGETALL per letter, so this grows with the
+     manifest exactly as marks.ts does. See countCommands in trace.ts. */
+  countCommands('letters', cmds.length, res.status, t.total());
 
   if (!res.ok) throw new LetterError(`upstash HTTP ${res.status}`);
 

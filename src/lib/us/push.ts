@@ -76,7 +76,7 @@
 import type { WebPushModule } from 'web-push';
 import { hasKV, hasPush, kvConfig, pushConfig } from './config';
 import { otherOne, type Who } from './together';
-import { timer, trace } from './trace';
+import { countCommands, timer, trace } from './trace';
 
 /* ============================================================================
    THE VOCABULARY
@@ -200,6 +200,7 @@ async function redis(cmds: (string | number)[][]): Promise<unknown[] | null> {
   const { url, token } = kvConfig();
   if (!hasKV() || !url || !token) return null;
 
+  const t = timer();
   try {
     const res = await fetch(`${url.replace(/\/+$/, '')}/pipeline`, {
       method: 'POST',
@@ -211,6 +212,10 @@ async function redis(cmds: (string | number)[][]): Promise<unknown[] | null> {
          awaited inside a request. */
       signal: AbortSignal.timeout(2500),
     });
+    /* THE COMMAND COUNT. Every notification reads the recipient's device hash, so this
+       is charged once per notified event on top of the write that caused it, and
+       subscribeDevice is two or three round trips. See countCommands in trace.ts. */
+    countCommands('push', cmds.length, res.status, t.total());
     if (!res.ok) {
       console.error(`[us] push store returned ${res.status}.`);
       return null;
