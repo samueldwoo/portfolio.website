@@ -51,7 +51,9 @@ import {
   getDaysSafe,
   withUrls,
   type VisibleDayFrames,
+  setPlace,
 } from '../../../lib/us/frames';
+import { lookupPlace } from '../../../lib/us/place';
 import { CARRY_DAYS, pickSlots } from '../../../lib/us/slots';
 
 export const prerender = false;
@@ -86,6 +88,52 @@ const week: VisibleDayFrames[] = available ? await withUrls(stored) : [];
    rather than strictly today's — see pickSlots in slots.ts for the timezone
    arithmetic that forces it, and for why the carry is two days and not seven. */
 const { mine, theirs, mineFrom, theirsFrom } = pickSlots(week, today, viewer);
+
+/* ---- THE PLACE LABEL, RESOLVED LAZILY AND EXACTLY ONCE ----------------------
+
+   This used to run inside /api/us/frame, right after the bytes were saved. Safe,
+   but it put a third-party network call between her and the end of her upload — and
+   she had already said uploads felt slow. Nominatim measures 0.68s cold, so that
+   was most of a second added to the "sending…" state, for a caption nobody is
+   waiting to read.
+
+   Here instead: a frame that has coordinates but no label yet gets one, once, and
+   it is stored. Every later render reads the stored string and asks nobody
+   anything, so this is still ONE disclosure per photograph — the same count as
+   before, just paid by a page view rather than by her.
+
+   900ms, not the 2500ms an upload could afford. A page is a worse place to wait
+   than a form submit, and a miss is cheap: the pin shows coordinates this time and
+   the next render tries again. That retry is why a failure here needs no handling.
+
+   Both sides in one pass, because they are independent lookups and the slower one
+   should not be the sum of the two. */
+if (available && reachable) {
+  /* THE FRAME'S OWN DAY, NOT TODAY. The slot carries a photograph forward, so
+     `mine` may live on yesterday's hash — `mineFrom` is exactly that date when it
+     does and null when the frame is current. Writing the label to `today` would
+     file it against a day the photograph is not on: silently lost, and on a day
+     that may later hold a different photograph entirely. */
+  const wanted: Array<{ who: Who; date: string; frame: NonNullable<typeof mine> }> = [];
+  if (mine && mine.lat !== null && mine.lon !== null && !mine.place) {
+    wanted.push({ who: viewer, date: mineFrom ?? today, frame: mine });
+  }
+  if (theirs && theirs.lat !== null && theirs.lon !== null && !theirs.place) {
+    wanted.push({ who: them, date: theirsFrom ?? today, frame: theirs });
+  }
+  if (wanted.length) {
+    await Promise.all(
+      wanted.map(async ({ who: w, date, frame }) => {
+        const label = await lookupPlace({ lat: frame.lat!, lon: frame.lon! }, 900);
+        if (!label) return;
+        /* Mutating the object the markup below reads, so the label appears on THIS
+           render rather than only the next one. setPlace never throws. */
+        frame.place = label;
+        await setPlace(date, w, label);
+      }),
+    );
+  }
+}
 
 /* ---- outcomes from the no-JavaScript path ---------------------------------
    Both paths land back here as a 303 with ?ok= or ?e=, written in her language
@@ -337,7 +385,7 @@ const whoWord = (w: Who): string => (w === viewer ? 'you' : w === 'her' ? (her |
                                            the information. */
                                         <span class="fr-where">
                                             <span class="fr-where-pin" aria-hidden="true">📍</span>
-                                            <span class="fr-where-num">{f.lat.toFixed(4)}, {f.lon.toFixed(4)}</span>
+                                            <span class="fr-where-num">{f.place ?? `${f.lat.toFixed(4)}, ${f.lon.toFixed(4)}`}</span>
                                         </span>
                                     )}
                                 </figcaption>
@@ -611,7 +659,17 @@ const whoWord = (w: Who): string => (w === viewer ? 'you' : w === 'her' ? (her |
                and the upload then proceeds without the pin. A missing point on a
                map is not worth a failed photograph. */
             try {
-                if (original && original.slice) {
+                /* AND ONLY WHEN THE RESIZER ACTUALLY RE-ENCODED. shrink() has an
+                   early return: a photograph already within the long edge and under
+                   half the byte cap is resolved UNCHANGED, and then it still carries
+                   its own EXIF — so the head would be 64KB of duplicate metadata on
+                   an upload that already contains it.
+
+                   That is not a rare branch. Her first upload was 615KB and passed
+                   straight through, so the head was pure waste on a connection she
+                   had already told us felt slow. `small === original` is the exact
+                   test for it, because the early return resolves the same object. */
+                if (small !== original && original && original.slice) {
                     body.append('exifhead', original.slice(0, 65536), 'head.bin');
                 }
             } catch (err) { /* no pin, and nothing else changes */ }

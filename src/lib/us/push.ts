@@ -76,6 +76,7 @@
 import type { WebPushModule } from 'web-push';
 import { hasKV, hasPush, kvConfig, pushConfig } from './config';
 import { otherOne, type Who } from './together';
+import { timer, trace } from './trace';
 
 /* ============================================================================
    THE VOCABULARY
@@ -513,6 +514,11 @@ async function loadWebPush(): Promise<WebPushModule | null> {
  * notification about something he just did — rather than silently wrong.
  */
 export async function notify(actor: Who, event: PushEvent): Promise<void> {
+  /* Notifications fail SILENTLY by design — a failed push must never cost a write —
+     which also made them impossible to debug. "She says she got nothing" had no
+     evidence either way. Now there is a line per attempt: how many devices were
+     tried, how many were pruned as dead, and how long Apple took. */
+  const t = timer();
   try {
     if (!isPushEvent(event)) {
       // A caller passing something outside the vocabulary is a bug in the caller,
@@ -597,6 +603,23 @@ export async function notify(actor: Who, event: PushEvent): Promise<void> {
        them. A prune that did not happen means the same dead endpoint is retried
        forever, which is precisely what pruning exists to stop. */
     await pruneDevices(to, dead);
+
+    /* ONE LINE PER NOTIFICATION ATTEMPT, and it exists because this whole file
+       fails silently on purpose. A push that never arrives was previously
+       indistinguishable from a push that was never sent — "she says she got
+       nothing" had no evidence on either side.
+    
+       `event` and `to` are enums and pass trace()'s filter. There is no payload to
+       leak here regardless, since the wire only ever carries two enums. `dead` is
+       the useful one: a device count that keeps shrinking is tiles being deleted,
+       which is the only way this system ever learns that. */
+    trace('push.send', {
+        event,
+        to,
+        devices: devices.length,
+        dead: dead.length,
+        ms: t.total(),
+    });
   } catch (err) {
     /* THE OUTERMOST CATCH, AND THE POINT OF THE WHOLE FILE. Whatever went wrong
        — the store, the network, a bad key, a bug in here — the write that

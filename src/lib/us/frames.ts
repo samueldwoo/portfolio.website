@@ -195,6 +195,17 @@ export interface Frame {
    */
   lat: number | null;
   lon: number | null;
+  /**
+   * Where that is, as a short human label, or null.
+   *
+   * Resolved ONCE at upload and stored, never computed on render — a lookup per
+   * render would disclose her location to a third party dozens of times a week for
+   * a string that cannot change. place.ts carries the argument.
+   *
+   * Null is ordinary: no network at upload time, a rate limit, or nowhere named
+   * nearby. The page falls back to the coordinates, so the pin never disappears.
+   */
+  place: string | null;
 }
 
 /** One day, both sides. Either may be absent. */
@@ -344,6 +355,7 @@ function frameFrom(h: Record<string, string>, who: Who): Frame | null {
     note: h[`${who}Note`] ?? '',
     lat: at ? at.lat : null,
     lon: at ? at.lon : null,
+    place: (h[`${who}Place`] ?? '') || null,
   };
 }
 
@@ -425,6 +437,10 @@ export async function putFrame(input: {
     note,
     lat: coords ? coords.lat : null,
     lon: coords ? coords.lon : null,
+    /* Resolved AFTER the bytes are safe, by the caller, and written separately —
+       see setPlace(). A geocoder must never sit between her and a saved
+       photograph. */
+    place: null,
   };
 
   if (!hasKV()) {
@@ -457,9 +473,13 @@ export async function putFrame(input: {
   ];
   if (frame.lat !== null && frame.lon !== null) {
     fields.push(`${who}Lat`, String(frame.lat), `${who}Lon`, String(frame.lon));
-    await redis([fields]);
+    /* The OLD place is deleted in the same pipeline. A new photograph has new
+       coordinates, and leaving yesterday's label attached while the new one is
+       resolved would show a confidently wrong place for a few seconds — or forever,
+       if the lookup then fails. */
+    await redis([fields, ['HDEL', DAY_KEY(date), `${who}Place`]]);
   } else {
-    await redis([fields, ['HDEL', DAY_KEY(date), `${who}Lat`, `${who}Lon`]]);
+    await redis([fields, ['HDEL', DAY_KEY(date), `${who}Lat`, `${who}Lon`, `${who}Place`]]);
   }
   return frame;
 }
@@ -502,6 +522,33 @@ export async function getDaysSafe(
     const dates: string[] = [];
     for (let i = 0; i < Math.max(1, days); i += 1) dates.push(shiftDate(today, -i));
     return { days: dates.map((d) => ({ date: d, her: null, him: null })), reachable: false };
+  }
+}
+
+/**
+ * Attach a resolved place label to a frame that is already saved.
+ *
+ * SEPARATE FROM putFrame ON PURPOSE. The geocoder is a third-party network call and
+ * putFrame's job is to get her photograph durable; putting a lookup on that path
+ * would mean a slow Nominatim is a slow upload, and a dead one is a failed upload.
+ * So the bytes land first and the label arrives a moment later.
+ *
+ * Never throws, and returns nothing worth checking: a missing label is a pin that
+ * shows coordinates instead, which is a state the page already renders.
+ */
+export async function setPlace(date: string, who: Who, place: string): Promise<void> {
+  const label = place.trim().slice(0, 80);
+  if (!label) return;
+  try {
+    if (!hasKV()) {
+      const day = memory.get(date);
+      const f = day?.[who];
+      if (f) f.place = label;
+      return;
+    }
+    await redis([['HSET', DAY_KEY(date), `${who}Place`, label]]);
+  } catch (err) {
+    console.error('[us] could not store a place label:', err instanceof Error ? err.message : err);
   }
 }
 

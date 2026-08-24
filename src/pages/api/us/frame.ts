@@ -41,6 +41,7 @@ import type { APIRoute } from 'astro';
 import { SESSION_SECRET } from '../../../lib/us/config';
 import { clientKey, hit } from '../../../lib/us/ratelimit';
 import { wingDate } from '../../../lib/us/kv';
+import { timer, trace } from '../../../lib/us/trace';
 import { readCoords } from '../../../lib/us/exif';
 import { notify } from '../../../lib/us/push';
 import { crossSite, identify } from '../../../lib/us/together';
@@ -110,6 +111,13 @@ function wantsJson(request: Request): boolean {
 }
 
 export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect, url }) => {
+  /* THE STOPWATCH STARTS BEFORE EVERYTHING, including the guards, because a cold
+     function boot happens before this line and shows up as the gap between her tap
+     and `readMs` starting to accumulate. `readMs` is the leg that matters: on Vercel
+     the body is streamed as it is awaited, so the time to read it IS her upload
+     crossing the network. That was the unanswerable question — 615KB on a Paris
+     connection, or the R2 write, or a boot. */
+  const t = timer();
   const asJson = wantsJson(request);
 
   /** One exit, so the fetch and no-JS paths cannot drift apart. */
@@ -119,6 +127,10 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
     code: string | null,
     extra: Record<string, unknown> = {},
   ): Response => {
+    /* EVERY exit is traced, from inside the one function they all go through —
+       adding a line at each `return answer(...)` would have missed one eventually,
+       and the refusals are exactly the cases nobody thinks to instrument. */
+    if (!ok) trace('frame.post', { ok: false, code, status, totalMs: t.total() });
     if (asJson) return json({ ok, ...(code ? { code } : {}), ...extra }, status);
     const query = ok
       ? `?ok=${encodeURIComponent(code ?? 'posted')}`
@@ -189,7 +201,11 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
     return answer(false, 413, 'too-big', { max: MAX_BYTES });
   }
 
+  /* The read leg. `formData()` above and this line together are where her upload
+     actually crosses the wire, so this is the number to compare against the file
+     size when the question is "why did that feel slow". */
   const bytes = new Uint8Array(await file.arrayBuffer());
+  const readMs = t.lap();
   /* Measured, not trusted. A multipart part can claim any size it likes; this is
      the length of what actually arrived. */
   if (bytes.byteLength === 0) return answer(false, 400, 'no-photo');
@@ -235,10 +251,12 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
 
      `coords` can never make this request fail. readCoords() is total — every branch
      returns null rather than throwing — and a null simply means no pin. */
+  let hadHead = false;
   let coords = readCoords(bytes);
   if (!coords) {
     const head = form.get('exifhead');
     if (head instanceof File && head.size > 0 && head.size <= EXIF_HEAD_MAX) {
+      hadHead = true;
       try {
         coords = readCoords(new Uint8Array(await head.arrayBuffer()));
       } catch {
@@ -254,8 +272,10 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
   const today = wingDate(new Date(nowMs));
 
   let frame;
+  let storeMs = 0;
   try {
     frame = await putFrame({ date: today, who, bytes, sniffed, note, atMs: nowMs, coords });
+    storeMs = t.lap();
   } catch (err) {
     /* The bytes-first order in putFrame() means the worst case here is an
        orphaned object in R2 that nothing points at — invisible, harmless, and
@@ -263,6 +283,37 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
     console.error('[us] frame write failed:', err instanceof Error ? err.message : err);
     return answer(false, err instanceof FramesError ? 502 : 500, 'store');
   }
+
+  /* ONE LINE PER SUCCESSFUL UPLOAD, with the legs separated so the next "it felt
+     slow" is answerable instead of arguable. `head` says whether the 64KB EXIF slice
+     was sent, which is only true when the resizer re-encoded; `coords` says whether
+     a location was found. Neither the note, the coordinates nor the place name can
+     appear here — trace() refuses strings with spaces or over 24 characters. */
+  trace('frame.post', {
+    ok: true,
+    who,
+    ext: sniffed.ext,
+    bytes: bytes.byteLength,
+    head: hadHead,
+    coords: coords !== null,
+    readMs,
+    storeMs,
+    totalMs: t.total(),
+  });
+
+  /* ---- THE PLACE LABEL IS NOT RESOLVED HERE, AND THAT IS THE SECOND VERSION.
+
+     It was: lookupPlace() ran right here, after the bytes were durable, awaited so
+     a frozen function could not cancel it. Correct about safety, wrong about the
+     thing that actually mattered — it put a third-party network call between her
+     and the end of her upload, and she had already reported uploads feeling slow.
+     Nominatim measures 0.68s cold, so that was most of a second added to the exact
+     "sending…" state she was complaining about, for a caption that nobody is waiting
+     to read.
+
+     So it moved to the day page, resolved lazily on first render and stored. Same
+     one lookup per photograph and the same single disclosure — just paid by a page
+     view instead of by her, and with a shorter deadline. See day.astro. */
 
   /* ---- THE NOTIFICATION -----------------------------------------------
      OUTSIDE the try, and that placement is the point rather than tidiness.
