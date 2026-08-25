@@ -23,6 +23,37 @@ import type { Who } from './together';
  */
 export const CARRY_DAYS = 2;
 
+/**
+ * The most recent day in a newest-first window that has something on `side`.
+ *
+ * THE RULE, EXTRACTED SO THE TWO PAGES CANNOT DRIFT. The photo page and the song
+ * page face the identical problem — wing midnight lands at 21:00 his time, so
+ * anything he posts in his evening is filed under a day that has already rolled by
+ * the time she wakes — and the song page originally answered it the other way,
+ * showing strictly today. That divergence is the thing this function exists to stop:
+ * one implementation of "how far back may a slot reach", used by both.
+ *
+ * Returns the frame/track AND the day it came from, because the caller needs the
+ * date for two separate reasons: to LABEL a carried item honestly, and — on the song
+ * page — to address a reaction at the day the song actually lives on.
+ *
+ * Generic over the day shape and the side key, so `her`/`him` and `his`/`hers` both
+ * work without either page reshaping its data.
+ */
+export function mostRecent<T>(
+  days: Array<{ date: string }>,
+  side: string,
+  carryDays: number = CARRY_DAYS,
+): { value: T | null; date: string | null; carried: boolean } {
+  const window = days.slice(0, Math.max(1, carryDays));
+  for (let i = 0; i < window.length; i += 1) {
+    const day = window[i] as { date: string } & Record<string, unknown>;
+    const value = day[side];
+    if (value) return { value: value as T, date: day.date, carried: i > 0 };
+  }
+  return { value: null, date: null, carried: false };
+}
+
 /** What the day page's two big frames should show, and what is left for the strip. */
 export type Slots = {
   mine: Frame | null;

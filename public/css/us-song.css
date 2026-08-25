@@ -1525,3 +1525,22 @@ a.mini:focus-visible {
         transition: none;
     }
 }
+
+/* ---------------------------------------------------------------------------
+   THE DAY ON A CARRIED CARD
+
+   Only rendered when a card is showing a song from a day that is not today, which
+   is the ordinary case for whichever of them posted in their own evening. Quiet:
+   it is a qualifier on the card, not a headline, and it must not read as an
+   apology for the song being late.
+   --------------------------------------------------------------------------- */
+.song-carried {
+    margin: 2px 0 0;
+    font-family: var(--us-mono, "DM Mono", ui-monospace, monospace);
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    /* --concrete-4 measures 7.30:1 on the page. Small uppercase mono is exactly
+       where the 4.5:1 floor is easiest to miss by eye. */
+    color: var(--concrete-4);
+}

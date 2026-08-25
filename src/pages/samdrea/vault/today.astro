@@ -95,6 +95,7 @@ import { touch } from '../../../lib/us/presence';
    asks it. The two are not interchangeable and this page now uses both, for the two
    different jobs. */
 import { HER_TZ, HIS_TZ, identify, type Who } from '../../../lib/us/together';
+import { mostRecent } from '../../../lib/us/slots';
 import {
   MAX_REACTIONS_PER_DAY,
   MAX_REACTION_UNITS,
@@ -167,10 +168,30 @@ const HISTORY_WINDOW = 365;
 /**
  * Everything, in one composite read, already folded into days.
  *
- * `todayPair` is whatever is filed under today's date — never "the most recent
- * day". Promoting yesterday would be a small lie that makes the whole feature
- * untrustworthy: she would have no way to tell a day I posted from a day I forgot,
- * and the honest empty slot is a better artifact than a quietly stale card.
+ * ---------------------------------------------------------------------------
+ * EACH SIDE SHOWS ITS MOST RECENT SONG, NOT STRICTLY TODAY'S — AND THE COMMENT
+ * THAT USED TO BE HERE ARGUED THE OPPOSITE, CORRECTLY, FOR A REASON THAT HAS
+ * BEEN ANSWERED RATHER THAN OVERRULED.
+ *
+ * It said: "Promoting yesterday would be a small lie that makes the whole feature
+ * untrustworthy: she would have no way to tell a day I posted from a day I forgot."
+ * That objection is right, and it is exactly why the card now NAMES the day when it
+ * shows something carried. The lie was never the promotion; it was promoting
+ * SILENTLY. Labelled, she can tell the two apart at a glance — which is what the old
+ * behaviour was protecting, and what an empty slot protected clumsily.
+ *
+ * WHAT FORCED IT is the arithmetic that forced it on the photograph page: wing
+ * midnight lands at 21:00 his time and 05:00–06:00 hers, so a song he picks at 20:00
+ * is filed under a day that has already rolled by the time she wakes. Same backwards
+ * rule — posting at 22:00 worked, posting at 20:00 did not — and the same outcome,
+ * where the thing he sent reached an archive before she ever saw it in the slot it
+ * was sent for.
+ *
+ * The rule is mostRecent() in slots.ts, shared with the photograph page precisely so
+ * the two cannot answer this question differently again.
+ *
+ * PER SIDE, INDEPENDENTLY: his may be yesterday's while hers is today's. They are two
+ * people posting on their own clocks, not one event.
  */
 let pairs: DayPair[] = [];
 let storeUnreachable = false;
@@ -182,11 +203,32 @@ try {
 }
 
 const todayPair = pairs.find((p) => p.date === today) ?? emptyPair(today);
+
+/* Each side's most recent, and the day it came from. The whole day RECORD is looked
+   up too, because reactions live on it and must be read from the same day the song
+   is — see reactionsFor(). */
+const hisPick = mostRecent<DayPair['his']>(pairs, 'his');
+const hersPick = mostRecent<DayPair['hers']>(pairs, 'hers');
+const hisPair = pairs.find((p) => p.date === hisPick.date) ?? todayPair;
+const hersPair = pairs.find((p) => p.date === hersPick.date) ?? todayPair;
 /* Sliced here, not in the store call: getExchange's limit caps each SIDE's
    history, so the number of days it returns can exceed it when the two histories
    do not overlap. The counting below wants every day; only the rendering is
    capped. */
-const archive = pairs.filter((p) => p.date !== today).slice(0, ARCHIVE_LIMIT);
+/* Promoted days are blanked per SIDE rather than dropped whole: if his song was
+   carried from yesterday and hers was not, yesterday still has to appear for her.
+   Same shape as the photograph page's strip, and the filter runs after the map for
+   the same reason — a row emptied by blanking should vanish, a half-full one should
+   not. */
+const archive = pairs
+  .filter((p) => p.date !== today)
+  .map((p) => ({
+    ...p,
+    his: hisPick.carried && p.date === hisPick.date ? null : p.his,
+    hers: hersPick.carried && p.date === hersPick.date ? null : p.hers,
+  }))
+  .filter((p) => p.his || p.hers)
+  .slice(0, ARCHIVE_LIMIT);
 
 /* WHICH SIDE THE READER IS. Drives one thing and one thing only on this page: you
    get the reaction bar on the OTHER card and never on your own.
@@ -419,6 +461,20 @@ interface Slot {
   /** The word on the card, in this page's voice. */
   who: string;
   track: TrackRecord | null;
+  /**
+   * The wing day this slot's song is filed under.
+   *
+   * Usually today. Not always: each side shows its MOST RECENT song, so a song
+   * picked in his evening — after wing midnight has already rolled — is carried
+   * forward and this is the day it actually lives on.
+   *
+   * Load-bearing rather than decorative. A reaction is addressed to this date, and
+   * /api/us/react takes whatever date it is handed, so getting it wrong would file
+   * her reaction against a day with no song in it and no error anywhere.
+   */
+  date: string;
+  /** True when `date` is not today, so the card can say so instead of implying it. */
+  carried: boolean;
   /** What the slot says when nobody has posted in it. Never "late", never red. */
   open: string;
   /** The quieter second line under that. */
@@ -500,7 +556,11 @@ function emptyFor(isMine: boolean): { open: string; openSub: string } {
  * bug being fixed.
  */
 function reactionsFor(side: Side, track: TrackRecord | null) {
-  const given = side === 'his' ? todayPair.reactions.onHis : todayPair.reactions.onHers;
+  /* THE SOURCE DAY'S reactions, not today's. A song carried from yesterday brings its
+     reactions with it — reading today's would draw an empty bar over a song she had
+     already reacted to, and let her leave the same emoji twice on two days. */
+  const pair = side === 'his' ? hisPair : hersPair;
+  const given = side === 'his' ? pair.reactions.onHis : pair.reactions.onHers;
   // A reaction needs a track to be about. `canReact` also stays false while the
   // store is unreachable, because the chips would be drawn from an empty pair and
   // every one of them would claim to be off.
@@ -519,15 +579,25 @@ const slots: Slot[] = [
   {
     side: 'his',
     who: whoWord.his,
-    track: todayPair.his,
+    track: hisPick.value,
+    /* THE DAY THIS SONG IS FILED UNDER, which is not always today: each side
+       shows its most recent, so one picked in his evening after wing midnight
+       has rolled is carried forward. A reaction is addressed to this date. */
+    date: hisPick.date ?? today,
+    carried: hisPick.carried,
     ...emptyFor(mineIsHis),
     unnamed: 'a song Spotify wouldn’t name',
-    ...reactionsFor('his', todayPair.his),
+    ...reactionsFor('his', hisPick.value),
   },
   {
     side: 'hers',
     who: whoWord.hers,
-    track: todayPair.hers,
+    track: hersPick.value,
+    /* THE DAY THIS SONG IS FILED UNDER, which is not always today: each side
+       shows its most recent, so one picked in his evening after wing midnight
+       has rolled is carried forward. A reaction is addressed to this date. */
+    date: hersPick.date ?? today,
+    carried: hersPick.carried,
     /* BOTH SIDES HEDGE ON AN OUTAGE, and hers is the one that has to.
        When getExchange() throws, todayPair is emptyPair() — so an unhedged empty
        slot would tell her "your side of today is open", open the form and offer
@@ -538,7 +608,7 @@ const slots: Slot[] = [
        is a claim about her, made to her. */
     ...emptyFor(!mineIsHis),
     unnamed: 'a song Spotify wouldn’t name',
-    ...reactionsFor('hers', todayPair.hers),
+    ...reactionsFor('hers', hersPick.value),
   },
 ];
 
@@ -823,6 +893,23 @@ function minisFor(pair: DayPair): Mini[] {
                     same claim the layout makes, made where a screen reader
                     can hear it. The track title is the <h3> under it. */}
                 <h2 class="song-side" id={`who-${slot.side}`}>{slot.who}</h2>
+                {slot.carried && slot.track && (
+                    /* THE DAY, SAID OUT LOUD, and this is the whole reason carrying a
+                       song forward is honest rather than a quiet lie.
+
+                       The comment that used to sit above `todayPair` argued against
+                       promotion precisely because "she would have no way to tell a day
+                       I posted from a day I forgot". Correct — so she is told. An
+                       unlabelled carried card is the untrustworthy thing; a labelled
+                       one is just a card with a date on it.
+
+                       wingDateLabel, not "yesterday": relative words cannot survive
+                       nine hours. Between 21:00 and midnight his local date and the
+                       wing's disagree, so "yesterday" would name a day he would call
+                       today — the same reason the photograph captions name the day
+                       instead. */
+                    <p class="song-carried">{wingDateLabel(slot.date)}</p>
+                )}
 
                 {slot.track ? (
                     <>
@@ -1022,7 +1109,12 @@ function minisFor(pair: DayPair): Mini[] {
                             <div class="react-row">
                                 {slot.chips.map((chip) => (
                                     <form class="react-form" method="post" action="/api/us/react">
-                                        <input type="hidden" name="date" value={todayPair.date}>
+                                        {/* THE SONG'S OWN DAY, NOT TODAY. A card may be showing something carried
+                                            forward from yesterday, and a reaction has to land on the day that song is
+                                            actually filed under. Posting today's date would file her reaction against a
+                                            day with no song in it — and /api/us/react would accept it, because it takes
+                                            whatever date it is given and only falls back to today when none is sent. */}
+                                        <input type="hidden" name="date" value={slot.date}>
                                         <input type="hidden" name="side" value={slot.side}>
                                         <input type="hidden" name="reaction" value={chip.emoji}>
                                         <input type="hidden" name="on" value={chip.on ? '0' : '1'}>
@@ -1068,7 +1160,12 @@ function minisFor(pair: DayPair): Mini[] {
                                 the chips it creates are what take it back.
                                 ------------------------------------------------ */}
                             <form class="react-any" method="post" action="/api/us/react">
-                                <input type="hidden" name="date" value={todayPair.date}>
+                                {/* THE SONG'S OWN DAY, NOT TODAY. A card may be showing something carried
+                                    forward from yesterday, and a reaction has to land on the day that song is
+                                    actually filed under. Posting today's date would file her reaction against a
+                                    day with no song in it — and /api/us/react would accept it, because it takes
+                                    whatever date it is given and only falls back to today when none is sent. */}
+                                <input type="hidden" name="date" value={slot.date}>
                                 <input type="hidden" name="side" value={slot.side}>
                                 <label class="react-any-label" for={`react-any-${slot.side}`}>
                                     or any emoji
@@ -1189,7 +1286,12 @@ function minisFor(pair: DayPair): Mini[] {
                         </summary>
 
                         <form class="dj-form" id="mine-form" method="post" action="/api/us/song">
-                            <input type="hidden" name="date" value={todayPair.date}>
+                            {/* TODAY, EXPLICITLY, and not `slot.date` — which is the trap next to this one.
+                                The reaction forms above send the CARRIED song's day, because a reaction is
+                                about a song that already exists. This form creates a NEW one, and it belongs
+                                to today. Using slot.date here would silently backdate a fresh song onto
+                                yesterday and overwrite what is being carried. */}
+                            <input type="hidden" name="date" value={today}>
                             {/* WHERE HE IS, at the moment he posts. Filled in by the
                                 script at the bottom from
                                 Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -1284,7 +1386,12 @@ function minisFor(pair: DayPair): Mini[] {
                         <summary class="reply-summary">{herSummary}</summary>
 
                         <form class="dj-form" id="reply-form" method="post" action="/api/us/reply">
-                            <input type="hidden" name="date" value={todayPair.date}>
+                            {/* TODAY, EXPLICITLY, and not `slot.date` — which is the trap next to this one.
+                                The reaction forms above send the CARRIED song's day, because a reaction is
+                                about a song that already exists. This form creates a NEW one, and it belongs
+                                to today. Using slot.date here would silently backdate a fresh song onto
+                                yesterday and overwrite what is being carried. */}
+                            <input type="hidden" name="date" value={today}>
                             {/* WHERE SHE IS, at the moment she posts. Same field,
                                 same script, same shipped-empty behaviour as the one
                                 on his form above — this is the half that actually
