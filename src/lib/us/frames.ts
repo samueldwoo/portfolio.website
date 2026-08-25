@@ -42,12 +42,20 @@
  * ---------------------------------------------------------------------------
  * THE SPLIT: BYTES IN R2, WORDS IN UPSTASH
  *
- * R2 holds the image at a key this file derives — `frames/<date>/<who>.<ext>` —
- * and NEVER at a name that came from the client. The upload's filename is
+ * R2 holds the image at a key this file builds — `frames/<date>/<who>-<atMs>.<ext>`
+ * — and NEVER at a name that came from the client. The upload's filename is
  * discarded entirely: the date is the server's, `who` comes from the session
- * cookie, and the extension comes from sniffing the bytes. There is no
- * client-controlled character anywhere in the key, so there is no traversal to
- * escape and no key to collide with.
+ * cookie, the extension comes from sniffing the bytes, and the millisecond is the
+ * server's clock. There is no client-controlled character anywhere in the key, so
+ * there is no traversal to escape and no key to collide with.
+ *
+ * THE MILLISECOND IS THERE BECAUSE THE KEY USED TO BE `<who>.<ext>` AND A SECOND
+ * UPLOAD ON A DAY OVERWROTE THE FIRST. R2 is unversioned, so that was final, and on
+ * 2026-08-24 it took the only copy of a real photograph. A unique key means a swap
+ * leaves the previous object in place and merely stops pointing at it. Which object
+ * a record refers to is now STORED (`<who>Key`) rather than recomputed by whoever is
+ * reading — see keyFromHash(), which also still answers for the records written
+ * before that field existed.
  *
  * Upstash holds one hash per day with both captions and both timestamps, so the
  * whole week's metadata is a single pipelined read rather than fourteen HEADs
@@ -76,6 +84,7 @@
  */
 
 import { AwsClient } from 'aws4fetch';
+import { frameKey, frameKeyAt, keyFromHash } from './frame-keys';
 import { validCoords } from './exif';
 import { hasKV, hasR2, kvConfig, r2Config, r2Endpoint } from './config';
 import { presignedUrl } from './photos';
@@ -174,9 +183,27 @@ export function sniff(bytes: Uint8Array): Sniffed | null {
 
 /** One person's frame for one day, as STORED. */
 export interface Frame {
-  /** `jpg` | `png` | `webp`. Needed to rebuild the key. */
+  /** `jpg` | `png` | `webp`. Kept for the legacy key and for the export tool. */
   ext: string;
-  /** Epoch ms it was posted. */
+  /**
+   * The R2 object key, READ FROM THE STORE RATHER THAN RECOMPUTED.
+   *
+   * IT USED TO BE DERIVED AT BOTH ENDS, AND THAT IS WHAT DESTROYED A PHOTOGRAPH.
+   * putFrame() built `frames/<date>/<who>.<ext>` and withUrls() built the same
+   * string again from the same three inputs — so the key was a pure function of
+   * the day and the person, and a second upload on a day landed exactly on top of
+   * the first one. R2 is unversioned, so "exactly on top of" means gone.
+   *
+   * Storing it inverts that: the hash now says WHERE the bytes are instead of the
+   * reader guessing, which is what lets the write side move to a key nothing can
+   * collide with (frameKeyAt) without the read side having to agree on a formula.
+   *
+   * '' is impossible on the way out — keyFromHash() falls back to the legacy
+   * layout for the records written before this field existed, so a photograph
+   * uploaded in August still resolves to the object it has always been at.
+   */
+  key: string;
+  /** Epoch ms it was posted. Also the discriminator in the key. */
   atMs: number;
   /** Her or his words under it. '' when there are none, which is common. */
   note: string;
@@ -234,26 +261,17 @@ export interface VisibleDayFrames {
    ========================================================================= */
 
 /**
- * The R2 object key. Every component is server-derived.
+ * THE KEYS LIVE IN frame-keys.ts, AND THE REASON IS THE INCIDENT.
  *
- * `date` is produced by wingDate()/shiftWingDate() and is therefore always
- * `YYYY-MM-DD`; `who` is a union of two literals from the session cookie; `ext`
- * comes from sniff(). None of the three can carry a `/`, a `.` or a `%`, so this
- * cannot be walked out of its prefix — which is asserted rather than assumed, in
- * frameKey's guard below, because the whole safety of this feature rests on it.
+ * Re-exported here so every existing caller is unchanged. They were moved out
+ * because this module imports the R2 client, the Upstash config and the geocoder,
+ * which meant the key arithmetic could not be exercised without credentials — and
+ * the way this project last checked it was a real upload, which destroyed the only
+ * copy of a real photograph. frame-keys.ts is pure and has no import that can
+ * reach a bucket, so `npm run test:frames-key` proves the layout without being able
+ * to write a byte.
  */
-export function frameKey(date: string, who: Who, ext: string): string {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-    throw new Error(`frames: refusing to build a key from a non-date: ${JSON.stringify(date)}`);
-  }
-  if (who !== 'her' && who !== 'him') {
-    throw new Error(`frames: refusing to build a key for: ${JSON.stringify(who)}`);
-  }
-  if (!/^(jpg|png|webp)$/.test(ext)) {
-    throw new Error(`frames: refusing to build a key with extension: ${JSON.stringify(ext)}`);
-  }
-  return `frames/${date}/${who}.${ext}`;
-}
+export { frameKey, frameKeyAt, keyFromHash } from './frame-keys';
 
 /** `us:frame:` — distinct from us:song:, us:mark:, us:letter:, us:together:. */
 const DAY_KEY = (date: string) => `us:frame:${date}`;
@@ -343,7 +361,11 @@ function foldHash(raw: unknown): Record<string, string> {
   return out;
 }
 
-function frameFrom(h: Record<string, string>, who: Who): Frame | null {
+/* `date` is a parameter rather than something read off the hash, and that is the
+   security-relevant half of keyFromHash(): the caller already knows which day it
+   asked the store for, so a stored key is checked against that instead of against
+   anything the hash claims about itself. */
+function frameFrom(h: Record<string, string>, who: Who, date: string): Frame | null {
   const ext = h[`${who}Ext`] ?? '';
   if (!/^(jpg|png|webp)$/.test(ext)) return null;
   const atMs = Number(h[`${who}At`] ?? 0);
@@ -354,6 +376,7 @@ function frameFrom(h: Record<string, string>, who: Who): Frame | null {
 
   return {
     ext,
+    key: keyFromHash(h, who, date, ext),
     atMs: Number.isFinite(atMs) && atMs > 0 ? atMs : 0,
     note: h[`${who}Note`] ?? '',
     lat: at ? at.lat : null,
@@ -417,7 +440,12 @@ export async function putFrame(input: {
   const bucket = r2();
   if (!bucket) throw new FramesError('r2 is not configured, so there is nowhere to put a photograph');
 
-  const key = frameKey(date, who, sniffed.ext);
+  /* UNIQUE PER UPLOAD, so this PUT cannot be landing on an existing photograph.
+     Before frameKeyAt() this line built `frames/<date>/<who>.<ext>` and a second
+     upload for a day overwrote the first — including, on 2026-08-24, the only copy
+     of a real one. The millisecond removes the collision rather than documenting
+     it; see frameKeyAt() for why the old object is deliberately left behind. */
+  const key = frameKeyAt(date, who, sniffed.ext, atMs);
 
   let res: Response;
   try {
@@ -446,6 +474,11 @@ export async function putFrame(input: {
 
   const frame: Frame = {
     ext: sniffed.ext,
+    /* The key the bytes actually went to, carried on the returned Frame rather than
+       recomputed by the reader. This is also what the memory tier stores, so dev
+       and production resolve a photograph the same way instead of only agreeing as
+       long as two formulas match. */
+    key,
     atMs,
     note,
     lat: coords ? coords.lat : null,
@@ -481,10 +514,16 @@ export async function putFrame(input: {
      to the second one. That is a confidently wrong pin rather than a missing one,
      and on a map a wrong point is worse than a gap. So the empty case deletes the
      pair, in the same pipeline as the write. */
+  /* `<who>Key` rides in the HSET that was already being sent, so recording WHERE the
+     bytes went costs no extra Upstash command — the whole change is one more field
+     on one existing write. It is also what makes the swap non-destructive end to
+     end: the bytes go to a new key and this pipeline moves the pointer, so the
+     previous photograph is unreferenced rather than gone. */
   const fields: (string | number)[] = [
     'HSET',
     DAY_KEY(date),
     `${who}Ext`, frame.ext,
+    `${who}Key`, frame.key,
     `${who}At`, String(frame.atMs),
     `${who}Note`, frame.note,
   ];
@@ -527,7 +566,7 @@ export async function getDays(
   const out = await redis(dates.map((d) => ['HGETALL', DAY_KEY(d)]));
   return dates.map((date, i) => {
     const h = foldHash(out[i]);
-    return { date, her: frameFrom(h, 'her'), him: frameFrom(h, 'him') };
+    return { date, her: frameFrom(h, 'her', date), him: frameFrom(h, 'him', date) };
   });
 }
 
@@ -590,7 +629,11 @@ export async function withUrls(days: DayFrames[]): Promise<VisibleDayFrames[]> {
       const f = day[who];
       if (!f) return;
       jobs.push(
-        presignedUrl(frameKey(day.date, who, f.ext))
+        /* f.key, NOT frameKey(...) — this call site recomputing the key from the day
+           and the person is the other half of what made an overwrite possible, and
+           it would now sign the wrong object for every new upload. keyFromHash() has
+           already decided which layout this record uses and validated it. */
+        presignedUrl(f.key)
           .then((url) => {
             out[i][who] = { ...f, url: url ?? '' };
           })

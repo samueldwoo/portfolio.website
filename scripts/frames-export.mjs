@@ -84,9 +84,21 @@
  * So this also does a paginated ListObjectsV2 under `frames/` and reports any
  * object the hashes do not account for. Orphans ARE exported — the picture is
  * the point, and a missing caption is a smaller loss than a missing picture —
- * with `orphan: true` in the manifest and no timestamp, because there is
- * genuinely no record of when it was posted. They do not fail the run; they are
- * a surprise to look at, not a broken invariant.
+ * with `orphan: true` in the manifest. They do not fail the run; they are a
+ * surprise to look at, not a broken invariant.
+ *
+ * SINCE KEYS BECAME UNIQUE, MOST ORPHANS ARE NOT SURPRISES AT ALL. R2 keys carry
+ * the upload's millisecond (`frames/<date>/<who>-<atMs>.<ext>`), so posting a second
+ * photograph on a day writes a new object and moves the pointer rather than
+ * overwriting — which means the first one is still in the bucket and nothing
+ * references it. Every swap makes an orphan by design, and those orphans are the
+ * reason the 2026-08-24 data loss cannot repeat. This pass is what turns them from
+ * "still present" into "actually recoverable", so it is now load-bearing rather
+ * than a safety net.
+ *
+ * A superseded orphan DOES have a timestamp — it is in the key — and it exports as
+ * `<date>/<who>-<atMs>.<ext>` so it cannot overwrite the current photograph's file.
+ * Only pre-uniqueness objects still lack a timestamp.
  *
  * ---------------------------------------------------------------------------
  * THE TIMEZONE TRAP, WRITTEN OUT BECAUSE IT IS THE EASIEST THING HERE TO GET
@@ -324,7 +336,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, join, resolve, sep } from 'node:path';
+import { basename, dirname, join, resolve, sep } from 'node:path';
 
 /* ===========================================================================
    WHERE THINGS ARE
@@ -336,6 +348,7 @@ const ENV_PATH = join(ROOT, '.env');
 /** The files whose constants this script mirrors. Named so errors can point at them. */
 const SRC = {
   frames: join(ROOT, 'src/lib/us/frames.ts'),
+  frameKeys: join(ROOT, 'src/lib/us/frame-keys.ts'),
   kv: join(ROOT, 'src/lib/us/kv.ts'),
   together: join(ROOT, 'src/lib/us/together.ts'),
 };
@@ -484,32 +497,64 @@ const TZ_OF = { her: HER_TZ, him: HIS_TZ };
  * somebody needs the photographs.
  */
 function assertLayout() {
-  const src = sourceOf(SRC.frames);
+  /* TWO FILES NOW. The key builders moved to frame-keys.ts so they could be tested
+     without loading a credential path, which means the templates this exporter
+     mirrors are no longer all in one place. Checking the wrong file would pass
+     vacuously — the worst possible outcome for a guard whose entire job is to fail. */
   const expected = [
-    ['R2 key template', 'return `frames/${date}/${who}.${ext}`;'],
-    ['day-key prefix', 'const DAY_KEY = (date: string) => `us:frame:${date}`;'],
+    [SRC.frameKeys, 'legacy R2 key template', 'return `frames/${date}/${who}.${ext}`;'],
+    [SRC.frameKeys, 'unique R2 key template', 'return `frames/${date}/${who}-${atMs}.${ext}`;'],
+    [SRC.frameKeys, 'stored-key field name', "const stored = h[`${who}Key`] ?? '';"],
+    [SRC.frames, 'stored-key write', '`${who}Key`, frame.key,'],
+    [SRC.frames, 'day-key prefix', 'const DAY_KEY = (date: string) => `us:frame:${date}`;'],
   ];
-  const drifted = expected.filter(([, literal]) => !src.includes(literal));
+  const cache = new Map();
+  const read = (f) => (cache.has(f) ? cache.get(f) : (cache.set(f, sourceOf(f)), cache.get(f)));
+  const drifted = expected.filter(([file, , literal]) => !read(file).includes(literal));
   if (drifted.length) {
     die(
-      'frames.ts no longer matches what this exporter assumes.',
+      'frames.ts / frame-keys.ts no longer match what this exporter assumes.',
       '',
-      ...drifted.map(([what, literal]) => `  missing ${what}:  ${literal}`),
+      ...drifted.map(([file, what, literal]) => `  missing ${what} in ${basename(file)}:  ${literal}`),
       '',
       'Refusing to run. An exporter that guesses the wrong key finds nothing and',
       'reports success, which for a backup is the worst available outcome. Re-read',
-      'frames.ts, then update frameKey() and DAY_KEY_PREFIX in this file — and the',
+      'those files, then update frameKey(), keyFromHash() and DAY_KEY_PREFIX here — and the',
       'literals above, which are what make the next drift loud too.',
     );
   }
 }
 
-/** Mirror of frameKey() in frames.ts, guards included. */
+/** Mirror of frameKey() in frames.ts — the LEGACY layout, still the fallback. */
 function frameKey(date, who, ext) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error(`refusing a non-date: ${JSON.stringify(date)}`);
   if (who !== 'her' && who !== 'him') throw new Error(`refusing who: ${JSON.stringify(who)}`);
   if (!/^(jpg|png|webp)$/.test(ext)) throw new Error(`refusing ext: ${JSON.stringify(ext)}`);
   return `frames/${date}/${who}.${ext}`;
+}
+
+/**
+ * Mirror of keyFromHash() in frames.ts.
+ *
+ * A BACKUP TOOL MUST RESOLVE KEYS THE SAME WAY THE APP DOES, and this is the exact
+ * place that assumption can rot: if this kept deriving `<who>.<ext>` while the app
+ * wrote `<who>-<atMs>.<ext>`, every export would download the OLD photograph for a
+ * day that had been swapped, or nothing at all, and report success either way. That
+ * is the failure mode assertLayout() exists to make loud — the new template literal
+ * is on its list for exactly this reason.
+ *
+ * Same strictness as the app: a stored key is only honoured if it matches the day
+ * and person of the record it came in on.
+ */
+function keyFromHash(h, who, date, ext) {
+  const stored = h[`${who}Key`] ?? '';
+  if (stored) {
+    if (new RegExp(`^frames/${date}/${who}(-\\d{1,13})?\\.(jpg|png|webp)$`).test(stored)) return stored;
+    console.error(
+      c.red(`  ignoring an out-of-shape stored key for ${who} on ${date}; using the legacy layout`),
+    );
+  }
+  return frameKey(date, who, ext);
 }
 
 const DAY_KEY_PREFIX = 'us:frame:';
@@ -634,12 +679,13 @@ function foldHash(raw) {
  * Printing 1970 on the back of a photograph would be worse than admitting the
  * timestamp is missing.
  */
-function frameFrom(h, who) {
+function frameFrom(h, who, date) {
   const ext = h[`${who}Ext`] ?? '';
   if (!/^(jpg|png|webp)$/.test(ext)) return null;
   const atMs = Number(h[`${who}At`] ?? 0);
   return {
     ext,
+    key: keyFromHash(h, who, date, ext),
     atMs: Number.isFinite(atMs) && atMs > 0 ? atMs : 0,
     note: h[`${who}Note`] ?? '',
   };
@@ -1280,8 +1326,11 @@ const rows = [];
 dates.forEach((date, i) => {
   const h = foldHash(hashes[i]);
   for (const who of ['her', 'him']) {
-    const f = frameFrom(h, who);
-    if (f) rows.push({ date, who, ...f, key: frameKey(date, who, f.ext), orphan: false });
+    /* The key comes from the record now (frameFrom -> keyFromHash), not from
+       recomputing it here. Recomputing was correct only while the layout was a pure
+       function of the day and the person, which is exactly what changed. */
+    const f = frameFrom(h, who, date);
+    if (f) rows.push({ date, who, ...f, orphan: false });
   }
 });
 
@@ -1293,7 +1342,19 @@ const orphans = [];
 try {
   for (const key of await r2List(FRAMES_PREFIX)) {
     if (known.has(key)) continue;
-    const m = /^frames\/(\d{4}-\d{2}-\d{2})\/(her|him)\.(jpg|png|webp)$/.exec(key);
+    /* BOTH LAYOUTS, AND THE `-<atMs>` ONE IS NOW THE COMMON CASE.
+
+       Orphans used to mean "something went wrong" — bytes in the bucket that no
+       hash points at. Since keys became unique they are also the ORDINARY result of
+       a swap: posting a second photograph on a day writes a new key and moves the
+       pointer, so the first one is still there and no longer referenced. That is
+       the whole safety property, and it puts real photographs down this path.
+
+       So this regex has to recognise the unique layout, or every superseded
+       photograph would be filed as `unrecognised` and, per the branch below,
+       LISTED BUT NOT EXPORTED — a backup quietly omitting the exact objects the
+       overwrite fix was built to preserve. */
+    const m = /^frames\/(\d{4}-\d{2}-\d{2})\/(her|him)(?:-(\d{1,13}))?\.(jpg|png|webp)$/.exec(key);
     if (!m) {
       // Something under frames/ that this feature did not put there. Reported,
       // not exported: guessing a date and a person from an unknown name is how
@@ -1301,7 +1362,18 @@ try {
       orphans.push({ key, unrecognised: true });
       continue;
     }
-    orphans.push({ date: m[1], who: m[2], ext: m[3], key, atMs: 0, note: '', orphan: true });
+    /* The suffix IS the timestamp, so a superseded photograph exports with the
+       moment it was taken rather than a 0 that sorts it to the beginning of time.
+       Legacy keys have no suffix and keep the old 0. */
+    orphans.push({
+      date: m[1],
+      who: m[2],
+      ext: m[4],
+      key,
+      atMs: m[3] ? Number(m[3]) : 0,
+      note: '',
+      orphan: true,
+    });
   }
 } catch (err) {
   // A failed LIST costs orphan detection, not the export. Said out loud, because
@@ -1439,7 +1511,23 @@ for (const r of rows) {
     }
     r.length = head.length;
     r.etag = head.etag;
-    r.path = join(OUT, r.date, `${r.who}.${r.ext}`);
+    /* ONE FILE PER OBJECT, WHICH `<who>.<ext>` STOPPED GUARANTEEING.
+
+       This used to be safe because a person had at most one object per day, so the
+       output name could be derived from the day and the person the same way the R2
+       key was. Unique keys break that: a swapped day now yields the current
+       photograph AND every superseded one, and all of them would want
+       `<date>/<who>.<ext>` — so each write would clobber the previous file and the
+       run would report N exported photographs having kept one. That is the original
+       overwrite bug reappearing inside the tool built to survive it.
+
+       The photograph the hash points at keeps the plain, friendly name, because it
+       is the one a human is looking for. Superseded ones carry their millisecond,
+       which is already unique per object. A legacy orphan has no millisecond, and
+       cannot collide with another legacy orphan of the same extension — one key is
+       one object — so a fixed word is enough to separate it from the current file. */
+    const stamp = r.orphan ? `-${r.atMs > 0 ? r.atMs : 'legacy'}` : '';
+    r.path = join(OUT, r.date, `${r.who}${stamp}.${r.ext}`);
     const d = decide(r);
     r.action = d.action;
     r.why = d.why ?? null;
