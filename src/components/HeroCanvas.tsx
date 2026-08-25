@@ -867,9 +867,30 @@ export default function HeroCanvas() {
 
        `tools/golf_sweep.py` brute-forces every (aim, power) pair for a hole and
        reports two things per round: `tolDeg`, the widest aim window that still
-       sinks, and `hits`, the raw NUMBER of sinking lines. 61 holes were swept at
-       1440x900 and every cheap runtime signal was ranked against both
-       (Spearman, on ranks):
+       sinks, and `hits`, the raw NUMBER of sinking lines. Every cheap runtime
+       signal was ranked against both (Spearman, on ranks).
+
+       >>> RE-FITTED 2026-08-25, and the old table below it was WRONG — not
+       mis-derived, but measured on a green nobody plays. golf_sweep's numpy
+       height field had been left on frequencies 1.25/2.9 and amplitudes
+       1.05/0.40 while this file moved to 0.85/2.0 and 1.16/0.26, so the original
+       calibration described a different, steeper surface. Re-run on the
+       corrected field over 81 holes at 1440x900:
+
+                        vs hits    (old, stale field)
+           distance       -0.444        -0.633
+           mean up-slope  -0.607        -0.399
+           composite      -0.828        -0.853
+
+       So the two signals swap rank: up-slope leads, distance follows. Do not
+       read more into the swap than that — on a 41-hole subset the same
+       measurement gave -0.269 and -0.775, so the GAP is sampling noise even
+       though the ordering is stable. `lateral break` and `tiltMag` were NOT
+       re-measured on the corrected field; the -0.029 lateral figure below is
+       inherited from the stale sweep and should be treated as untested rather
+       than as a finding.
+
+       Old table, kept only so the drift is auditable:
 
                         vs tolDeg   vs hits
            distance        -0.420    -0.633
@@ -886,19 +907,55 @@ export default function HeroCanvas() {
        curves, so aiming is hard" — and the measurement says no. Do not
        reintroduce it on a hunch.
 
-       The shipped score is z(distance) + z(mean up-slope), which reaches
-       rho = -0.853 against `hits`. Distance in px is legitimately comparable
+       The shipped score is z(distance) + uW * z(mean up-slope), reaching
+       rho = -0.828 against `hits`. Distance in px is legitimately comparable
        across viewports because reach is fixed by the physics (MAX_SPEED and
        friction give ~425px on the flat regardless of screen size), so a 300px
        putt is a 300px putt everywhere.
+
+       `uW` EXISTS BECAUSE AN EQUAL SUM IS THE WRONG MODEL. z(d) + z(up) spends
+       half its weight on the weaker signal. Fitting the weight on purpose (grid
+       search, maximising |rho| against `hits`) gives uW = 1.25 and -0.828, where
+       the honest equal sum on the same corrected field manages only -0.799.
+       Note what that means about the ORIGINAL constants: they scored -0.867
+       because their uSd was fitted on the steeper stale green, which
+       over-weighted up-slope — the right adjustment reached for the wrong
+       reason, and it is why a plain mean/sd re-fit alone made the rating worse
+       rather than better.
 
        The mean up-slope is the SAME quantity reachToward() already integrates
        (its `up`), sampled at the same five fractions along the line — one
        definition, used twice.
 
-       Constants below are the mean/sd of those 61 swept holes and the quartile
-       cuts of the composite. The four bands separate cleanly by median sinking
-       lines: 226 / 196 / 76 / 39.
+       THE BANDS ARE ABSOLUTE NOW, NOT QUARTILES, and that is the fix for the
+       actual complaint. Cutting the composite at its own quartiles forces
+       exactly a quarter of holes into each word no matter how hard the green is,
+       so "Brutal" only ever meant "hardest 25% of whatever was dealt". Worse,
+       when the calibration went stale it drifted into over-reporting: 14 of 41
+       holes read Brutal where the true hardest quartile is 10.
+
+       A band is now defined by the share of the whole (aim, power) space that
+       actually sinks — grid-independent, so it survives a finer sweep:
+
+           Brutal  < 0.45%      Tricky  0.45-1.0%
+           Fair    1.0-2.0%     Gentle  >= 2.0%
+
+       `HOLE_CUTS` are then the z thresholds that reproduce those classes, fitted
+       by `tools/golf_calibrate.py` so this is re-runnable rather than frozen.
+       The cuts match the true MIX rather than maximising per-hole hits: 63.0%
+       exact agreement with 14 holes called harsh against 16 called soft, where
+       accuracy-maximising cuts score 70.4% but skew 16 harsh to 8 soft. An
+       unbiased rule that is wrong slightly more often beats a sharper one that
+       leans hard, because leaning hard is the bug being fixed.
+
+       Median sinking lines per band, monotonic as they must be:
+       2442 / 789 / 464 / 178.
+
+       This does NOT flatten the difficulty skew — it reports it. The tee sampler
+       deliberately draws 0.55-1.00 of the reach budget (mean 0.775, "lean
+       towards brutal usually"), and on 81 holes that yields 24 Brutal and 24
+       Tricky against 14 Gentle. The card now says so honestly instead of
+       manufacturing a flat quartile split or inflating it.
 
        HONEST LIMIT — AND THE EXPLANATION HERE WAS WRONG ONCE, so read the numbers
        rather than the intuition. This comment used to say wide viewports skew
@@ -932,8 +989,8 @@ export default function HeroCanvas() {
        picture wins here. Nobody compares hole difficulty across monitors, and the
        scorecard's "best" is per-browser localStorage, so there is no scoreboard
        for the inconsistency to be unfair on. */
-    const HOLE_CAL = { dMean: 271.5, dSd: 56.5, uMean: 5.7, uSd: 83.4 };
-    const HOLE_CUTS = [-0.793, 0.003, 0.852];
+    const HOLE_CAL = { dMean: 292.5, dSd: 43.6, uMean: 3.8, uSd: 89.8, uW: 1.25 };
+    const HOLE_CUTS = [-1.364, -0.203, 0.768];
     const HOLE_BANDS = ['Gentle', 'Fair', 'Tricky', 'Brutal'];
 
     /** 0..3. Recomputed per hole and on resize, never per frame. */
@@ -952,7 +1009,8 @@ export default function HeroCanvas() {
         up -= sl.gx * ux + sl.gy * uy;
       }
       up /= 5;
-      const z = (d - HOLE_CAL.dMean) / HOLE_CAL.dSd + (up - HOLE_CAL.uMean) / HOLE_CAL.uSd;
+      const z = (d - HOLE_CAL.dMean) / HOLE_CAL.dSd
+        + HOLE_CAL.uW * (up - HOLE_CAL.uMean) / HOLE_CAL.uSd;
       return z <= HOLE_CUTS[0] ? 0 : z <= HOLE_CUTS[1] ? 1 : z <= HOLE_CUTS[2] ? 2 : 3;
     };
 

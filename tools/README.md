@@ -248,6 +248,7 @@ proof.
 | `golf_pick.py` | turns a sweep into browser-replayable trials, deliberately including predicted MISSES |
 | `golf_pick_fails.py` | for a round the sweep calls unsolvable, the closest-possible lines, so the claim can be corroborated in a browser instead of trusted |
 | `golf_relief.py` | how much of the height variation is undulation vs plane, per undulation setting |
+| `golf_calibrate.py` | fits `HOLE_CAL` / `HOLE_CUTS` for the hero's difficulty card from a sweep, and prints the two lines to paste. Bands are anchored to an absolute share of the aim/power space, not to quartiles |
 | `golf_validate.py` | replays picked trials in a real browser and scores agreement (physics only — bypasses the pointer path) |
 | `golf_keys/stuck/mouse/touch/scroll.py`, `hero_ink.py` | the six input/render harnesses — see the golf section below |
 
