@@ -270,3 +270,30 @@ back/forward, no reduced-motion run, no slow-network or offline run. Since the f
 nothing else come from a third party, an offline run would change the descender numbers.
 `prefers-reduced-motion` is recorded but never forced on, so the reduced-motion code path
 is untested.
+
+---
+
+## Golf / hero harnesses (moved out of /tmp, 2026-08-25)
+
+These six lived in `/tmp` and were load-bearing for every change to the putting green and the hero
+canvas — a reboot would have lost them. They now live here. All take an optional base URL as the
+first argument (or `SITE_BASE`), defaulting to `http://localhost:8020`, and all use
+**directory-format** URLs: they previously requested `/index.html`, which `python -m http.server`
+serves but production 301s.
+
+    PY=~/personal/finance/finance/.venv/bin/python     # selenium + numpy live here, not in system python3
+
+    $PY tools/golf_keys.py    [base]   # keyboard putting: 20 checks (tab reach, ring, live region, no scroll)
+    $PY tools/golf_stuck.py   [base]   # soft-locks: must report 0
+    $PY tools/golf_mouse.py   [base]   # desktop click-drag from 5 lies: must report 0 failures
+    $PY tools/golf_touch.py   [base]   # touch putting, 7 lies: must report 0 failures
+    $PY tools/golf_scroll.py  [base]   # canvas must NOT move/scale on scroll (scale stays 1.0000)
+    $PY tools/hero_ink.py     [base]   # canvas ink over hero copy: must be 0% at every width
+
+Last known-good on the shipped build: `golf_keys` PASS · `golf_stuck` 0 · `golf_mouse` 0 ·
+`golf_touch` 0/7 · `hero_ink` PASS (0% × 12 widths).
+
+`golf_scroll.py` exists because the hero pin used to scrub the canvas plane
+(`y: 0 -> 6vh, scale: 1 -> 1.12`), which both moved an interactive playfield under the player and
+forced `toCanvas()` to divide out a live scale that reached 1.0991. If that check ever shows a scale
+other than 1.0000, someone has re-added a transform to `.hero-canvas-wrap`.
