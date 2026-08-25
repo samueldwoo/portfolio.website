@@ -43,7 +43,8 @@ import { HER_NAME, SESSION_SECRET, hasKV } from '../../../lib/us/config';
 import { readCookie, verify } from '../../../lib/us/session';
 import { wingDate, wingDateLabel } from '../../../lib/us/kv';
 import { touch } from '../../../lib/us/presence';
-import { identify, type Who } from '../../../lib/us/together';
+import { HER_TZ, HIS_TZ, identify, type Who } from '../../../lib/us/together';
+import { stillFresh } from '../../../lib/us/fresh';
 import {
   MAX_BYTES,
   NOTE_MAX,
@@ -69,6 +70,12 @@ await touch(viewer);
 const her = HER_NAME();
 const today = wingDate();
 
+/* ONE clock reading for the whole render, so two frames cannot be judged against
+   two different "now"s and disagree about whether 07:00 has passed. */
+const nowMs = Date.now();
+const myTz = viewer === 'her' ? HER_TZ : HIS_TZ;
+const theirTz = viewer === 'her' ? HIS_TZ : HER_TZ;
+
 /* ---- the window -----------------------------------------------------------
    CARRY_DAYS, not FRAME_DAYS: this reads exactly as many days as the slot can
    draw. It used to read seven to render two, which was the tell that the page and
@@ -87,7 +94,31 @@ const week: VisibleDayFrames[] = available ? await withUrls(stored) : [];
 /* The window is newest-first and the slot takes each person's most recent frame
    rather than strictly today's — see pickSlots in slots.ts for the timezone
    arithmetic that forces it, and for why the carry is two days and not seven. */
-const { mine, theirs, mineFrom, theirsFrom } = pickSlots(week, today, viewer);
+const picked = pickSlots(week, today, viewer);
+
+/* ---- AND THEN 07:00 IN WHOEVER POSTED IT --------------------------------------
+
+   pickSlots decides WHICH frame each side would show; this decides whether it is
+   still worth showing. Two rules rather than one because they answer different
+   questions: the first is "the most recent, within reach", the second is "has its
+   morning come".
+
+   THE EMPTY SLOT IS THE SIGNAL, and that is the whole reason for this. Under the day
+   window she had to reason about midnight in New York — which falls at 06:00 for her,
+   just as she wakes — to know whether posting counted as today. Now she looks: empty
+   means post, full means today is done.
+
+   PER POSTER, so each side expires on its own author's morning. Hers goes at 07:00
+   Paris, which is 22:00 for him, so he keeps it through his evening. His goes at 07:00
+   Los Angeles, which is 16:00 for her, so she keeps it through her whole morning
+   rather than losing it at 06:00 to a boundary neither of them chose.
+
+   HIDDEN, NOT DELETED. Both stores keep every frame exactly as posted; export:frames
+   still retrieves all of them. See fresh.ts. */
+const mine = picked.mine && stillFresh(picked.mine.atMs, myTz, nowMs) ? picked.mine : null;
+const theirs = picked.theirs && stillFresh(picked.theirs.atMs, theirTz, nowMs) ? picked.theirs : null;
+const mineFrom = mine ? picked.mineFrom : null;
+const theirsFrom = theirs ? picked.theirsFrom : null;
 
 /* ---- THE PLACE LABEL, RESOLVED LAZILY AND EXACTLY ONCE ----------------------
 
@@ -313,7 +344,9 @@ const whoWord = (w: Who): string => (w === viewer ? 'you' : w === 'her' ? (her |
         <div class="fr-pair">
             {[viewer, them].map((w) => {
                 const f = w === viewer ? mine : theirs;
-                const tz = w === 'her' ? 'Europe/Paris' : 'America/Los_Angeles';
+                /* The shared constants, not string literals — this line and the freshness
+                   check above must never disagree about where somebody lives. */
+                const tz = w === 'her' ? HER_TZ : HIS_TZ;
                 return (
                     <figure class="fr-frame" data-whose={w === viewer ? 'mine' : 'theirs'}>
                         <p class="fr-who">{whoWord(w)}</p>

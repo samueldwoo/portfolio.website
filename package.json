@@ -20,7 +20,8 @@
     "export:frames": "node scripts/frames-export.mjs",
     "test:slots": "node --experimental-strip-types scripts/test-slots.mts",
     "test:trace": "node --experimental-strip-types scripts/test-trace.mts",
-    "test:recent": "node --experimental-strip-types scripts/test-recent.mts"
+    "test:recent": "node --experimental-strip-types scripts/test-recent.mts",
+    "test:fresh": "node --experimental-strip-types scripts/test-fresh.mts"
   },
   "dependencies": {
     "@astrojs/react": "^6.0.4",
