@@ -709,5 +709,66 @@ document.addEventListener('keydown', function (ev) {
     window.location.replace(window.location.pathname + '#t-' + hash.slice(3));
 });
 </script>
+
+<!-- ============================================================
+     TELL THE SERVER WHEN A PHOTOGRAPH IS ACTUALLY OPENED.
+
+     The hub said "16 photographs you've never opened" and never
+     stopped saying it, because nothing had ever marked one as
+     seen. getMarks() returns a record for EVERY photograph,
+     defaulting to seen:0, so the count was structurally stuck at
+     the full sixteen forever.
+
+     The write itself was never missing: /api/us/mark has taken
+     `{ action: 'seen', id }` all along, and its own comment says
+     "the room fires it when she opens one". The ROOM is the
+     studio — which was benched, and the board replaced it as the
+     way photographs get looked at without inheriting that one
+     job. A pure-anchor lightbox cannot tell anybody anything.
+
+     WHY hashchange RATHER THAN A CLICK HANDLER: opening a
+     Polaroid is a navigation to `#m-<id>`, so the hash is the
+     event whichever way she got there — tapping a Polaroid,
+     using the back button, or following a link she sent herself.
+     A click handler would miss the last two.
+
+     FIRE AND FORGET, AND NOTHING VISIBLE. A count on the hub is
+     not worth a spinner, an error message, or blocking the
+     lightbox. It is also idempotent per session: `sent` stops a
+     re-open of the same photograph costing another request, and
+     the endpoint is bounded at 150 per ten minutes regardless.
+
+     With JavaScript off nothing is marked, which is exactly the
+     state this page was already in.
+     ============================================================ -->
+<script is:inline>
+(function () {
+    'use strict';
+    var sent = {};
+
+    function mark(hash) {
+        var m = /^#m-([A-Za-z0-9_-]{1,40})$/.exec(hash || '');
+        if (!m) return;
+        var id = m[1];
+        if (sent[id]) return;
+        sent[id] = true;
+        try {
+            fetch('/api/us/mark', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify({ action: 'seen', id: id }),
+                /* The lightbox must not wait on this, and a navigation away
+                   mid-request must not log an error. */
+                keepalive: true,
+            }).catch(function () { /* a count, not the content */ });
+        } catch (err) { /* same */ }
+    }
+
+    window.addEventListener('hashchange', function () { mark(location.hash); });
+    // And the case where she arrived with a hash already in the URL.
+    mark(location.hash);
+})();
+</script>
 </body>
 </html>
