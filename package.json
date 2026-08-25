@@ -22,7 +22,8 @@
     "test:trace": "node --experimental-strip-types scripts/test-trace.mts",
     "test:recent": "node --experimental-strip-types scripts/test-recent.mts",
     "test:fresh": "node --experimental-strip-types scripts/test-fresh.mts",
-    "test:frames-key": "node --experimental-strip-types scripts/test-frames-key.mts"
+    "test:frames-key": "node --experimental-strip-types scripts/test-frames-key.mts",
+    "test:ratelimit": "node --experimental-strip-types scripts/test-ratelimit.mts"
   },
   "dependencies": {
     "@astrojs/react": "^6.0.4",

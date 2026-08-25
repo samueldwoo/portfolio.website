@@ -36,7 +36,12 @@
    no environment and cannot throw, so importing it creates none of that coupling. It is
    here because this file spends three commands on EVERY write in the wing, which makes
    it a large share of a 50,000/month tier and the last place anyone would look. */
-import { countCommands, timer } from './trace';
+/* The `.ts` is explicit so this module can be imported by `node --experimental-strip-types`
+   for `npm run test:ratelimit`. Node's ESM resolver will not guess an extension, and
+   trace.ts has no imports of its own, so this one character is the whole difference
+   between the bucket arithmetic being testable and not. tsconfig sets
+   allowImportingTsExtensions, and Vite resolves it unchanged. Please don't tidy it away. */
+import { countCommands, timer } from './trace.ts';
 
 export interface Verdict {
   ok: boolean;
@@ -161,6 +166,48 @@ export async function hit(key: string, limit: number, windowSec: number): Promis
     }
   }
 
+  return hitMemory(key, limit, windowSec);
+}
+
+/**
+ * Count one attempt WITHOUT ever leaving the instance.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY A LOCAL-ONLY VARIANT EXISTS AT ALL
+ *
+ * hit() picks Upstash whenever Upstash is configured, which in production it always
+ * is. That is right for a write endpoint, where three commands on a deliberate
+ * action are nothing and a shared counter is worth having. It is wrong for
+ * /api/us/photo/[id], which is not an action at all: it fires once per `<img>`, and
+ * the board has sixteen photographs.
+ *
+ * So hitUpstash() there would put a fetch with a two-second ceiling in front of
+ * EVERY IMAGE, on an endpoint that otherwise does no network I/O at all on a warm
+ * instance (photos.ts caches object existence in process, and signing is pure
+ * arithmetic). That trades her image-loading latency for a throttle on somebody who
+ * already holds a valid session. The commands are affordable — about 0.9% of the
+ * monthly free tier — so cost is not the objection. The round trip is.
+ *
+ * ---------------------------------------------------------------------------
+ * WHAT THIS IS, AND WHAT IT IS NOT
+ *
+ * It is a bound on a runaway loop in our own island: a page script that requests
+ * images in a cycle stops being free after `limit` of them. That is the entire
+ * claim. It is NOT a defence, for the reason the file header already gives about
+ * the memory backend — each instance keeps its own Map, so N instances mean N times
+ * the stated ceiling. What decides who may read a photograph is the session cookie,
+ * and the id is matched against a hardcoded list so there is nothing to enumerate.
+ *
+ * SYNCHRONOUS ON PURPOSE, and it is a small safety property rather than a style
+ * choice: hit() returns a Promise, and a forgotten `await` gives you an object whose
+ * `.ok` is `undefined`, so `if (!limit.ok)` would refuse every request. This cannot
+ * be misused that way. Awaiting it anyway is harmless.
+ *
+ * A `{ local: true }` option on hit() was the obvious alternative and was rejected:
+ * a flag that silently changes which backend answers is easy to pass by accident or
+ * to drop in a refactor, and this choice needs to be visible at the call site.
+ */
+export function hitLocal(key: string, limit: number, windowSec: number): Verdict {
   return hitMemory(key, limit, windowSec);
 }
 

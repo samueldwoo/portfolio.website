@@ -54,6 +54,7 @@ import {
   placeholderSvg,
   resolvePhotoUrl,
 } from '../../../../lib/us/photos';
+import { clientKey, hitLocal } from '../../../../lib/us/ratelimit';
 import { readCookie, verify } from '../../../../lib/us/session';
 
 export const prerender = false;
@@ -119,14 +120,49 @@ const REDIRECT_CACHE: Record<string, string> = {
   'Cache-Control': `private, max-age=${PRESIGN_BUCKET_SEC}`,
 };
 
-function fail(status: number, error: string): Response {
+/* ---------------------------------------------------------------------------
+   THE CAP, AND WHY IT IS LOCAL AND GENEROUS
+
+   Every other endpoint in the wing rate-limits, and for a while this one was left
+   out as the exception. It is genuinely a different shape, though, and the numbers
+   are what settle how to do it rather than whether.
+
+   THIS IS NOT AN ACTION, IT IS AN IMAGE. The other endpoints are hit once when
+   somebody taps something. This one is hit once per <img>: sixteen photographs on
+   the board, plus the full-size copy of any she opens. So a limit here is priced
+   per-image, not per-gesture.
+
+   Which is why it uses hitLocal() and not hit(). hit() goes to Upstash whenever
+   Upstash is configured, and that is a fetch with a two-second ceiling in front of
+   every single image — on a handler that otherwise does NO network I/O on a warm
+   instance, because photos.ts caches existence in process and signing is pure
+   arithmetic. The three commands per call are affordable; the round trip in front
+   of her photographs is not. hitLocal() costs nothing and leaves the endpoint as
+   cheap as it was.
+
+   WHAT IT ACTUALLY PROTECTS AGAINST is a runaway loop — a bug in a page script
+   requesting images in a cycle, which today would burn a serverless invocation per
+   iteration with nothing to stop it. It is not a defence against a person, and it
+   does not need to be: the session cookie already decided who may look, and
+   findMemory() matches ids against a hardcoded list so there is nothing to walk.
+
+   THE CEILING IS SIZED SO A HUMAN CANNOT REACH IT. A heavy board session is about
+   thirty-two requests, so 200 in ten minutes is roughly six full page loads a
+   minute. Nobody browses like that and a loop passes it instantly. Erring high is
+   deliberate: the cost of being wrong in the generous direction is a loop that runs
+   a little longer, and in the strict direction it is a broken image in her room.
+   --------------------------------------------------------------------------- */
+const RATE_LIMIT = 200;
+const RATE_WINDOW_SEC = 600;
+
+function fail(status: number, error: string, extra?: Record<string, string>): Response {
   return new Response(JSON.stringify({ ok: false, error }), {
     status,
-    headers: { 'Content-Type': 'application/json', ...NO_STORE },
+    headers: { 'Content-Type': 'application/json', ...NO_STORE, ...extra },
   });
 }
 
-export const GET: APIRoute = async ({ params, cookies, url }) => {
+export const GET: APIRoute = async ({ params, cookies, url, request, clientAddress }) => {
   // ---- 1. Authorize, ourselves, from scratch -----------------------------
   const secret = SESSION_SECRET();
   if (!secret) {
@@ -143,6 +179,20 @@ export const GET: APIRoute = async ({ params, cookies, url }) => {
     verify(secret, 'admin', readCookie(cookies, 'admin', url));
 
   if (!authorized) return fail(401, 'unauthorized');
+
+  /* ---- 1a. Cap the volume, after authorising and before doing any work ----
+     AFTER the cookie check, so an unauthenticated flood cannot consume her bucket
+     and lock her out of her own photographs. BEFORE findMemory() and the presign, so
+     a refusal is the cheapest possible response and skips the R2 existence check
+     that a cold instance would otherwise do.
+
+     Retry-After is sent because this response can reach an <img>: a browser that
+     gets a bare 429 for a picture has nothing to act on, and the header is the one
+     thing that tells a client when it is worth trying again. */
+  const capped = hitLocal(`photo:${clientKey(request, clientAddress)}`, RATE_LIMIT, RATE_WINDOW_SEC);
+  if (!capped.ok) {
+    return fail(429, 'rate', { 'Retry-After': String(capped.retryAfter) });
+  }
 
   // ---- 2. Resolve the id against the manifest ----------------------------
   const memory = findMemory(params.id);
