@@ -110,19 +110,38 @@ def play_hole(g, rng, aim_sd, power_sd, dt, dts, overshoot, read):
         # just the stroke cap.
         want = dist * overshoot / flat_run
         power = float(np.clip(want * rng.normal(1.0, power_sd), 0.1, 1.0))
-        out, _, fx, fy, *_ = g.putt(math.cos(ang), math.sin(ang), power,
-                                    dt=dt, dts=dts, start=(bx, by))
+        out, _, fx, fy, _, _, _, path = g.putt(math.cos(ang), math.sin(ang),
+                                               power, dt=dt, dts=dts,
+                                               start=(bx, by), trace=True)
         if out == "sunk":
             return stroke
-        # What the green did to that putt, as an angle. Measured from where the
-        # ball STARTED to where it finished, against where it was aimed. A ball
-        # that finished essentially on top of its start (parked on a wall, or
-        # barely moved) teaches nothing, so skip rather than learn from noise.
-        moved = math.hypot(fx - bx, fy - by)
-        if moved > 8.0:
-            bend = math.atan2(fy - by, fx - bx) - ang
-            bend = (bend + math.pi) % (2 * math.pi) - math.pi   # to [-pi, pi]
-            bias = max(-BIAS_CAP, min(BIAS_CAP, bias - read * bend))
+        # WHAT THE GREEN DID, MEASURED AT THE HOLE — not at the resting place.
+        #
+        # The first version took the angle from the ball's start to its FINAL
+        # position. That conflates break with everything that happens after the
+        # ball passes the cup: with `overshoot` it rolls on by design, then keeps
+        # going downhill or parks on a wall, and none of that is information about
+        # the line. Learning from it made `bias` slam to its +-35deg cap and stay
+        # there, spraying putts 80-210px wide and stranding the player on holes
+        # whose every lie was perfectly reachable. It looked like the game had
+        # more dead ends than it does.
+        #
+        # A real player watches the ball AT the hole and says "it broke left".
+        # So take the signed lateral offset at the point of closest approach and
+        # correct by that angle. Off-line by `lat` after travelling `along` is an
+        # aiming error of atan2(lat, along), which is the correction to apply.
+        best = None
+        for px, py, _sp in path or []:
+            dd = math.hypot(px - g.cup_x, py - g.cup_y)
+            if best is None or dd < best[0]:
+                best = (dd, px, py)
+        if best is not None:
+            ex, ey = best[1] - bx, best[2] - by
+            along = ex * math.cos(aim) + ey * math.sin(aim)
+            lat = -ex * math.sin(aim) + ey * math.cos(aim)
+            if along > 20.0:
+                bend = math.atan2(lat, along)
+                bias = max(-BIAS_CAP, min(BIAS_CAP, bias - read * bend))
         bx, by = fx, fy
     return MAX_STROKES
 
