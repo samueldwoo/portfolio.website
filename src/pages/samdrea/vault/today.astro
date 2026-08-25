@@ -96,6 +96,7 @@ import { touch } from '../../../lib/us/presence';
    different jobs. */
 import { HER_TZ, HIS_TZ, identify, type Who } from '../../../lib/us/together';
 import { mostRecent } from '../../../lib/us/slots';
+import { stillFresh } from '../../../lib/us/fresh';
 import {
   MAX_REACTIONS_PER_DAY,
   MAX_REACTION_UNITS,
@@ -144,6 +145,10 @@ await touch(_seenBy);
 
 const her = HER_NAME();
 const today = wingDate();
+
+/* ONE clock reading for the whole render, so the two sides cannot be judged against
+   two different "now"s and disagree about whether 07:00 has passed. */
+const nowMs = Date.now();
 
 /** How many DAYS the archive renders. Matches ARCHIVE_LIMIT in /api/us/song. */
 const ARCHIVE_LIMIT = 60;
@@ -207,8 +212,37 @@ const todayPair = pairs.find((p) => p.date === today) ?? emptyPair(today);
 /* Each side's most recent, and the day it came from. The whole day RECORD is looked
    up too, because reactions live on it and must be read from the same day the song
    is — see reactionsFor(). */
-const hisPick = mostRecent<DayPair['his']>(pairs, 'his');
-const hersPick = mostRecent<DayPair['hers']>(pairs, 'hers');
+const hisPickRaw = mostRecent<DayPair['his']>(pairs, 'his');
+const hersPickRaw = mostRecent<DayPair['hers']>(pairs, 'hers');
+
+/* ---- AND THEN 07:00 IN WHOEVER POSTED IT --------------------------------------
+
+   The same rule the photograph page uses, applied here so the two halves of the wing
+   cannot disagree about when a day ends. mostRecent decides WHICH song each side
+   would show; this decides whether its morning has come.
+
+   PER POSTER: his clears at 07:00 Los Angeles, hers at 07:00 Paris. So each of them
+   wakes to their own side empty — which is the prompt to pick something — while the
+   other's is still there to hear. A shared boundary cannot do that nine hours apart.
+
+   THE STORED `tz` FIRST, and the side's constant only as a fallback. TrackRecord
+   records the timezone the poster was in when they posted, so a song sent from a
+   different country expires on the morning of the place it was actually sent from
+   rather than the one they usually live in. The fallback covers records written
+   before that field existed.
+
+   Hidden, never deleted: the archive below still lists every day, and the store is
+   untouched. See fresh.ts. */
+const hisFresh = Boolean(
+  hisPickRaw.value && stillFresh(hisPickRaw.value.postedAt, hisPickRaw.value.tz ?? HIS_TZ, nowMs),
+);
+const hersFresh = Boolean(
+  hersPickRaw.value && stillFresh(hersPickRaw.value.postedAt, hersPickRaw.value.tz ?? HER_TZ, nowMs),
+);
+/* The whole pick is emptied rather than just the track, so the date and the carried
+   flag cannot survive their own song and label an empty slot. */
+const hisPick = hisFresh ? hisPickRaw : { value: null, date: null, carried: false };
+const hersPick = hersFresh ? hersPickRaw : { value: null, date: null, carried: false };
 const hisPair = pairs.find((p) => p.date === hisPick.date) ?? todayPair;
 const hersPair = pairs.find((p) => p.date === hersPick.date) ?? todayPair;
 /* Sliced here, not in the store call: getExchange's limit caps each SIDE's
