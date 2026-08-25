@@ -150,8 +150,20 @@ const today = wingDate();
    two different "now"s and disagree about whether 07:00 has passed. */
 const nowMs = Date.now();
 
-/** How many DAYS the archive renders. Matches ARCHIVE_LIMIT in /api/us/song. */
-const ARCHIVE_LIMIT = 60;
+/**
+ * How many DAYS the archive renders. Matches ARCHIVE_LIMIT in /api/us/song.
+ *
+ * SEVEN, DOWN FROM SIXTY. Sixty days is a hundred and twenty songs on one page, and
+ * that stopped being a keepsake and became a backlog — something to scroll past
+ * rather than look at. The photograph page has no history at all now, and a week is
+ * the smallest span that still answers the only question this list is really for:
+ * what did we send each other recently.
+ *
+ * Nothing is lost by lowering it. Every day either of them has posted is still in the
+ * store, still counted in the totals above, and still reachable — the number only
+ * decides how much is DRAWN.
+ */
+const ARCHIVE_LIMIT = 7;
 
 /**
  * How far back the COUNTING goes. 365, which is also the ceiling getSongs()

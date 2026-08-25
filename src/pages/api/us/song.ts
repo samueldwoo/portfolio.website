@@ -114,7 +114,9 @@ export const prerender = false;
  * for a JSON response and is the honest thing to return rather than truncating
  * whichever side sorted second.
  */
-const ARCHIVE_LIMIT = 60;
+/* 7, and it must equal the page's ARCHIVE_LIMIT — the two are the same window seen
+   from two sides, and a mismatch shows her a day in one place and not the other. */
+const ARCHIVE_LIMIT = 7;
 
 /**
  * A ceiling on my own posting, not a security control.
