@@ -224,6 +224,29 @@ def sweep(g: S.Green, angles_deg, powers, dt, start=None):
         if done.any():
             live = live[~done]
 
+    # RELIEF, THE THIRD MIRROR. HeroCanvas.tsx will not let a ball REST somewhere
+    # the cup cannot be reached from, and golf_sim.Green.relief_in mirrors that.
+    # This numpy path is a separate integration loop, so it needs the rule too --
+    # and it is the same trap that had Field.height on a stale field for three
+    # days: two mirrors were updated and the vectorised one was forgotten.
+    #
+    # Applied to STOPPED **and TIMED-OUT** putts, not just stopped ones: the
+    # component runs relief from a single rest branch that both conditions fall
+    # into (`rollTime > MAX_ROLL || (speed < STOP_SPEED && ...)`), and so does
+    # golf_sim. A sunk putt is skipped because it is already at the cup.
+    # Sentinels are 0 running, 1 sunk, 2 stopped, 3 timeout -- the first version
+    # of this tested `outcome == 0`, which selects nothing, so the selfcheck
+    # stayed at 2.083e+01 px and said so.
+    #
+    # Loop rather than vectorise: relief bisects on reach_toward, which integrates
+    # five slope samples along a line that moves with the point, and the cost
+    # lands only on candidates that did not drop.
+    #
+    # If --selfcheck ever reports a non-zero final-pos delta again, suspect this
+    # block first. It is what caught the omission in the first place.
+    for k in np.flatnonzero((outcome == 2) | (outcome == 3)):
+        bx[k], by[k] = g.relief_in(float(bx[k]), float(by[k]))
+
     return {
         "outcome": outcome.reshape(nA, nP),
         "closest": closest.reshape(nA, nP),

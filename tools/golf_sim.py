@@ -239,6 +239,40 @@ class Green:
                 break
         self.cup_x, self.cup_y = bx, by
 
+    def relief_in(self, bx, by):
+        """MIRROR of HeroCanvas.tsx reliefIn(). Keep bit-identical.
+
+        A ball may pass through a spot the cup cannot be reached from; it may not
+        STOP there. Without this the game had unwinnable holes -- see the long
+        note at the component's rest branch. Applied at rest only, so a ball in
+        flight is untouched and every trajectory number stays what it was.
+
+        `reach_safety` is the budget the component calls REACH_BUDGET. When it is
+        None the component's own default of 0.9 is used rather than skipping
+        relief, because "no budget set" is a caller omission and silently
+        disabling the rule would reintroduce exactly the class of bug this fixes.
+        """
+        bud = self.reach_safety if self.reach_safety is not None else 0.9
+        dx0 = self.cup_x - bx
+        dy0 = self.cup_y - by
+        d0 = math.hypot(dx0, dy0) or 1.0
+        if d0 <= self.reach_toward(bx, by) * bud:
+            return bx, by
+        lo, hi = 0.0, 1.0
+        for _ in range(20):
+            t = (lo + hi) / 2.0
+            px = bx + dx0 * t
+            py = by + dy0 * t
+            d = math.hypot(self.cup_x - px, self.cup_y - py) or 1.0
+            if d <= self.reach_toward(px, py) * bud:
+                hi = t
+            else:
+                lo = t
+        t = min(1.0, hi + 0.02)
+        cap = max(0.0, 1.0 - (CUP_R * 4.0) / d0)
+        tt = min(t, cap)
+        return bx + dx0 * tt, by + dy0 * tt
+
     def reach_toward(self, px, py):
         """Max distance a FULL-power putt can roll from (px,py) toward the cup.
 
@@ -434,6 +468,7 @@ class Green:
             if roll_time > MAX_ROLL or (speed < STOP_SPEED
                                        and (holds or stalled > 0.9)):
                 out = "timeout" if roll_time > MAX_ROLL else "stopped"
+                bx, by = self.relief_in(bx, by)
                 return (out, i, bx, by, closest, hot_pass, hot_min_speed, path)
             if speed < 6 and not holds:
                 vx += gx * step_dt * 0.5
