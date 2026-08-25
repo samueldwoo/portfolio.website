@@ -9,7 +9,7 @@ everything would pass it. So each round contributes:
   miss-edge     three steps OUTSIDE the run                      -> expect NOT sunk
   miss-far      the solution line rotated 90 deg, full power     -> expect NOT sunk
 
-Usage: golf_pick.py probe.json out.json [--rounds 20] [--fps 120]
+Usage: golf_pick.py probe.json out.json [--rounds 20] [--dt-source probe|fps]
 """
 import argparse
 import json
@@ -51,7 +51,12 @@ def main():
     ap.add_argument("probe")
     ap.add_argument("out")
     ap.add_argument("--rounds", type=int, default=20)
-    ap.add_argument("--fps", type=float, default=120.0)
+    # SAME TIMESTEP AS golf_sweep, from the same resolver. This defaulted to
+    # --fps 120 while golf_sweep defaulted to 60, so the tool that picks the
+    # trials and the tool that certifies solvability disagreed about the physics
+    # by a factor of two — and neither matched the page.
+    ap.add_argument("--fps", type=float, default=S.DEFAULT_FPS)
+    ap.add_argument("--dt-source", choices=("probe", "fps"), default="probe")
     ap.add_argument("--astep", type=float, default=1.0)
     ap.add_argument("--pstep", type=float, default=0.025)
     a = ap.parse_args()
@@ -60,7 +65,8 @@ def main():
     w = max(1, round(probe["wrap"]["w"]))
     h = max(1, round(probe["wrap"]["h"]))
     cb, nr = probe["copyBottom"], probe["narrow"]
-    dt = 1.0 / a.fps
+    dt, dt_label = S.resolve_dt(probe, a.dt_source, a.fps)
+    print(f"# dt={dt_label}")
     measured = {r["round"]: r for r in probe["rounds"]}
 
     angles = np.arange(0.0, 360.0, a.astep)
@@ -68,7 +74,13 @@ def main():
 
     trials = []
     for rnd in range(1, a.rounds + 1):
-        g = S.Green(w, h, cb, nr, rnd)
+        # copy_edge IS REQUIRED. Without it Green falls back to the
+        # pre-derivation 0.44 left edge, so the play box ran 633..1354 while the
+        # real one runs 905..1354 at 1440 — the trials were picked with the left
+        # wall 271px too far out, and a putt that the page stops against that
+        # wall kept rolling here. Overriding ball0/cup from the probe fixed the
+        # tee and the hole and hid the box.
+        g = S.Green(w, h, cb, nr, rnd, copy_edge=probe["copyEdge"])
         if rnd in measured:
             m = measured[rnd]
             g.ball0 = (m["ball"][0], m["ball"][1])
@@ -83,7 +95,7 @@ def main():
         if best is None:
             trials.append({"round": rnd, "kind": "unsolvable",
                            "cup": [g.cup_x, g.cup_y], "ball": list(g.ball0)})
-            print(f"round {rnd}: NO SOLUTION at dt=1/{a.fps:g}")
+            print(f"round {rnd}: NO SOLUTION at dt={dt_label}")
             continue
         st, ln, pi = best
         n = angles.size
@@ -114,8 +126,8 @@ def main():
         print(f"round {rnd}: run {ln * a.astep:.1f}deg @ power {pw:.3f}, "
               f"centre {centre:.1f}deg")
 
-    json.dump({"probe": a.probe, "fps": a.fps, "trials": trials},
-              open(a.out, "w"), indent=1)
+    json.dump({"probe": a.probe, "dt": dt_label, "dtSource": a.dt_source,
+               "fps": a.fps, "trials": trials}, open(a.out, "w"), indent=1)
     bad = [t for t in trials if t.get("predict") and
            ((t["expect"] == "sunk") != (t["predict"] == "sunk"))]
     print(f"\n{len(trials)} trials -> {a.out}"

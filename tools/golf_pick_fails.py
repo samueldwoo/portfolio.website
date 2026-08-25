@@ -5,7 +5,8 @@ closest to the cup over the whole (angle x power) grid. Replaying them in the
 browser is the direct corroboration that the hole really cannot be holed --
 independent of trusting the sweep's completeness.
 
-Usage: golf_pick_fails.py probe.json out.json 7,12 [--top 15] [--fps 120]
+Usage: golf_pick_fails.py probe.json out.json 7,12 [--top 15]
+                         [--dt-source probe|fps]
 """
 import argparse
 import json
@@ -22,7 +23,9 @@ ap.add_argument("probe")
 ap.add_argument("out")
 ap.add_argument("rounds")
 ap.add_argument("--top", type=int, default=15)
-ap.add_argument("--fps", type=float, default=120.0)
+# SAME TIMESTEP AS golf_sweep AND golf_pick, from the same resolver.
+ap.add_argument("--fps", type=float, default=S.DEFAULT_FPS)
+ap.add_argument("--dt-source", choices=("probe", "fps"), default="probe")
 ap.add_argument("--astep", type=float, default=0.5)
 ap.add_argument("--pstep", type=float, default=0.01)
 a = ap.parse_args()
@@ -31,14 +34,17 @@ probe = json.load(open(a.probe))
 w = max(1, round(probe["wrap"]["w"]))
 h = max(1, round(probe["wrap"]["h"]))
 cb, nr = probe["copyBottom"], probe["narrow"]
-dt = 1.0 / a.fps
+dt, dt_label = S.resolve_dt(probe, a.dt_source, a.fps)
+print(f"# dt={dt_label}")
 measured = {r["round"]: r for r in probe["rounds"]}
 angles = np.arange(0.0, 360.0, a.astep)
 powers = np.round(np.arange(0.1, 1.0 + 1e-9, a.pstep), 6)
 
 trials = []
 for rnd in [int(v) for v in a.rounds.split(",")]:
-    g = S.Green(w, h, cb, nr, rnd)
+    # copy_edge is REQUIRED: without it the play box reverts to the
+    # pre-derivation 0.44 left edge and the wall sits 271px too far out at 1440.
+    g = S.Green(w, h, cb, nr, rnd, copy_edge=probe["copyEdge"])
     if rnd in measured:
         m = measured[rnd]
         g.ball0 = (m["ball"][0], m["ball"][1])
@@ -62,6 +68,7 @@ for rnd in [int(v) for v in a.rounds.split(",")]:
             "cup": [g.cup_x, g.cup_y], "ball": list(g.ball0),
         })
 
-json.dump({"probe": a.probe, "fps": a.fps, "trials": trials},
+json.dump({"probe": a.probe, "dt": dt_label, "dtSource": a.dt_source,
+           "fps": a.fps, "trials": trials},
           open(a.out, "w"), indent=1)
 print(f"{len(trials)} trials -> {a.out}")

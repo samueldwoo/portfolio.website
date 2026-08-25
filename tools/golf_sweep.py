@@ -4,11 +4,13 @@ Vectorised with numpy: every candidate putt for a round is stepped in lockstep,
 which is what makes an exhaustive sweep tractable (a single putt can roll 7s =
 840 frames, and a fine sweep is ~10^5 putts per round).
 
-The numpy field functions are bit-checked against the scalar port in
-tools/golf_sim.py (itself checked against the browser) by --selfcheck.
+The numpy field functions are checked against the scalar port in tools/golf_sim.py
+(itself checked against the browser) on every run. That check was opt-in until
+2026-08-25 and the drift it exists to catch had been in the tree for days — see
+Field.height. Use --no-selfcheck only when you know why.
 
 Usage:
-  golf_sweep.py probe_1440.json [--rounds 24] [--dt 60] [--fine]
+  golf_sweep.py probe.json [--rounds 24] [--dt-source probe|fps] [--fps 120]
                 [--capture 520] [--maxspeed 900] [--friction 0.12] [--cupr 13]
 """
 import argparse
@@ -67,9 +69,19 @@ class Field:
         nx = (x - self.hmx) / self.span
         ny = (y - self.hmy) / self.span
         plane = (nx * self.ca + ny * self.sa) * self.tm
-        undul = (fbm_np(nx * 1.25 + self.sd, ny * 1.25 - self.sd) * 1.05
-                 + fbm_np(nx * 2.9 - self.sd * 1.7,
-                          ny * 2.9 + self.sd * 1.3) * 0.40) * self.us
+        # THIRD MIRROR OF heightAt, AND THE ONE THAT WENT STALE. It sat at
+        # frequencies 1.25/2.9 and amplitudes 1.05/0.40 long after the component
+        # moved to 0.85/2.0 and 1.16/0.26 — up to 1.14 units of height error, mean
+        # |grad| 202 against a real 179, and less than half the restable area. So
+        # every sweep number, including SOLVABLE 41/41, described a green nobody
+        # plays, and every trial golf_pick handed the browser was aimed on it.
+        #
+        # golf_verify_port.py could not catch it: it only ever checked
+        # golf_sim.height_at. golf_sweep's own --selfcheck WOULD have caught it,
+        # which is why that now runs by default rather than on request.
+        undul = (fbm_np(nx * 0.85 + self.sd, ny * 0.85 - self.sd) * 1.16
+                 + fbm_np(nx * 2.0 - self.sd * 1.7,
+                          ny * 2.0 + self.sd * 1.3) * 0.26) * self.us
         return plane + undul
 
     def slope(self, x, y):
@@ -81,8 +93,28 @@ class Field:
 
 # ---------------- vectorised stepBall ----------------
 
+def as_dts(dt):
+    """A scalar timestep or a measured per-frame sequence, one way in.
+
+    The page's dt is a real frame delta, so the honest input here is a sequence.
+    A float is still accepted because a uniform step is the right tool for a
+    what-if (halve the friction, widen the cup) where the browser is not the
+    reference. Whichever it is, the loop below reads it the same way and the
+    sequence's LAST value repeats once a putt outlives the capture.
+    """
+    if isinstance(dt, (int, float)):
+        return [float(dt)]
+    out = [float(v) for v in dt]
+    if not out:
+        raise ValueError("empty dt sequence")
+    return out
+
+
 def sweep(g: S.Green, angles_deg, powers, dt, start=None):
-    """Returns dict of per-candidate result arrays, shape (nA, nP)."""
+    """Returns dict of per-candidate result arrays, shape (nA, nP).
+
+    `dt` is a float or a measured per-frame sequence (see as_dts).
+    """
     f = Field(g)
     b = g.box
     bxl, bxr = b["x"], b["x"] + b["w"]
@@ -110,12 +142,16 @@ def sweep(g: S.Green, angles_deg, powers, dt, start=None):
     live = np.arange(N)
 
     hold_thr = S.SLOPE_ACCEL * S.REST_SLOPE   # mirrors HeroCanvas REST_SLOPE
-    keep = math.pow(g.friction, dt)
-    max_frames = int(math.ceil(S.MAX_ROLL / dt)) + 4
+    dts = as_dts(dt)
+    # Frame budget from the SMALLEST step, so a fast-frame tail cannot truncate a
+    # putt that MAX_ROLL would otherwise still be carrying.
+    max_frames = int(math.ceil(S.MAX_ROLL / min(dts))) + 4
 
-    for _ in range(max_frames):
+    for _fi in range(max_frames):
         if live.size == 0:
             break
+        dt = dts[_fi] if _fi < len(dts) else dts[-1]
+        keep = math.pow(g.friction, dt)
         x = bx[live]
         y = by[live]
         gx, gy = f.slope(x, y)
@@ -215,15 +251,23 @@ def widest_run(mask_row, step_deg, wrap=True):
 
 
 def selfcheck(g, dt):
-    """Vectorised engine vs the scalar port, on a handful of putts."""
+    """Vectorised engine vs the scalar port, on a handful of putts.
+
+    THIS RUNS BY DEFAULT NOW. It was opt-in, and the one bug it exists to catch —
+    the vectorised height field drifting away from the scalar one — then sat in
+    the tree through every documented invariant run, because none of them passed
+    the flag. A guard nobody turns on is not a guard.
+    """
     worst = 0.0
     dis = 0
     tested = 0
+    dts = as_dts(dt)
     for adeg in (0.0, 37.0, 111.0, 214.0, 300.5):
         for p in (0.3, 0.6, 0.95):
             r = sweep(g, [adeg], [p], dt)
             a = math.radians(adeg)
-            o, _, fx, fy, _, _, _, _ = g.putt(math.cos(a), math.sin(a), p, dt=dt)
+            o, _, fx, fy, _, _, _, _ = g.putt(math.cos(a), math.sin(a), p,
+                                              dts=dts)
             v = {1: "sunk", 2: "stopped", 3: "timeout"}[int(r["outcome"][0, 0])]
             tested += 1
             if v != o:
@@ -240,7 +284,14 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("probe")
     ap.add_argument("--rounds", type=int, default=24)
-    ap.add_argument("--fps", type=float, default=60.0)
+    # TIMESTEP: shared default, and it USED TO BE 60 here while golf_pick used
+    # 120 — two tools written to corroborate each other integrating different
+    # greens. `--dt-source probe` is the faithful setting and the default:
+    # it replays the frame deltas golf_probe.py measured during a real roll.
+    ap.add_argument("--fps", type=float, default=S.DEFAULT_FPS)
+    ap.add_argument("--dt-source", choices=("probe", "fps"), default="probe",
+                    help="probe: replay probe.json's dt_roll_ms (falls back to "
+                         "--fps if absent). fps: uniform 1/fps.")
     ap.add_argument("--astep", type=float, default=1.0)
     ap.add_argument("--pstep", type=float, default=0.025)
     ap.add_argument("--pmin", type=float, default=0.1)
@@ -248,11 +299,14 @@ def main():
     ap.add_argument("--maxspeed", type=float, default=S.MAX_SPEED)
     ap.add_argument("--friction", type=float, default=S.FRICTION)
     ap.add_argument("--cupr", type=float, default=S.CUP_R)
-    ap.add_argument("--selfcheck", action="store_true")
+    ap.add_argument("--selfcheck", action="store_true",
+                    help="(now the default; kept so old invocations still run)")
+    ap.add_argument("--no-selfcheck", action="store_true",
+                    help="skip the vectorised-vs-scalar check")
     ap.add_argument("--only", default=None,
                     help="comma-separated round numbers to sweep")
     ap.add_argument("--undul", type=float, default=1.0,
-                    help="multiplier on BOTH fbm amplitudes (0.42/0.16)")
+                    help="multiplier on BOTH fbm amplitudes (1.16/0.26)")
     ap.add_argument("--tilt", type=float, default=1.0,
                     help="multiplier on the plane's tiltMag")
     ap.add_argument("--downhill-credit", type=float, default=None,
@@ -271,13 +325,13 @@ def main():
     w = max(1, round(probe["wrap"]["w"]))
     h = max(1, round(probe["wrap"]["h"]))
     cb, nr = probe["copyBottom"], probe["narrow"]
-    dt = 1.0 / a.fps
+    dt, dt_label = S.resolve_dt(probe, a.dt_source, a.fps)
 
     angles = np.arange(0.0, 360.0, a.astep)
     powers = np.round(np.arange(a.pmin, 1.0 + 1e-9, a.pstep), 6)
 
     print(f"# {probe['viewport'][0]}x{probe['viewport'][1]}  narrow={nr}  "
-          f"dt=1/{a.fps:g}s  grid={angles.size}ang x {powers.size}pow "
+          f"dt={dt_label}  grid={angles.size}ang x {powers.size}pow "
           f"= {angles.size * powers.size} putts/round")
     print(f"# capture<{a.capture:g}  MAX_SPEED={a.maxspeed:g}  "
           f"FRICTION={a.friction:g}  CUP_R={a.cupr:g}  "
@@ -285,7 +339,7 @@ def main():
           f"downhillCredit={a.downhill_credit} "
           f"undul={a.undul} tilt={a.tilt}")
 
-    if a.selfcheck:
+    if not a.no_selfcheck:
         g0 = S.Green(w, h, cb, nr, 1, copy_edge=probe["copyEdge"],
                      cup_r=a.cupr, capture_speed=a.capture,
                      max_speed=a.maxspeed, friction=a.friction)

@@ -7,11 +7,15 @@ the Python port of JS's lossy `hash2` can be proven bit-equal.
 Usage: golf_probe.py [base_url] [width] [height] [rounds] > probe.json
 """
 import json
+import math
 import sys
 import time
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+
+sys.path.insert(0, __file__.rsplit("/", 1)[0])
+from golf_frames import capture  # noqa: E402
 
 # BASE URL: directory-format, and 8020 to match every other harness here. This
 # file asked for "/index.html" on a default port of its own until 2026-08-25,
@@ -103,7 +107,15 @@ for (let k = 0; k < 200; k++) {
 return out;
 """
 
-DT_JS = r"""
+"""IDLE rAF deltas. Kept, renamed, and demoted to a reference number.
+
+This used to be called `dt_ms` and it was the only timestep evidence probe.json
+carried, which made it look like the answer to "what dt does the game
+integrate with". It is not: it samples a QUIET page with no ball rolling, so it
+misses every per-frame cost the game actually pays. Nothing consumes it. The
+number the offline tools need is `dt_roll_ms`, measured while a putt is in
+flight — see tools/golf_frames.py."""
+DT_IDLE_JS = r"""
 const done = arguments[0];
 const ds = [];
 let last = 0;
@@ -156,6 +168,24 @@ def main():
             )
             rounds.append({"round": i, "ball": s["ball"], "cup": s["cup"]})
 
+        # ROLL TIMESTEP. Sampled LAST, after the round table is closed, because
+        # each capture putts and re-tees and would otherwise walk the round
+        # sequence the table is built from. Three full-power putts in different
+        # directions: one is a small sample, and a putt that sinks early is a
+        # short one.
+        roll_ms = []
+        roll_runs = []
+        for adeg in (0.0, 120.0, 240.0):
+            d.execute_script("window.__puttTest.reset();")
+            time.sleep(0.2)
+            ang = math.radians(adeg)
+            c = capture(d, math.cos(ang), math.sin(ang), 1.0, heavy=False)
+            ms = [v * 1000.0 for v in c["roll_dts"]]
+            roll_runs.append({"angle": adeg, "frames": len(ms),
+                              "skips": c["skips"], "sunk": c["sunk"]})
+            if not c["skips"]:
+                roll_ms += ms
+
         out = {
             "viewport": [W, H],
             "wrap": wrap,
@@ -166,7 +196,11 @@ def main():
             "rounds": rounds,
             "hash2": d.execute_script(HASH_JS),
             "field": d.execute_script(FIELD_JS),
-            "dt_ms": d.execute_async_script(DT_JS),
+            # dt_roll_ms is the one the offline tools integrate with. dt_idle_ms
+            # is kept only so the difference between the two stays visible.
+            "dt_roll_ms": roll_ms,
+            "dt_roll_runs": roll_runs,
+            "dt_idle_ms": d.execute_async_script(DT_IDLE_JS),
         }
         print(json.dumps(out))
     finally:

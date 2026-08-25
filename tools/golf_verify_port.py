@@ -6,8 +6,11 @@ is auditing a different green than the one the player sees.
 import json
 import sys
 
+import numpy as np
+
 sys.path.insert(0, __file__.rsplit("/", 1)[0])
 from golf_sim import Green, hash2  # noqa: E402
+from golf_sweep import Field  # noqa: E402
 
 probe = json.load(open(sys.argv[1] if len(sys.argv) > 1 else "probe_1440.json"))
 # Pass the tee rule's budget to check the FIXED build; omit for the original.
@@ -35,6 +38,22 @@ for x, y, cx, cy, span, ta, tm, sd, want in probe["field"]:
     g.undul_scale = 1.0
     hw = max(hw, abs(g.height_at(x, y) - want))
 print(f"heightAt: {len(probe['field'])} samples, max abs delta {hw:.3e}")
+
+# 2b. THE OTHER heightAt. golf_sweep carries its own vectorised copy of the field
+# and every solvability number comes out of THAT one, not the scalar port above.
+# This script checked only the scalar port and printed PORT VERIFIED while the
+# numpy copy was 1.14 units out — stuck on the pre-2026-08-22 frequencies. The
+# port was fine; the thing doing the work was not. Check both.
+vw = 0.0
+for x, y, cx, cy, span, ta, tm, sd, want in probe["field"]:
+    g = Green.__new__(Green)
+    g.hmx, g.hmy, g.span = cx, cy, span
+    g.tilt_ang, g.tilt_mag, g.g_seed = ta, tm, sd
+    g.undul_scale = 1.0
+    got = float(Field(g).height(np.array([x]), np.array([y]))[0])
+    vw = max(vw, abs(got - want))
+print(f"heightAt (numpy, golf_sweep.Field): {len(probe['field'])} samples, "
+      f"max abs delta {vw:.3e}")
 
 # 3. per-round ball + cup geometry
 # layout() rounds the wrap rect before it becomes cssW/cssH.
@@ -64,6 +83,6 @@ for r in probe["rounds"]:
 print(f"geometry: {len(probe['rounds']) - gbad}/{len(probe['rounds'])} rounds "
       f"match, worst {gworst:.3e} px")
 
-ok = bad == 0 and hw < 1e-12 and gbad == 0
+ok = bad == 0 and hw < 1e-12 and vw < 1e-12 and gbad == 0
 print("PORT " + ("VERIFIED" if ok else "MISMATCH"))
 sys.exit(0 if ok else 1)

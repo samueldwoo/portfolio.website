@@ -24,6 +24,61 @@ MAX_SPEED = 900.0
 TAU = math.pi * 2
 CAPTURE_SPEED = 520.0  # the `speed < 520` in the cup test
 
+# ---- THE TIMESTEP: ONE STORY, NOT FOUR ----
+# HeroCanvas.tsx tick() computes `Math.min(0.05, (now - last) / 1000)`, seeded at
+# 0.016 on the first frame after the loop starts. So the page integrates at the
+# REAL frame delta, clamped at 50ms — never at a uniform 1/fps.
+#
+# This module owns those numbers because the tools disagreed about them: sweep
+# defaulted to 1/60, pick and pick_fails to 1/120, and putt() to 1/60, so three
+# scripts written to corroborate each other were integrating three different
+# greens. The rejected alternative was to pick one fps and document it; that
+# still would not have matched the page, and probe.json's `dt_ms` field existed
+# to describe the real thing yet no caller ever read it.
+#
+# DEFAULT_FPS is a FALLBACK for callers with no measured sequence, not a claim
+# about the page. Prefer `dts=frame_dts(probe["dt_roll_ms"])`.
+DT_CLAMP = 0.05          # Math.min(0.05, ...) in tick()
+DT_FIRST = 0.016         # tick()'s seed while `last` is still 0
+DEFAULT_FPS = 120.0
+DEFAULT_DT = 1.0 / DEFAULT_FPS
+
+
+def frame_dts(ms, clamp=DT_CLAMP, seed_first=False):
+    """Measured per-frame millisecond deltas -> the seconds tick() would use.
+
+    `seed_first` reproduces tick()'s 0.016 first frame. It is OFF by default and
+    that is deliberate: the seed only fires when `last` is 0, i.e. immediately
+    after start(), and a putt launched on a visible page lands mid-loop where
+    start() is a no-op. Turning it on for a mid-session putt would inject a
+    16ms frame the page never took.
+    """
+    out = [min(clamp, v / 1000.0) for v in ms]
+    if seed_first and out:
+        out[0] = DT_FIRST
+    return out
+
+
+def resolve_dt(probe, source="probe", fps=DEFAULT_FPS):
+    """(dt, label) for the sweepers. One resolver so they cannot drift apart.
+
+    Returns a measured sequence when the probe carries one, else a uniform step.
+    An older probe.json has no `dt_roll_ms` — it falls back rather than raising,
+    but the label says so, because a silent fallback to 1/fps is how the three
+    timesteps got out of step in the first place.
+    """
+    ms = (probe or {}).get("dt_roll_ms") or []
+    if source == "probe" and ms:
+        dts = frame_dts(ms)
+        s = sorted(dts)
+        return dts, (f"measured roll dt, {len(dts)} frames, "
+                     f"p50 {s[len(s) // 2] * 1000:.2f}ms "
+                     f"[{s[0] * 1000:.2f}..{s[-1] * 1000:.2f}]")
+    if source == "probe":
+        return 1.0 / fps, (f"uniform 1/{fps:g}s (probe has no dt_roll_ms — "
+                           f"re-run golf_probe.py to get the real thing)")
+    return 1.0 / fps, f"uniform 1/{fps:g}s (requested)"
+
 
 def to_uint32(x: float) -> int:
     """JS ToUint32 on a double."""
@@ -274,7 +329,7 @@ class Green:
         return -hx * SLOPE_ACCEL, -hy * SLOPE_ACCEL
 
     # ---- integration ----
-    def putt(self, dx, dy, power, dt=1.0 / 60.0, dts=None, trace=False,
+    def putt(self, dx, dy, power, dt=DEFAULT_DT, dts=None, trace=False,
              start=None):
         """Returns (outcome, frames, final_x, final_y, closest_dist, hot_pass).
 
