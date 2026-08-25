@@ -13,7 +13,7 @@
    reasoning lives on pickSlots below.
    =========================================================================== */
 
-import type { DayFrames, Frame } from './frames';
+import type { VisibleDayFrames, VisibleFrame } from './frames';
 import type { Who } from './together';
 
 /**
@@ -56,13 +56,13 @@ export function mostRecent<T>(
 
 /** What the day page's two big frames should show, and what is left for the strip. */
 export type Slots = {
-  mine: Frame | null;
-  theirs: Frame | null;
+  mine: VisibleFrame | null;
+  theirs: VisibleFrame | null;
   /** The wing day `mine` came from, or null when it is today's / absent. */
   mineFrom: string | null;
   theirsFrom: string | null;
   /** Days below the slot, with promoted frames removed so nothing appears twice. */
-  earlier: DayFrames[];
+  earlier: VisibleDayFrames[];
 };
 
 /**
@@ -105,8 +105,18 @@ export type Slots = {
  * her. It blanks the two specific promoted frames and then drops rows left with
  * nothing, which is why the filter runs after the map.
  */
+/* VisibleFrame, NOT Frame — a correction, and one that only surfaced when the right
+   checker was finally run. The only caller passes the output of withUrls(), whose
+   sides carry a presigned `url` on top of Frame. Typed as Frame, `mine.url` worked
+   perfectly at runtime while the type insisted the field did not exist — three
+   errors sitting in plain sight that `tsc --noEmit` never reported, because tsc does
+   not read .astro files. `npm run typecheck` (astro check) is the one that does.
+
+   A generic over the frame shape was tried first and was worse: inference collapsed
+   it to `{}` and turned three errors into thirty. Naming the concrete type the caller
+   actually uses is the honest description of what this function is for. */
 export function pickSlots(
-  week: DayFrames[],
+  week: VisibleDayFrames[],
   today: string,
   viewer: Who,
   carryDays: number = CARRY_DAYS,
@@ -124,7 +134,7 @@ export function pickSlots(
       [viewer]: mineDay && d.date === mineDay.date ? null : d[viewer],
       [them]: theirsDay && d.date === theirsDay.date ? null : d[them],
     }))
-    .filter((d) => d.her || d.him) as DayFrames[];
+    .filter((d) => d.her || d.him) as VisibleDayFrames[];
 
   return {
     mine: mineDay?.[viewer] ?? null,

@@ -614,6 +614,8 @@ const whoWord = (w: Who): string => (w === viewer ? 'you' : w === 'her' ? (her |
 
         ev.preventDefault();
         if (go) go.disabled = true;
+        var sent = false;
+        var ticker = 0;
         say('shrinking it…');
 
         /* The same guarantee for the ENCODE. canvas.toBlob() takes a callback and
@@ -674,7 +676,21 @@ const whoWord = (w: Who): string => (w === viewer ? 'you' : w === 'her' ? (her |
                 }
             } catch (err) { /* no pin, and nothing else changes */ }
 
+            /* A TICKING COUNT, because "sending…" alone is indistinguishable from a
+               hang — which is exactly what happened. A real upload succeeded, the page
+               said "sending…" until it was abandoned, and the only way to learn the
+               truth was to leave and come back.
+            
+               Elapsed seconds rather than a percentage: `fetch` cannot report upload
+               progress at all, and a faked bar is worse than an honest count. A real
+               determinate bar needs XMLHttpRequest's upload.onprogress, which is a
+               rewrite of this whole block and is left as the proper follow-up. */
+            var began = Date.now();
             say('sending…');
+            ticker = setInterval(function () {
+                var secs = Math.round((Date.now() - began) / 1000);
+                say(secs < 3 ? 'sending…' : 'sending… ' + secs + 's');
+            }, 1000);
             /* A DEADLINE. Every FAILURE branch here falls back to submitting the
                plain form, but a request that never settles is not a failure — it
                is a hang, and preventDefault() has already suppressed the native
@@ -684,6 +700,9 @@ const whoWord = (w: Who): string => (w === viewer ? 'you' : w === 'her' ? (her |
                45s is generous for a few hundred KB and still finite. */
             var ctl = new AbortController();
             var killer = setTimeout(function () { ctl.abort(); }, 45000);
+            /* FROM HERE THE SERVER MAY ALREADY HAVE THE PHOTOGRAPH, which changes what
+               a failure means. See the catch below. */
+            sent = true;
             return fetch(form.action, {
                 method: 'POST',
                 body: body,
@@ -698,6 +717,7 @@ const whoWord = (w: Who): string => (w === viewer ? 'you' : w === 'her' ? (her |
             clearTimeout(killer);
             return res.json().catch(function () { return { ok: res.ok }; });
         }).then(function (data) {
+            clearInterval(ticker);
             if (data && data.ok) {
                 /* Reload rather than patch the DOM: the new frame needs a freshly
                    signed URL, and the server is the only thing that can mint one. */
@@ -711,11 +731,33 @@ const whoWord = (w: Who): string => (w === viewer ? 'you' : w === 'her' ? (her |
                re-encode — and the endpoint's own error page explains the rest. */
             form.submit();
         }).catch(function () {
-            /* Reached by an abort (the deadline above), a network failure, or a
-               resize that threw. All three mean the same thing: hand the job to
-               the real form, which posts the ORIGINAL file with no script
-               involved. */
+            /* ---- AN UNKNOWN OUTCOME IS NOT THE SAME AS A FAILURE ----------------
+            
+               Reached by an abort at the deadline, a network drop, or a resize that
+               threw. This used to call form.submit() for all three, re-posting the
+               ORIGINAL file — and that is wrong for two of them, because the request
+               may already have SUCCEEDED. It did: a real upload landed, the response
+               never came back, and the page would then have quietly uploaded the
+               whole thing a second time.
+            
+               So the cases are split by whether the request ever left:
+            
+                 NEVER SENT — the resize threw before any request. Nothing is on the
+                 server, so the original is the right thing to post and the real form
+                 does it with no script involved.
+            
+                 ALREADY SENT — the photograph may be saved. RELOAD rather than
+                 re-post, and let the page state be the answer: if it landed she sees
+                 it, and if it did not she sees the empty slot and can try again. That
+                 is the manual "exit the page and refresh" that was the only way to
+                 find out, done automatically. */
             clearTimeout(killer);
+            clearInterval(ticker);
+            if (sent) {
+                say('checking…');
+                window.location.assign('/samdrea/vault/day#post');
+                return;
+            }
             say('');
             if (go) go.disabled = false;
             form.submit();
