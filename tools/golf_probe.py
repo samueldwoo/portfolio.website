@@ -4,7 +4,7 @@ Feeds the offline simulator (tools/golf_sim.py) the exact layout numbers the
 live component is using, and gives us a ground-truth table of hash2 outputs so
 the Python port of JS's lossy `hash2` can be proven bit-equal.
 
-Usage: golf_probe.py [base_url] [width] [height] > probe.json
+Usage: golf_probe.py [base_url] [width] [height] [rounds] > probe.json
 """
 import json
 import sys
@@ -13,7 +13,12 @@ import time
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 
-BASE = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8123"
+# BASE URL: directory-format, and 8020 to match every other harness here. This
+# file asked for "/index.html" on a default port of its own until 2026-08-25,
+# which `python -m http.server` serves but production 301s — and since probe.json
+# is what golf_verify_port.py and golf_sweep.py both consume, the whole invariant
+# chain started on a URL the real site does not serve.
+BASE = (sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8020").rstrip("/")
 W = int(sys.argv[2]) if len(sys.argv) > 2 else 1440
 H = int(sys.argv[3]) if len(sys.argv) > 3 else 900
 ROUNDS = int(sys.argv[4]) if len(sys.argv) > 4 else 24
@@ -124,7 +129,7 @@ def main():
             "Emulation.setDeviceMetricsOverride",
             {"width": W, "height": H, "deviceScaleFactor": 1, "mobile": False},
         )
-        d.get(BASE + "/index.html")
+        d.get(BASE + "/")
         d.set_script_timeout(30)
         # let fonts settle so copyEdge/copyBottom stop moving
         for _ in range(40):

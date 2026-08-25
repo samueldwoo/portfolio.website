@@ -7,7 +7,7 @@ cannot be tracked blindly), then drives each trial through __puttTest.aim().
 
 NOTE ON SCOPE: driving __puttTest.aim() deliberately bypasses the pointer path.
 This validates PHYSICS ONLY and is not evidence that input works -- that is what
-golfmouse.py / golftouch.py / golfscroll.py are for.
+golf_mouse.py / golf_touch.py / golf_scroll.py are for.
 
 Usage: golf_validate.py trials.json [base_url] [width] [height]
 """
@@ -20,7 +20,10 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 
 TRIALS = sys.argv[1]
-BASE = sys.argv[2] if len(sys.argv) > 2 else "http://localhost:8123"
+# BASE URL: directory-format, 8020 like the rest of the harness. See the note in
+# golf_probe.py -- this file had the same "/index.html" + port-8123 pair, which
+# passes on `python -m http.server` and 301s in production.
+BASE = (sys.argv[2] if len(sys.argv) > 2 else "http://localhost:8020").rstrip("/")
 W = int(sys.argv[3]) if len(sys.argv) > 3 else 1440
 H = int(sys.argv[4]) if len(sys.argv) > 4 else 900
 
@@ -31,7 +34,7 @@ return {phase: s.phase, ball: s.ball, cup: s.cup, speed: s.speed};
 
 
 def boot(d):
-    d.get(BASE + "/index.html")
+    d.get(BASE + "/")
     for _ in range(60):
         time.sleep(0.15)
         if d.execute_script("return !!window.__puttTest"):

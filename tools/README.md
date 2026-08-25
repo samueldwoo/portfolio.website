@@ -1,10 +1,16 @@
 # `tools/` — cross-browser and touch verification harness
 
-This site ships four animation libraries (GSAP + ScrollTrigger, SplitText, anime.js,
-Motion) and, before this harness existed, had only ever been exercised in **headless
-Chrome**. Everything here exists to close that gap: to find what one engine does and
-another does not, and — just as importantly — to be explicit about which engines were
-genuinely driven and which were not.
+This site ships five animation scripts — GSAP + ScrollTrigger, SplitText, Draggable,
+anime.js, and `motion-shim.js` — and, before this harness existed, had only ever been
+exercised in **headless Chrome**. Everything here exists to close that gap: to find what
+one engine does and another does not, and — just as importantly — to be explicit about
+which engines were genuinely driven and which were not.
+
+> `motion-shim.js` is OURS: a ~5KB-brotli reimplementation of the four Motion APIs this
+> site actually uses, which replaced the vendored 136KB `motion.min.js`. It still defines
+> `window.Motion`, so the `libs` check below is unchanged — but "Motion is present" no
+> longer means a third-party bundle loaded. `InertiaPlugin.min.js` is likewise gone: the
+> throw it existed for was replaced by a swap.
 
 These tools **measure only**. They never modify site files. The one thing they add to a
 page is a detached measurement node, which they remove again.
@@ -33,26 +39,42 @@ install by hand.
 Both harnesses test the **built output**, not the dev server:
 
 ```bash
-npm run build                  # -> dist/
-cd dist && python3 -m http.server 8899
+npm run build
+cd .vercel/output/static && python3 -m http.server 8020
 ```
+
+**The static build is in `.vercel/output/static`, NOT `dist/`.** `dist/` contains only a
+`client/` subdirectory, so serving `dist/` itself returns 404 for every path — which looks
+exactly like a broken build. (`dist/client` happens to hold the same file list today, but
+it is the adapter's intermediate; `.vercel/output/static` is what deploys.)
+
+**Restart the server after every build.** A build deletes and recreates that directory, so
+a long-running `http.server` goes on serving the old unlinked inode and 404s every path
+while the new files sit on disk. Several minutes were once spent debugging this as a build
+failure.
+
+Port **8020** is not arbitrary — it is the default every tool here falls back to when given
+no base. Serving on a different port means passing `--base`/`[base]` to every invocation.
 
 ---
 
 ## 1. `crossbrowser.py` — per-engine page audit
 
 ```bash
-$PY tools/crossbrowser.py --base http://127.0.0.1:8899 --clip-report \
+$PY tools/crossbrowser.py --base http://127.0.0.1:8020 --clip-report \
     --json /tmp/ov-cross.json
 
 # subsets
-$PY tools/crossbrowser.py --base http://127.0.0.1:8899 --engines chrome,webkit
-$PY tools/crossbrowser.py --base http://127.0.0.1:8899 --pages travel.html
-$PY tools/crossbrowser.py --base http://127.0.0.1:8899 --headed        # watch it
-$PY tools/crossbrowser.py --base http://127.0.0.1:8899 --width 1280 --height 800
+$PY tools/crossbrowser.py --base http://127.0.0.1:8020 --engines chrome,webkit
+$PY tools/crossbrowser.py --base http://127.0.0.1:8020 --pages travel/
+$PY tools/crossbrowser.py --base http://127.0.0.1:8020 --headed        # watch it
+$PY tools/crossbrowser.py --base http://127.0.0.1:8020 --width 1280 --height 800
 ```
 
-Checks `index.html`, `projects.html` and `travel.html` in each available engine:
+Checks `/`, `/projects/` and `/travel/` in each available engine — **directory format**,
+which is what `--pages` expects (`""`, `projects/`, `travel/`). A `.html` page name is not
+a shorthand here: the Vercel adapter emits directory URLs, so `travel.html` 404s on the
+static server and 301s in production.
 
 | check | what it means |
 |---|---|
@@ -127,9 +149,9 @@ the verdict. Elements that scroll their own content horizontally are recorded as
 ## 2. `touch.py` — real touch emulation via Chrome CDP
 
 ```bash
-$PY tools/touch.py --base http://127.0.0.1:8899 --json /tmp/ov-touch.json
-$PY tools/touch.py --base http://127.0.0.1:8899 --device iphone14,small360
-$PY tools/touch.py --base http://127.0.0.1:8899 --headed
+$PY tools/touch.py --base http://127.0.0.1:8020 --json /tmp/ov-touch.json
+$PY tools/touch.py --base http://127.0.0.1:8020 --device iphone14,small360
+$PY tools/touch.py --base http://127.0.0.1:8020 --headed
 ```
 
 Devices: `iphone14` (390x844 @3x), `iphonese` (375x667 @2x), `pixel7` (412x915 @2.625x),
@@ -215,6 +237,34 @@ proof.
 | `probe.js` | the shared in-page audit — **one** copy of the measurement logic, evaluated identically in every engine |
 | `mask_recorder.js` | `MutationObserver` that catches transient `.srline-mask` nodes |
 | `webkit_runner.mjs` | WebKit adapter (Playwright/node); runs the same `probe.js` |
+| `a11y_chrome.py` | WCAG 2.1 AA audit of the global chrome (nav, palette, drawer, rail, skip link, focus). Takes `--base` |
+| `a11y_pixel.py` | contrast measured from RENDERED PIXELS rather than the DOM. Takes `--base` |
+| `gate_dir.py` | the merge gate: runs the stated verification bar against a served build. Base is **positional** |
+| `golf_sim.py` | offline line-for-line port of the `HeroCanvas` physics. `Green()` needs `copy_edge` passed |
+| `golf_probe.py` | dumps the live page's geometry + `hash2` samples to `probe.json` |
+| `golf_verify_port.py` | proves `golf_sim.py` is bit-equal to the page. Base/safety **positional** |
+| `golf_sweep.py` | exhaustive (aim × power) numpy sweep: solvability and difficulty calibration |
+| `golf_pick.py` | turns a sweep into browser-replayable trials, deliberately including predicted MISSES |
+| `golf_pick_fails.py` | for a round the sweep calls unsolvable, the closest-possible lines, so the claim can be corroborated in a browser instead of trusted |
+| `golf_relief.py` | how much of the height variation is undulation vs plane, per undulation setting |
+| `golf_validate.py` | replays picked trials in a real browser and scores agreement (physics only — bypasses the pointer path) |
+| `golf_keys/stuck/mouse/touch/scroll.py`, `hero_ink.py` | the six input/render harnesses — see the golf section below |
+
+### `tools/suites/` was DELETED 2026-08-25 — recover from git only if you know why
+
+It held the pre-move originals, which had gone stale in a way that failed silently:
+
+- `suites/golfmouse.py`, `golfscroll.py`, `golfstuck.py`, `golftouch.py` hardcoded
+  `http://localhost:8123/index.html` with no way to override it — superseded by `golf_mouse.py`,
+  `golf_scroll.py`, `golf_stuck.py`, `golf_touch.py`, which are supersets of them.
+- `suites/gate.py` was byte-identical to `tools/gate_dir.py` **except** for
+  `PAGES = ["index.html", "projects.html", "travel.html"]` — three URLs this build does not serve.
+  That is the exact bug `a11y_chrome.py`'s header warns about: `projects.html` once "passed" while
+  the page was blank. Use `gate_dir.py`.
+
+Two copies of a harness is worse than one, because the stale copy is the one that reports a pass on
+a page that does not exist. `tools/a11y-motion/gate_dir.py` survives on purpose — it is a lane-local
+copy differing from `tools/gate_dir.py` only in its default port (8130), kept as that audit's record.
 
 `probe.js` and `mask_recorder.js` are each a single parenthesised function literal, read as
 text and evaluated by both drivers. That is deliberate: a harness whose engines ask
@@ -281,6 +331,13 @@ first argument (or `SITE_BASE`), defaulting to `http://localhost:8020`, and all 
 **directory-format** URLs: they previously requested `/index.html`, which `python -m http.server`
 serves but production 301s.
 
+The same sweep missed two files on the first pass, fixed 2026-08-25: `golf_probe.py` and
+`golf_validate.py` also requested `/index.html`, and defaulted to a port (8123) no other tool
+here uses. `golf_probe.py` is the one that matters — it writes the `probe.json` that
+`golf_verify_port.py` and `golf_sweep.py` both read, so the invariant chain itself started on a
+URL the real site does not serve. Both now use `/` and 8020. If you audit a class of bug, count
+the call sites.
+
     PY=~/personal/finance/finance/.venv/bin/python     # selenium + numpy live here, not in system python3
 
     $PY tools/golf_keys.py    [base]   # keyboard putting: 20 checks (tab reach, ring, live region, no scroll)
@@ -292,6 +349,28 @@ serves but production 301s.
 
 Last known-good on the shipped build: `golf_keys` PASS · `golf_stuck` 0 · `golf_mouse` 0 ·
 `golf_touch` 0/7 · `hero_ink` PASS (0% × 12 widths).
+
+### The physics chain, and its measured baseline (2026-08-25, port fix in place)
+
+    $PY tools/golf_probe.py http://localhost:8020 1440 900 41 > probe.json
+    $PY tools/golf_verify_port.py probe.json 0.9          # base + safety are POSITIONAL
+    $PY tools/golf_sweep.py probe.json --rounds 40 --reach-safety 0.9 --astep 0.5 --pstep 0.01
+    $PY tools/golf_pick.py probe.json trials.json --rounds 6
+    $PY tools/golf_validate.py trials.json [base]
+
+`golf_verify_port`: hash2 1504/1504 exact · heightAt max Δ 2.220e-16 · geometry 42/42 rounds,
+worst 3.411e-13 px · `PORT VERIFIED`. `golf_sweep`: **SOLVABLE 41/41 = 100%**, aim tolerance min
+4.0° / median 11.0° / max 144.5°. Sweep a shipped build **without** `--recompute`, or you are
+testing the simulator's own tee picker and can get a false unsolvable round.
+
+`golf_validate` currently reports **AGREEMENT 16/24 = 66.7% (desyncs: 0)** — and that number is
+**pre-existing, not a regression**: the pre-fix version at `HEAD` was run against the same
+`trials.json` and returned the identical 16/24 with the same per-kind breakdown. Worth someone's
+attention, because the failure pattern is lopsided: all 12 predicted misses agree, while 8 of 12
+predicted sinks disagree with `browser=idle`. `idle` on a predicted sink is what you would expect
+if the harness sampled *after* the 1.5s auto-re-tee, i.e. a sampling-window bug in the harness
+rather than a physics divergence — the docstring already warns that a sunk putt re-tees itself.
+Nobody has confirmed that, so treat 66.7% as an unexplained baseline and not as a pass.
 
 `golf_scroll.py` exists because the hero pin used to scrub the canvas plane
 (`y: 0 -> 6vh, scale: 1 -> 1.12`), which both moved an interactive playfield under the player and
