@@ -67,7 +67,7 @@ import type { Mark, Visits } from './marks';
             Optional — leave it '' and the date carries the line on its own.
 
      graceDays
-            How long the line keeps saying "you're here" after the date passes,
+            How long the line keeps saying "you’re here" after the date passes,
             before it disappears. See countdown() for why this exists at all; the
             short version is that the wing's midnight is in New York and hers is
             not, so a hard cutoff at day 0 can hide the line hours before she has
@@ -192,13 +192,13 @@ function daysUntil(from: string, to: string): number {
  *
  *   0 days      "today".
  *
- *   past        "you're here", for `graceDays`, then nothing.
+ *   past        "you’re here", for `graceDays`, then nothing.
  *
  *               The grace window is not sentiment, it is the New York anchor
  *               leaking. Her flight lands in the evening, Pacific; the wing's
  *               midnight is three hours ahead of that, so a hard cutoff at day 0
  *               would blank the line while she is still in the air. And "she is
- *               visiting" is a state that lasts days, during which "you're here" is
+ *               visiting" is a state that lasts days, during which "you’re here" is
  *               simply true, so present tense for a couple of days is more accurate
  *               than a countdown to a date that has passed.
  *
@@ -245,7 +245,7 @@ export function countdown(today: string): Countdown | null {
   if (days === 0) return { days, count: 'today', connector: '', iso: raw, when, label };
   // Inside the grace window. The label is dropped rather than shown in the wrong
   // tense; see Countdown.label.
-  return { days, count: "you're here", connector: 'since', iso: raw, when, label: '' };
+  return { days, count: "you’re here", connector: 'since', iso: raw, when, label: '' };
 }
 
 /* ============================================================================
@@ -264,7 +264,7 @@ export function countdown(today: string): Countdown | null {
    saying and stays true until she does.
 
    They are counted separately and worded separately so the summary line never
-   claims a standing fact arrived recently. "three photographs you've never opened"
+   claims a standing fact arrived recently. "three photographs you’ve never opened"
    is true whenever it is shown; "three photographs arrived since Tuesday" would
    not be.
 
@@ -350,7 +350,7 @@ function spell(n: number): string {
  *
  * Normally two items take no comma ("salt and pepper"), and that rule is wrong here
  * because these are not items, they are clauses: "a morning in here you haven't
- * heard and one photograph you've never opened" runs the two together and reads as
+ * heard and one photograph you’ve never opened" runs the two together and reads as
  * one thought on the first pass. The comma is the pause that separates them.
  */
 function joinAnd(parts: string[]): string {
@@ -391,7 +391,7 @@ export function newSince(input: {
      It is also the backstop for a dead store: countVisitSafe returns count 0 when
      the store is unreachable, and getMarksSafe returns thirteen empty marks from
      the same failure — so without this line an outage would render "thirteen
-     photographs you've never opened" as if it were a fact about her. Both reads hit
+     photographs you’ve never opened" as if it were a fact about her. Both reads hit
      the same backend, so one failing almost always means both did. */
   if (visits.count <= 1) return { ...NOTHING };
 
@@ -443,12 +443,12 @@ export function newSince(input: {
      several. Canned sentences would mean twelve of them and eleven would be
      unreachable in practice and therefore never proofread. */
   const frags: string[] = [];
-  if (songs === 1) frags.push("a morning in here you haven't heard");
-  else if (songs > 1) frags.push(`${spell(songs)} mornings you haven't heard`);
+  if (songs === 1) frags.push("a morning in here you haven’t heard");
+  else if (songs > 1) frags.push(`${spell(songs)} mornings you haven’t heard`);
   if (changed === 1) frags.push('a note I went back and changed');
   else if (changed > 1) frags.push(`${spell(changed)} notes I went back and changed`);
-  if (unopened === 1) frags.push("one photograph you've never opened");
-  else if (unopened > 1) frags.push(`${spell(unopened)} photographs you've never opened`);
+  if (unopened === 1) frags.push("one photograph you’ve never opened");
+  else if (unopened > 1) frags.push(`${spell(unopened)} photographs you’ve never opened`);
 
   /* THE EMPTY STATE IS THE COMMON CASE, so it is written as a sentence somebody
      meant, not as the absence of one. Most visits will land here: she comes back on

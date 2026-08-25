@@ -602,7 +602,10 @@ const vapidKey = pushReady ? pushConfig().publicKey ?? '' : '';
 <body class="studio">
 <div class="studio-wrap">
 
-    <p class="studio-kicker">verified &middot; welcome in</p>
+    {/* "verified" is a word from a security product, not from either of them — it
+        described the gate she had just cleared rather than the place she had arrived
+        in. An eyebrow's job is to say where you are. */}
+    <p class="studio-kicker">us &middot; the whole thing</p>
 
     <h1 class="us-mark">
         <span class="us-mark-bracket" aria-hidden="true">[</span>us<span
@@ -614,9 +617,16 @@ const vapidKey = pushReady ? pushConfig().publicKey ?? '' : '';
                 everyone, so switching to Sam left the very first line of the hub
                 greeting him as Andrea — which is what "items still say Andrea"
                 was. The name is HER name; the greeting is the READER's. */}
+            {/* AND NOTHING AFTER IT. "Nobody else has this address." used to sit on a
+                second line here, and it was the worst sentence in the wing: reassurance
+                she never asked for, delivered portentously, explaining the site's own
+                privacy to her as though it were a selling point.
+
+                It is also the tell for copy that was written ABOUT this place rather
+                than IN it — a short declarative that reframes the line above it, neatly
+                parallel, faintly profound. Two people texting do not talk that way. The
+                greeting is enough; anything appended to it is a brochure. */}
             You&rsquo;re in, {viewer === 'her' ? (her || 'you') : 'Sam'}.
-            <br>
-            Nobody else has this address.
         </p>
 
     {/* ============================================================
@@ -789,8 +799,15 @@ const vapidKey = pushReady ? pushConfig().publicKey ?? '' : '';
                    were last here" line. It is also the state she will see most
                    often, so it has to read as deliberate. */
                 <p class="tg-think-line tg-think-line--quiet">
-                    Nothing from {them === 'her' ? her : 'him'} today. One tap counts as
-                    a whole message.
+                    {/* JUST THE FACT. It used to append "One tap counts as a whole message." —
+                        the same failing as the greeting's second line: a neat aphorism explaining
+                        the feature back to her, in a register neither of them uses. The button
+                        below already says "I'm thinking of you"; a sentence justifying it turns
+                        the empty state into marketing for the thing she is looking at.
+                    
+                        It still has to be a real sentence rather than a blank — she sees this
+                        state more than any other. It just does not need to editorialise. */}
+                    Nothing from {them === 'her' ? her : 'him'} today.
                 </p>
             )}
 
