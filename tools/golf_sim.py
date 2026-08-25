@@ -132,11 +132,20 @@ class Green:
                  downhill_credit=1.0 / -math.log(FRICTION),
                  undul_scale=1.0, tilt_scale=1.0, copy_edge=None):
         # Slope-budget knobs: undul_scale multiplies BOTH fbm amplitudes
-        # (0.42 / 0.16), tilt_scale multiplies the plane's tiltMag.
+        # (1.16 / 0.26), tilt_scale multiplies the plane's tiltMag.
+        #
+        # THOSE TWO NUMBERS WERE WRITTEN AS 0.42 / 0.16 HERE UNTIL 2026-08-25,
+        # which is the pre-2026-08-22 field. Harmless in itself (it is prose, and
+        # the code reads the real constants), but it is the same stale-mirror
+        # class of bug that had golf_sweep rolling balls on a green nobody plays.
+        # If you change the field, grep the whole of tools/ for the old numbers.
         self.undul_scale = undul_scale
         self.tilt_scale = tilt_scale
-        # None => the shipped (unbounded) tee rule; a float => the two-sided
-        # rule under evaluation.
+        # A float => the SHIPPED two-sided tee rule (0.9 is what the component
+        # uses). None => unbounded, which is NOT what ships: dropping it takes
+        # golf_verify_port from geometry 42/42 to 38/42, worst ball error 61.7px.
+        # This comment said the opposite until 2026-08-25 — that `None` was
+        # shipped and the float was "under evaluation".
         self.reach_safety = reach_safety
         # Seconds of downhill terminal drift credited as "aimable" reach.
         self.downhill_credit = downhill_credit
@@ -314,9 +323,14 @@ class Green:
         ny = (y - self.hmy) / self.span
         plane = (nx * math.cos(self.tilt_ang) + ny * math.sin(self.tilt_ang)) \
             * self.tilt_mag
-        # MIRROR of HeroCanvas.tsx heightAt(). Amplitudes 1.05/0.40 -> 0.58/0.13
-        # and frequencies 1.25/2.9 -> 0.85/2.0: fewer, broader contours so the
-        # fall line is readable again. Keep bit-identical with the component.
+        # MIRROR of HeroCanvas.tsx heightAt(). Frequencies went 1.25/2.9 ->
+        # 0.85/2.0 for fewer, broader contours so the fall line is readable
+        # again, and the amplitudes then came back UP to 1.16/0.26 to buy back
+        # the difficulty the broader field gave away. This comment claimed
+        # 0.58/0.13 until 2026-08-25, an intermediate that never shipped —
+        # frequency and amplitude move independently here, which is the whole
+        # point, so a comment naming a superseded pair is actively misleading.
+        # Keep bit-identical with the component.
         undul = (fbm(nx * 0.85 + self.g_seed, ny * 0.85 - self.g_seed) * 1.16
                  + fbm(nx * 2.0 - self.g_seed * 1.7,
                        ny * 2.0 + self.g_seed * 1.3) * 0.26) * self.undul_scale
