@@ -213,6 +213,34 @@ function dateScore(date: string): number {
 }
 
 /**
+ * A day as a COUNT of days, for anything that rotates.
+ *
+ * NOT dateScore, and the distinction is the whole point. dateScore reads the date as
+ * a decimal number — 2026-08-25 becomes 20260825 — which is a perfectly good
+ * monotonic sort key and is exactly what the ZADD indices above need. It is a bad
+ * counter, because consecutive days are not consecutive numbers: 20260831 to
+ * 20260901 is a jump of SEVENTY.
+ *
+ * Used as `% pool.length` that jump makes the same choice land twice. Measured over a
+ * year of real dates: at a pool of ten, seven pairs of consecutive days picked the
+ * SAME item, and the distribution ran from 35 hits to 43 instead of being even. On a
+ * "remember this one?" feature, the same memory two mornings running reads as broken
+ * rather than nostalgic.
+ *
+ * Days since the epoch increments by exactly one, every day, forever — no month
+ * lengths, no leap years, and no DST, because the parse is fixed at UTC midnight and
+ * a UTC day is always 86400 seconds.
+ *
+ * dateScore is deliberately left alone: it is a stored ZADD score, and changing it
+ * would leave old records ordered by one scheme and new ones by another in the same
+ * index.
+ */
+function dayNumber(date: string): number {
+  const t = Date.parse(`${date}T00:00:00Z`);
+  return Number.isFinite(t) ? Math.floor(t / 86_400_000) : 0;
+}
+
+/**
  * The day `days` away from this one, still as `YYYY-MM-DD`.
  *
  * Done in UTC on purpose, and that is not a contradiction of WING_TZ above. A
@@ -1951,7 +1979,7 @@ export function durationLabel(ms: number | undefined): string {
  * long enough that "remember this one?" is not pointing at last Thursday — which
  * is still in the visible archive and would make the whole block look broken.
  */
-const RESURFACE_MIN_AGE_DAYS = 14;
+export const RESURFACE_MIN_AGE_DAYS = 14;
 
 /**
  * Pick one old DAY to bring back, or null when there is not one worth it.
@@ -2003,5 +2031,8 @@ export function resurface(input: {
   // to hand the records back — otherwise the "deterministic" pick would quietly
   // differ between the R2 tier (object key order) and Redis (index order).
   const ordered = [...pool].sort((a, b) => a.date.localeCompare(b.date));
-  return ordered[dateScore(today) % ordered.length] ?? null;
+  /* dayNumber, NOT dateScore — see the comment on dayNumber. Using the decimal date
+     here made the same memory resurface on two consecutive mornings at every month
+     boundary, because 0831 to 0901 is a jump of seventy rather than one. */
+  return ordered[dayNumber(today) % ordered.length] ?? null;
 }

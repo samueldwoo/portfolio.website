@@ -108,6 +108,7 @@ import {
   isWingDate,
   reactionChips,
   reactionName,
+  RESURFACE_MIN_AGE_DAYS,
   resurface,
   storeTier,
   summarize,
@@ -266,6 +267,30 @@ const hersPair = pairs.find((p) => p.date === hersPick.date) ?? todayPair;
    Same shape as the photograph page's strip, and the filter runs after the map for
    the same reason — a row emptied by blanking should vanish, a half-full one should
    not. */
+/* ---- THE ARCHIVE MUST NOT REACH AS FAR BACK AS THE RESURFACED DAY -------------
+
+   These two numbers are coupled and were coupled silently. resurface() picks a day at
+   least RESURFACE_MIN_AGE_DAYS old; the archive lists the most recent ARCHIVE_LIMIT
+   days. If the archive reaches the resurface floor, the SAME day appears twice on one
+   page — once as "remember this one?" and once as an ordinary row a few inches below.
+
+   That was live until an hour ago. At ARCHIVE_LIMIT = 60 against a floor of 14 it
+   happened constantly, and cutting the archive to 7 fixed it BY ACCIDENT rather than
+   on purpose. Which means it would come back the moment anyone raised that number
+   without knowing about this one.
+
+   So the clamp is here rather than a comment asking future readers to remember. It is
+   min(), not an assertion: a page is the wrong place to throw, and silently drawing
+   one row fewer is a better failure than either a crash or a duplicate. The log line
+   is what makes it noticed instead of merely survived. */
+const archiveDays = Math.min(ARCHIVE_LIMIT, RESURFACE_MIN_AGE_DAYS - 1);
+if (archiveDays < ARCHIVE_LIMIT) {
+  console.warn(
+    `[us] ARCHIVE_LIMIT ${ARCHIVE_LIMIT} reaches the resurface floor ` +
+      `(${RESURFACE_MIN_AGE_DAYS}); clamped to ${archiveDays} so no day is listed twice.`,
+  );
+}
+
 const archive = pairs
   .filter((p) => p.date !== today)
   .map((p) => ({
@@ -274,7 +299,7 @@ const archive = pairs
     hers: hersPick.carried && p.date === hersPick.date ? null : p.hers,
   }))
   .filter((p) => p.his || p.hers)
-  .slice(0, ARCHIVE_LIMIT);
+  .slice(0, archiveDays);
 
 /* WHICH SIDE THE READER IS. Drives one thing and one thing only on this page: you
    get the reaction bar on the OTHER card and never on your own.
