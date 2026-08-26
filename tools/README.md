@@ -249,6 +249,8 @@ proof.
 | `golf_pick_fails.py` | for a round the sweep calls unsolvable, the closest-possible lines, so the claim can be corroborated in a browser instead of trusted |
 | `golf_relief.py` | how much of the height variation is undulation vs plane, per undulation setting |
 | `golf_calibrate.py` | fits `HOLE_CAL` / `HOLE_CUTS` for the hero's difficulty card from a sweep, and prints the two lines to paste. Bands are anchored to an absolute share of the aim/power space, not to quartiles |
+| `golf_par.py` | expected strokes per hole for a competent-but-imperfect putter — this is where `PAR_TABLE` comes from. Its cap rate is the honesty check: a rate far above ~2% means the numbers are really the 8-stroke ceiling |
+| `golf_frames.py` | passenger rAF loop that measures the REAL per-frame dt during a roll; `golf_probe.py` uses it for `dt_roll_ms` |
 | `golf_validate.py` | replays picked trials in a real browser and scores agreement (physics only — bypasses the pointer path) |
 | `golf_keys/stuck/mouse/touch/scroll.py`, `hero_ink.py` | the six input/render harnesses — see the golf section below |
 
@@ -355,91 +357,40 @@ physics chain rather than the input suites, so it is documented below.
 Last known-good on the shipped build: `golf_keys` PASS · `golf_stuck` 0 · `golf_mouse` 0 ·
 `golf_touch` 0/7 · `hero_ink` PASS (0% × 12 widths).
 
-### The physics chain, and its measured baseline (2026-08-25, field + timestep fix in place)
+### The physics chain, and its measured baseline (2026-08-26, capture 175)
 
-    $PY tools/golf_probe.py http://localhost:8020 1440 900 41 > probe.json
-    $PY tools/golf_verify_port.py probe.json 0.9          # base + safety are POSITIONAL
-    $PY tools/golf_sweep.py probe.json --rounds 40 --reach-safety 0.9 --astep 0.5 --pstep 0.01
-    $PY tools/golf_pick.py probe.json trials.json --rounds 6
-    $PY tools/golf_validate.py trials.json [base]
-    $PY tools/golf_frames.py [base] --round 3 --angle 240 --power 0.825   # frame-by-frame diff
+    $PY tools/golf_probe.py http://localhost:8020 1440 900 80 > probe80.json
+    $PY tools/golf_verify_port.py probe80.json 0.9          # base + safety are POSITIONAL
+    $PY tools/golf_sweep.py probe80.json --rounds 80 --reach-safety 0.9 --astep 0.5 --pstep 0.01
+    $PY tools/golf_pick.py probe80.json trials.json --rounds 6
+    $PY tools/golf_validate.py trials.json
+    $PY tools/golf_calibrate.py sweep80.json      # -> HOLE_CAL / HOLE_CUTS
+    $PY tools/golf_par.py probe80.json --rounds 80 --trials 2000   # -> PAR_TABLE
 
-`golf_verify_port`: hash2 1504/1504 exact · heightAt max Δ 2.220e-16 · **numpy heightAt max Δ
-2.220e-16** · geometry 42/42 rounds, worst 3.411e-13 px · `PORT VERIFIED`. `golf_sweep`:
-**SOLVABLE 41/41 = 100%**, aim tolerance min 4.0° / median 16.0° / max 237.5°.
+`golf_verify_port`: hash2 1504/1504 · heightAt Δ 2.220e-16 · **numpy heightAt Δ 2.220e-16** ·
+geometry 81/81 · `PORT VERIFIED`. `golf_sweep`: **SOLVABLE 81/81 = 100%**, selfcheck **0.000e+00**,
+aim tolerance min 3.0° / median 10.0° / max 252.5° (~25 min at this grid). `golf_validate`:
+**24/24 = 100%**, resting error median 0.2px / max 0.4px. `golf_par`: median expected strokes 2.04,
+cap rate ~2%, mean ace rate 34%.
 
-`golf_validate`: **AGREEMENT 24/24 = 100% (desyncs: 0)**, resting-position error on the misses
-median 0.1px / max 0.3px.
+Sweep a shipped build **without** `--recompute` — it tests the simulator's own tee picker and has
+reported a false unsolvable round. `--reach-safety 0.9` is a different flag and is REQUIRED: it is
+the shipped tee rule, and dropping it takes geometry to 38/42 with a 61.7px worst ball error.
 
-`--reach-safety 0.9` is not optional here. It is the shipped tee rule, not a proposal: without it
-`golf_verify_port` drops to geometry 38/42 with a 61.7px worst ball error. It does mean the sweep
-uses the SEEDED tee rather than the probe's measured one, which reads like the `--recompute`
-warning below — but the two agree to 3.4e-13 px, so nothing is being audited that the player
-does not see. Never pass `--recompute` itself: that tests the simulator's own tee picker and has
-reported a false unsolvable round.
+**`--selfcheck` runs by default and is the guard on the THIRD MIRROR.** Every physics rule lives in
+`HeroCanvas.tsx`, `golf_sim.py` and `golf_sweep.py`'s numpy path, and the vectorised one has been
+forgotten twice — once for three days on the height field, once within an hour on a rest rule. Both
+times a non-zero final-position delta was the only thing that said so.
 
-#### Why the old 16/24 was not a harness bug (resolved 2026-08-25)
+### The thing this subsystem is FOR, in one paragraph
 
-This section used to record **AGREEMENT 16/24 = 66.7%** and guess that the harness sampled after
-the 1.5s auto-re-tee. **That guess was wrong** and the data already contradicted it:
-`trials_browser.json` showed ball displacement of 41–595px per trial and four genuine `sunk`
-phases, so the browser really rolled and really was read. Worse, the 12 agreeing misses sat a
-median 116px and up to 451px from the sim's predicted resting point — the outcomes matched while
-the trajectories did not, which is not what a sampling-window bug looks like. And a simulator whose
-every sink prediction was wrong still scores 12/24 on this trial set, because a miss agrees whenever
-the ball fails to sink for any reason. 66.7% was four sinks above the floor.
-
-The actual cause was a **third, stale mirror of `heightAt`**. `golf_sweep.Field.height` — the
-vectorised field that every sweep, every trial and every solvability number is computed from — was
-still on the pre-2026-08-22 frequencies and amplitudes (1.25/2.9 and 1.05/0.40) after the component
-moved to 0.85/2.0 and 1.16/0.26. Up to **1.14 units of height error**, mean |grad| 202 against a
-real 179, and less than half the restable area. `golf_verify_port` printed `PORT VERIFIED` all the
-way through because it only ever checked the *scalar* port in `golf_sim.py`. `golf_sweep --selfcheck`
-would have caught it on day one — patched back in, it reports 6/15 outcomes agreeing and a 344px
-final-position delta — but it was opt-in and no documented invocation passed the flag.
-
-Fixed, and each fix has a measurement behind it:
-
-- `golf_sweep.Field.height` now matches the component. `golf_verify_port` checks **both** mirrors,
-  so this class of drift cannot pass again.
-- `--selfcheck` **runs by default**; `--no-selfcheck` opts out. A guard nobody turns on is not a guard.
-- `golf_pick` was building trials with `Green(...)` and **no `copy_edge`**, so the play box reverted
-  to the pre-derivation 0.44 left edge — the left wall sat 271px too far out at 1440 (633→1354 against
-  a real 905→1354). Overriding the tee and cup from the probe hid it. Now passed, in `golf_pick` and
-  `golf_pick_fails` both.
-- **One timestep, one owner.** `golf_sim.py` holds `DT_CLAMP` / `DT_FIRST` / `DEFAULT_FPS` and
-  `resolve_dt()`; `golf_sweep`, `golf_pick` and `golf_pick_fails` all resolve through it and default
-  to `--dt-source probe`. They used to default to 1/60, 1/120 and 1/120 — three scripts written to
-  corroborate each other integrating three different greens, none of them the page's.
-
-#### The timestep the page actually uses
-
-`HeroCanvas.tsx` `tick()` integrates at `Math.min(0.05, (now - last) / 1000)`, seeded at 0.016 while
-`last` is 0. `probe.json` used to carry a `dt_ms` field that looked like evidence about that, but it
-sampled a **quiet page with no ball on it** and nothing consumed it anyway. It is now `dt_idle_ms`,
-kept only so the difference stays visible, and the number the tools integrate with is `dt_roll_ms`
-— measured by `golf_frames.py` while a putt is in flight.
-
-Measured at 1440×900 headless over 841 stepped frames: min 7.30ms · p50 8.30ms · p95 9.20ms ·
-max 9.40ms · mean 8.333ms · **zero frames clamped at 50ms**. That mean is 120.0fps, so `golf_pick`'s
-old 1/120 was accidentally close and `golf_sweep`'s 1/60 was 2× out. Feeding the captured sequence
-through `golf_sim.putt(dts=...)` reproduces the browser's roll with a **worst position delta of
-exactly 0.000e+00 px across all 841 frames** — the offline integrator is bit-identical to `stepBall`,
-which is the proof the port never had.
-
-**The 0.016 seed does NOT fire for a putt on a live page**, and believing it did cost an hour.
-The rAF loop is already running while the hero idles (measured: 120fps with `phase === 'idle'`), so
-`start()` inside `aim()` is a no-op and `last` is never reset. The first capture launched the putt
-from outside the observer and silently dropped the roll's first step — and because two real 8.3ms
-frames sum to ~16.6ms, the missing step looked exactly like the seed and matched the browser to
-0.03px over 841 frames. A wrong story that fits to a thirtieth of a pixel is the trap this
-directory keeps falling into. `golf_frames.py` therefore warms up for two frames, fires the putt
-from **inside** its own rAF callback, and asserts `__heroFrames` advanced by exactly 1 between every
-sample, because a passenger loop that misses a frame is not reading `tick()`'s clock.
-
-The timestep mattered less than the field: at 1/60 on the *corrected* field solvability is still
-41/41 and the median aim tolerance is 16.5° against 16.0° at the measured dt, with total sinking
-lines differing by 0.4% and no round changing solvability. Worth aligning, not the bug.
+The green exists so that reading the contour lines pays. Until 2026-08-26 it did not: aiming at the
+cup at full power sank 68 of 81 holes, because break is proportional to time on the green so pace
+suppresses it, and nothing punished pace. `CAPTURE_SPEED` 520 → 175 plus removing a mis-implemented
+"rim-out" (which braked the ball to a crawl inside the cup and so dropped it) took that to 16/81
+with **no change to aim tolerance and none to par**. If you touch the cup test, re-measure the mash
+line — aim straight at the cup at power 1.0 on all 81 holes — because it is the check that catches a
+dominant strategy, and no invariant in this directory catches it for you.
 
 `golf_scroll.py` exists because the hero pin used to scrub the canvas plane
 (`y: 0 -> 6vh, scale: 1 -> 1.12`), which both moved an interactive playfield under the player and
