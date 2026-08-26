@@ -1746,6 +1746,13 @@ export function buildPairs(input: {
  */
 export async function getExchange(
   limit: number,
+  /**
+   * Which dates need their reactions read, chosen from the pairs.
+   *
+   * Called with reactions not yet attached — see the body. Omit it and every date in
+   * the window is read, which is only affordable when `limit` is already small.
+   */
+  pick?: (pairs: DayPair[]) => readonly string[],
 ): Promise<{
   songs: SongRecord[];
   replies: ReplyRecord[];
@@ -1756,8 +1763,41 @@ export async function getExchange(
   /** date -> day, for O(1) lookup of one specific day inside the window. */
   pairByDate: Record<string, DayPair>;
 }> {
+  /* Songs and replies are FOUR COMMANDS FOR ANY WINDOW — ZRANGE plus MGET on each
+     side — so the counting window is free to be a year wide. Reactions are the part
+     that scales, and the part this signature exists for. */
   const [songs, replies] = await Promise.all([getSongs(limit), getReplies(limit)]);
-  const reactedDates = [...new Set([...songs.map((s) => s.date), ...replies.map((r) => r.date)])];
+
+  /* ---- WHICH DAYS GET THEIR REACTIONS READ -------------------------------------
+
+     THIS USED TO BE "ALL OF THEM", AND IT WAS THE ONLY THING HERE THAT SCALED.
+     getReactions() spends TWO COMMANDS PER DATE (HKEYS on his side and on hers), in
+     one pipeline but two billed commands each. Asked for every day with a song in a
+     365-day window, that is up to 730 commands to render one page — against a
+     50,000-a-month tier it would take a few hundred page views to exhaust, and it
+     grew every single day whether anybody reacted or not.
+
+     The window sizes were never the problem and CLAUDE.md says so, correctly, about
+     getSongs(). It was wrong about this call, which is the one the page actually
+     makes.
+
+     So the caller says which days it will SHOW, because those are the only days whose
+     emoji anybody can see. `pick` receives the pairs with no reactions attached yet,
+     which is enough to choose by date — and it has to work that way round, since the
+     resurfaced day is chosen FROM the pairs and needs its reactions read like any
+     other visible row.
+
+     Omitting `pick` keeps the old behaviour, which is right for a caller that already
+     passes a small limit: /api/us/song asks for seven days and does not need a
+     narrowing argument to say so. */
+  const shape = { songs, replies, reactions: {} as Record<string, DayReactions> };
+  const wanted = pick
+    ? pick(buildPairs(shape))
+    : [...new Set([...songs.map((s) => s.date), ...replies.map((r) => r.date)])];
+
+  /* Filtered and de-duplicated here rather than trusted, so a caller cannot turn a
+     bad return value into a malformed key or a pointlessly long pipeline. */
+  const reactedDates = [...new Set(wanted)].filter(isWingDate);
   const reactions = await getReactions(reactedDates);
 
   const pairs = buildPairs({ songs, replies, reactions });
@@ -1803,23 +1843,17 @@ export interface Rhythm {
    * right thing.
    */
   both: number;
-  /**
-   * Days with at least one reaction on them, EITHER DIRECTION.
-   *
-   * THE MEANING CHANGED WITH THE MECHANISM, and saying so is the point of this
-   * paragraph. It used to be "days she reacted to his song", which was the only
-   * kind of reaction that existed. Now both of them can react, so a count of one
-   * direction would be a number that quietly stopped meaning what its name says
-   * the day the second direction shipped.
-   *
-   * Still kept separate from `his`/`hers`, which count POSTS. A reaction is not a
-   * post and lumping the two would inflate a number two people read as a fact.
-   */
-  reacted: number;
-  /** Days she reacted to his song. The old `reacted`, under an honest name. */
-  reactedOnHis: number;
-  /** Days he reacted to her song. */
-  reactedOnHers: number;
+  /* THE THREE REACTION COUNTS ARE GONE — `reacted`, `reactedOnHis`, `reactedOnHers`.
+     Nothing ever read them, which is the small reason. The load-bearing one is that
+     reactions are now read only for the days a page actually SHOWS, so a count over
+     the counting window could no longer be computed: it would have come out as
+     "days with a reaction, among the eight we happened to fetch", presented as a
+     total over a year.
+     That is precisely the number this section's rule forbids — a total that quietly
+     means "in the last N records we happened to read". Deleting three fields nobody
+     rendered is a much smaller loss than keeping three that would be wrong, and a
+     zero is a wrong number rather than a missing one. If a reaction total is ever
+     wanted on a page, it needs its own bounded read and its own honest label. */
   /**
    * Consecutive days we BOTH posted, counting back from today.
    *
@@ -1844,9 +1878,6 @@ const EMPTY_RHYTHM: Rhythm = {
   his: 0,
   hers: 0,
   both: 0,
-  reacted: 0,
-  reactedOnHis: 0,
-  reactedOnHers: 0,
   streak: 0,
   streakLive: false,
   best: 0,
@@ -1886,18 +1917,12 @@ export function summarize(input: {
   const allDates = new Set<string>();
   const hisDates = new Set<string>();
   const herDates = new Set<string>();
-  const reactedDates = new Set<string>();
-  const reactedOnHisDates = new Set<string>();
-  const reactedOnHersDates = new Set<string>();
   const bothDates = new Set<string>();
   for (const p of pairs) {
     allDates.add(p.date);
     if (p.his) hisDates.add(p.date);
     if (p.hers) herDates.add(p.date);
     if (p.both) bothDates.add(p.date);
-    if (p.reactions.onHis.length > 0) reactedOnHisDates.add(p.date);
-    if (p.reactions.onHers.length > 0) reactedOnHersDates.add(p.date);
-    if (reactionCount(p) > 0) reactedDates.add(p.date);
   }
 
   // Walk back one day at a time. Bounded by the window the caller read rather
@@ -1933,9 +1958,6 @@ export function summarize(input: {
     his: hisDates.size,
     hers: herDates.size,
     both: bothDates.size,
-    reacted: reactedDates.size,
-    reactedOnHis: reactedOnHisDates.size,
-    reactedOnHers: reactedOnHersDates.size,
     streak,
     streakLive,
     best,
@@ -1999,14 +2021,25 @@ export const RESURFACE_MIN_AGE_DAYS = 14;
  *
  *   1. days we BOTH posted   — two people chose to be there. Nothing in the store
  *                              is better evidence that a day was worth having.
- *   2. days SOMEBODY reacted — the next best, and the only other signal we record.
- *                              Either direction counts: a day he answered her song
- *                              with an emoji is exactly as much evidence as the
- *                              mirror image, and only counting hers would have made
- *                              the memory feature prefer his mornings.
- *   3. any old day           — because on day 20 neither of the above may exist
- *                              yet, and an empty block explaining its own absence
- *                              is worse than an unremarkable Tuesday.
+ *   2. any old day           — because on day 20 the above may not exist yet, and an
+ *                              empty block explaining its own absence is worse than
+ *                              an unremarkable Tuesday.
+ *
+ * THERE USED TO BE A MIDDLE RUNG — "days somebody reacted" — AND IT WAS PAID FOR IN
+ * A WAY NOBODY HAD PRICED. Expressing that preference means knowing the reactions on
+ * every old day in the window, and reactions cost two commands per date: up to 730 on
+ * one page render, growing daily, to break a tie that only arises when there is not a
+ * single day they both posted on.
+ *
+ * It cannot be recovered by narrowing either, and the ordering is the reason: the
+ * resurfaced day is picked FROM the pairs, and its own reactions have to be read so
+ * its card can show them, so the pick necessarily happens before any reactions exist.
+ * A rung that needs them is a rung that needs all of them.
+ *
+ * What is actually lost: on a wing where they have never once both posted on the same
+ * old day, a day with an emoji on it no longer outranks a day without one. Rung 1
+ * covers every case after that stops being true, which for a feature whose whole
+ * premise is two people posting to each other is nearly immediately.
  */
 export function resurface(input: {
   today: string;
@@ -2023,9 +2056,11 @@ export function resurface(input: {
   );
   if (old.length === 0) return null;
 
+  /* No reaction rung — see the header. `pairs` here may legitimately carry no
+     reactions at all, because this function is called to DECIDE which days get theirs
+     read, so filtering on them would have silently meant "never". */
   const together = old.filter((p) => p.both);
-  const answered = old.filter((p) => reactionCount(p) > 0);
-  const pool = together.length > 0 ? together : answered.length > 0 ? answered : old;
+  const pool = together.length > 0 ? together : old;
 
   // Sorted by date so the pool's ORDER does not depend on how the store happened
   // to hand the records back — otherwise the "deterministic" pick would quietly

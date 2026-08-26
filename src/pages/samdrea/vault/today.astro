@@ -211,10 +211,66 @@ const HISTORY_WINDOW = 365;
  * PER SIDE, INDEPENDENTLY: his may be yesterday's while hers is today's. They are two
  * people posting on their own clocks, not one event.
  */
+/* ---- HOW MANY ARCHIVE ROWS, needed BEFORE the read now ------------------------
+   Moved above the store call because the reaction picker below has to know how many
+   rows will be drawn. The value depends only on two constants; see the long note
+   further down for why it is clamped. */
+const archiveDays = Math.min(ARCHIVE_LIMIT, RESURFACE_MIN_AGE_DAYS - 1);
+if (archiveDays < ARCHIVE_LIMIT) {
+  console.warn(
+    `[us] ARCHIVE_LIMIT ${ARCHIVE_LIMIT} reaches the resurface floor ` +
+      `(${RESURFACE_MIN_AGE_DAYS}); clamped to ${archiveDays} so no day is listed twice.`,
+  );
+}
+
+/**
+ * THE DAYS WHOSE REACTIONS THIS PAGE CAN ACTUALLY SHOW.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THE PAGE HAS TO SAY, RATHER THAN THE STORE JUST FETCHING THEM ALL
+ *
+ * Reactions cost TWO COMMANDS PER DAY — HKEYS on his side and on hers. Read for every
+ * day in a 365-day counting window that is up to 730 commands to render this page,
+ * growing every day whether anybody reacted or not, and almost all of it for days
+ * nobody is looking at. The counting window itself is cheap and stays a year: songs
+ * and replies are four commands for any width.
+ *
+ * ---------------------------------------------------------------------------
+ * DELIBERATELY GENEROUS, AND THAT IS THE SAFE DIRECTION
+ *
+ * Fetching a day nobody draws wastes two commands. MISSING a day that IS drawn shows
+ * an empty reaction bar over a song she has already reacted to — a silent wrong answer,
+ * and it would let her leave the same emoji twice.
+ *
+ * So this asks for a couple more rows than the archive will show rather than
+ * replicating the archive's exact carried-side filtering, which would be a second copy
+ * of that logic waiting to drift out of step with the first. Roughly a dozen days
+ * either way, bounded forever.
+ *
+ * FOUR KINDS OF VISIBLE DAY, and every one of them renders emoji:
+ *   today            the two live cards.
+ *   each side's pick mostRecent() can carry an older day forward, and reactionsFor()
+ *                    reads that SOURCE day's reactions rather than today's.
+ *   the archive      the rows below.
+ *   the resurfaced   minisFor() is shared with the archive, so it shows them too.
+ */
+function visibleDates(all: DayPair[]): string[] {
+  const his = mostRecent<DayPair['his']>(all, 'his');
+  const hers = mostRecent<DayPair['hers']>(all, 'hers');
+  const rows = all
+    .filter((p) => p.date !== today && (p.his || p.hers))
+    .slice(0, archiveDays + 2)
+    .map((p) => p.date);
+  const back = resurface({ today, pairs: all });
+  return [today, his.date, hers.date, ...rows, back ? back.date : null].filter(
+    (d): d is string => typeof d === 'string' && d.length > 0,
+  );
+}
+
 let pairs: DayPair[] = [];
 let storeUnreachable = false;
 try {
-  ({ pairs } = await getExchange(HISTORY_WINDOW));
+  ({ pairs } = await getExchange(HISTORY_WINDOW, visibleDates));
 } catch (err) {
   console.error('[us] today page could not read the store:', err);
   storeUnreachable = true;
@@ -283,13 +339,7 @@ const hersPair = pairs.find((p) => p.date === hersPick.date) ?? todayPair;
    min(), not an assertion: a page is the wrong place to throw, and silently drawing
    one row fewer is a better failure than either a crash or a duplicate. The log line
    is what makes it noticed instead of merely survived. */
-const archiveDays = Math.min(ARCHIVE_LIMIT, RESURFACE_MIN_AGE_DAYS - 1);
-if (archiveDays < ARCHIVE_LIMIT) {
-  console.warn(
-    `[us] ARCHIVE_LIMIT ${ARCHIVE_LIMIT} reaches the resurface floor ` +
-      `(${RESURFACE_MIN_AGE_DAYS}); clamped to ${archiveDays} so no day is listed twice.`,
-  );
-}
+/* archiveDays is computed above the store read now — the reaction picker needs it. */
 
 const archive = pairs
   .filter((p) => p.date !== today)
