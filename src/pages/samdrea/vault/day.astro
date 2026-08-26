@@ -647,8 +647,39 @@ const whoWord = (w: Who): string => (w === viewer ? 'you' : w === 'her' ? (her |
 
         ev.preventDefault();
         if (go) go.disabled = true;
+        /* ---- ALL FOUR LIVE OUT HERE, AND THREE OF THEM USED TO NOT ------------
+
+           `ctl` and `killer` were declared with `var` inside the raced.then(small)
+           callback below, and then cleared from the TWO SIBLING callbacks after it.
+           `var` is function-scoped, so those callbacks never had them: the first
+           `clearTimeout(killer)` threw ReferenceError, the .catch threw the same on
+           its own first line, and the rejection went unhandled.
+
+           The result was the exact bug this whole block was written to fix, wearing a
+           different hat. A real upload SUCCEEDED, the server saved the photograph, the
+           response came back — and then the page threw before it could react, so it
+           never navigated, never said a word, and left the clock ticking past the 45s
+           deadline forever. The only way to learn the truth was still to leave and
+           refresh. Reported after counting to 60.
+
+           A ticking counter is a promise that something is still happening. Nothing
+           below may be able to break that promise by throwing, which is what stop()
+           is for. */
         var sent = false;
         var ticker = 0;
+        var killer = 0;
+        var ctl = null;
+
+        /* Cleanup that CANNOT throw and does not care what already ran. Every exit
+           path calls it first, so a later error can leave her looking at a stale
+           message but never at a clock that is still counting. */
+        function stop() {
+            try { clearInterval(ticker); } catch (err) { /* nothing to undo */ }
+            try { clearTimeout(killer); } catch (err) { /* same */ }
+            ticker = 0;
+            killer = 0;
+        }
+
         say('shrinking it…');
 
         /* The same guarantee for the ENCODE. canvas.toBlob() takes a callback and
@@ -731,8 +762,10 @@ const whoWord = (w: Who): string => (w === viewer ? 'you' : w === 'her' ? (her |
                the exact case the resizer exists for, she was left on "sending…"
                forever with no way to retry but a reload that loses her file.
                45s is generous for a few hundred KB and still finite. */
-            var ctl = new AbortController();
-            var killer = setTimeout(function () { ctl.abort(); }, 45000);
+            /* Assigned, NOT declared — the `var` that used to be on these two lines is
+               what stranded the clock. See the declarations in the handler scope. */
+            ctl = new AbortController();
+            killer = setTimeout(function () { ctl.abort(); }, 45000);
             /* FROM HERE THE SERVER MAY ALREADY HAVE THE PHOTOGRAPH, which changes what
                a failure means. See the catch below. */
             sent = true;
@@ -747,10 +780,18 @@ const whoWord = (w: Who): string => (w === viewer ? 'you' : w === 'her' ? (her |
                 credentials: 'same-origin',
             });
         }).then(function (res) {
-            clearTimeout(killer);
+            /* Everything stops the moment the response is in hand. The request has
+               landed, so the deadline has no more work to do and the count has nothing
+               left to reassure her about — parsing is instant and a navigation follows.
+
+               `res.ok` is the fallback rather than the primary, and deliberately: this
+               endpoint answers 303 for BOTH success and refusal with the outcome in the
+               body, so the status code is not the answer. It is only consulted when the
+               body would not parse at all. */
+            stop();
             return res.json().catch(function () { return { ok: res.ok }; });
         }).then(function (data) {
-            clearInterval(ticker);
+            stop();
             if (data && data.ok) {
                 /* Reload rather than patch the DOM: the new frame needs a freshly
                    signed URL, and the server is the only thing that can mint one. */
@@ -784,8 +825,7 @@ const whoWord = (w: Who): string => (w === viewer ? 'you' : w === 'her' ? (her |
                  it, and if it did not she sees the empty slot and can try again. That
                  is the manual "exit the page and refresh" that was the only way to
                  find out, done automatically. */
-            clearTimeout(killer);
-            clearInterval(ticker);
+            stop();
             if (sent) {
                 say('checking…');
                 window.location.assign('/samdrea/vault/day#post');

@@ -23,7 +23,8 @@
     "test:recent": "node --experimental-strip-types scripts/test-recent.mts",
     "test:fresh": "node --experimental-strip-types scripts/test-fresh.mts",
     "test:frames-key": "node --experimental-strip-types scripts/test-frames-key.mts",
-    "test:ratelimit": "node --experimental-strip-types scripts/test-ratelimit.mts"
+    "test:ratelimit": "node --experimental-strip-types scripts/test-ratelimit.mts",
+    "test:inline": "node scripts/test-inline-scope.mjs"
   },
   "dependencies": {
     "@astrojs/react": "^6.0.4",
