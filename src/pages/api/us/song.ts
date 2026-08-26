@@ -39,8 +39,13 @@
  * her page. Explicitly NOT `preview_url` — Spotify removed 30-second previews for
  * new applications, so anything built on it is dead on arrival.
  *
- * ARTIST: oEmbed does not reliably return one, so it is an optional field I can
- * type. Empty is a supported state, not a bug; her page just omits the line.
+ * ARTIST: oEmbed does not return one at all — re-measured, not assumed, and its
+ * `title` is the track name alone. It now comes from the EMBED page instead, which
+ * carries an `"artists":[…]` array in about 10KB against the track page's 290KB. See
+ * artistViaEmbed(): it runs alongside oEmbed rather than replacing it, because that
+ * blob is undocumented and must never be load-bearing for the title or the art. It is
+ * still an optional field anyone can type over, and empty is still a supported state
+ * rather than a bug; her page just omits the line.
  *
  * ---------------------------------------------------------------------------
  * THE WEB API IS AN OPTIONAL UPGRADE, GATED ON CREDENTIALS THAT MAY NEVER EXIST
@@ -624,36 +629,138 @@ async function resolveViaWebApi(id: string): Promise<Metadata | null> {
  * fetch from a host this code has never heard of. Logged loudly, because "the art
  * quietly stopped working" is otherwise invisible.
  */
+/**
+ * THE ARTIST, WITHOUT CREDENTIALS. Never throws, returns '' when it cannot.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THIS IS POSSIBLE AFTER ALL
+ *
+ * oEmbed genuinely does not carry an artist, and TrackRecord.artist has said so since
+ * it was written. That was measured again rather than trusted: oEmbed for a known
+ * track returns `title` as the track name alone and nothing about who made it.
+ *
+ * The EMBED page does carry it, in a JSON blob, and it is the cheap one. Measured
+ * against the same track:
+ *
+ *   /oembed?url=…            ~700 bytes   title, art, no artist
+ *   /embed/track/<id>        ~10.5 KB     "artists":[{"name":…,"uri":…}]
+ *   /track/<id>              ~292 KB      the page this feature already refuses to load
+ *
+ * So an artist costs about ten kilobytes, not three hundred. Confirmed on four
+ * unrelated tracks; the array shape is the same each time and holds every credited
+ * artist rather than only the first.
+ *
+ * ---------------------------------------------------------------------------
+ * IT IS SCRAPING, AND IT IS TREATED AS SUCH
+ *
+ * oEmbed is a contract. This is an internal blob inside a page Spotify can restructure
+ * on any deploy, with no notice and no version. So it may ONLY ever add a field that is
+ * already allowed to be empty:
+ *
+ *   - it never decides whether the song posts,
+ *   - it never supplies the title or the art, which come from oEmbed's documented
+ *     fields, so a change here cannot make a card lose the things it already had,
+ *   - every failure returns '' and is logged, which is exactly the state every song
+ *     posted before today is already in.
+ *
+ * The host is `open.spotify.com`, already on the allowlist the shortlink resolver uses,
+ * so this opens no new outbound surface.
+ *
+ * WHY NOT A MIDDLE TIER between the Web API and oEmbed. A tier would have to supply
+ * title and art too, which means one undocumented parse becoming load-bearing for the
+ * fields that make the card look right. Running alongside oEmbed instead keeps the
+ * documented source authoritative for everything it covers.
+ */
+async function artistViaEmbed(id: string): Promise<string> {
+  try {
+    const res = await fetch(`https://open.spotify.com/embed/track/${id}`, {
+      headers: { Accept: 'text/html' },
+      signal: AbortSignal.timeout(3000),
+    });
+    /* A bogus id answers 200 with a shell page carrying no artists array, so the status
+       is not the test — the parse is. Only the status is printed either way, since the
+       id is the song. */
+    if (!res.ok) {
+      console.error(`[us] spotify embed HTTP ${res.status} — storing without an artist.`);
+      return '';
+    }
+
+    /* Bounded before anything looks at it. The page measured ~10KB, and a regex over an
+       unbounded body is how a third party's bad day becomes ours. */
+    const html = (await res.text()).slice(0, 256 * 1024);
+
+    /* The array is real JSON inside the page, so it is PARSED rather than picked apart
+       with a second regex over the names. That gets the escapes right — an accented
+       name arrives as é and a regex would store the escape verbatim. */
+    const found = /"artists":(\[[^\]]*\])/.exec(html);
+    if (!found) {
+      console.error('[us] spotify embed had no artists array — storing without an artist.');
+      return '';
+    }
+
+    const artists = JSON.parse(found[1]) as unknown;
+    if (!Array.isArray(artists)) return '';
+
+    // Comma-joined, matching the credentialed path exactly: a collaboration listing
+    // only the first name is a small wrong answer.
+    return artists
+      .map((a) => {
+        const name = (a as { name?: unknown })?.name;
+        return typeof name === 'string' ? name.slice(0, 120).trim() : '';
+      })
+      .filter(Boolean)
+      .join(', ')
+      .slice(0, MAX_ARTIST);
+  } catch (err) {
+    console.error('[us] spotify embed unreachable — storing without an artist:', err);
+    return '';
+  }
+}
+
 export async function resolveMetadata(id: string): Promise<Metadata> {
   const enriched = await resolveViaWebApi(id);
   if (enriched) return enriched;
 
   const empty: Metadata = { ...EMPTY_METADATA };
-  try {
-    const endpoint = `https://open.spotify.com/oembed?url=${encodeURIComponent(trackUrl(id))}`;
-    const res = await fetch(endpoint, {
-      headers: { Accept: 'application/json' },
-      signal: AbortSignal.timeout(3000),
-    });
-    if (!res.ok) {
-      // Same reason as above: the id is the song, so only the status is printed.
-      console.error(`[us] spotify oembed HTTP ${res.status} — storing without metadata.`);
-      return empty;
-    }
 
-    const body = (await res.json()) as { title?: unknown; thumbnail_url?: unknown };
-    const title = typeof body?.title === 'string' ? body.title.slice(0, 200).trim() : '';
+  /* IN PARALLEL, so the artist costs no wall-clock time. Both are one request to the
+     same host and neither depends on the other, and this runs on his phone's form
+     submission — a second sequential 360ms round trip would be felt, two concurrent
+     ones are not. artistViaEmbed never throws, so it cannot take oEmbed down with it. */
+  const [oembed, artist] = await Promise.all([
+    (async () => {
+      try {
+        const endpoint = `https://open.spotify.com/oembed?url=${encodeURIComponent(trackUrl(id))}`;
+        const res = await fetch(endpoint, {
+          headers: { Accept: 'application/json' },
+          signal: AbortSignal.timeout(3000),
+        });
+        if (!res.ok) {
+          // Same reason as above: the id is the song, so only the status is printed.
+          console.error(`[us] spotify oembed HTTP ${res.status} — storing without metadata.`);
+          return null;
+        }
+        return (await res.json()) as { title?: unknown; thumbnail_url?: unknown };
+      } catch (err) {
+        /* R7 in the plan: oEmbed is undocumented-ish and may change or disappear. The
+           mitigation is exactly this — post the song anyway. The official embed iframe
+           needs no metadata at all, so her page is still fully functional. */
+        console.error('[us] spotify oembed unreachable — storing without metadata:', err);
+        return null;
+      }
+    })(),
+    artistViaEmbed(id),
+  ]);
 
-    // Same host allowlist as the credentialed path, via the same function. Two
-    // copies of an art-URL check is two chances to relax one of them.
-    return { ...empty, title, art: safeArtUrl(body?.thumbnail_url) };
-  } catch (err) {
-    // R7 in the plan: oEmbed is undocumented-ish and may change or disappear. The
-    // mitigation is exactly this — post the song anyway. The official embed iframe
-    // needs no metadata at all, so her page is still fully functional.
-    console.error('[us] spotify oembed unreachable — storing without metadata:', err);
-    return empty;
-  }
+  /* The artist is kept even when oEmbed failed. It is a separate fact about the same id,
+     and "who it is by, with no title" is still more than nothing on the card. */
+  if (!oembed) return { ...empty, artist };
+
+  const title = typeof oembed.title === 'string' ? oembed.title.slice(0, 200).trim() : '';
+
+  // Same host allowlist as the credentialed path, via the same function. Two
+  // copies of an art-URL check is two chances to relax one of them.
+  return { ...empty, title, artist, art: safeArtUrl(oembed.thumbnail_url) };
 }
 
 /* ============================================================================

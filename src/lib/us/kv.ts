@@ -670,7 +670,16 @@ export interface TrackRecord {
   /** Spotify track id, always 22 base62 chars. Validated before it gets here. */
   id: string;
   title: string;
-  /** May be empty: Spotify's credential-free oEmbed does not return an artist. */
+  /**
+   * May be empty, and the reason changed.
+   *
+   * oEmbed still does not return an artist, so for a while this was empty on every
+   * song posted without Web API credentials. It now comes from Spotify's embed page,
+   * which carries the names in a JSON blob — see artistViaEmbed() in the song
+   * endpoint. That blob is undocumented, so empty remains a fully supported state:
+   * every song stored before this existed has none, and any future change to the page
+   * puts new ones back in the same place rather than failing a post.
+   */
   artist: string;
   /** Album art URL, or empty when the metadata call failed or was rejected. */
   art: string;
