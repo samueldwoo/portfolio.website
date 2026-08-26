@@ -186,6 +186,25 @@ const ERRORS: Record<string, string> = {
 const errText = errCode ? (ERRORS[errCode] ?? "that didn't go through. Try again?") : '';
 const posted = okCode === 'posted' && !errText;
 
+/**
+ * `?ok=maybe` — THE HONEST THIRD OUTCOME, and it only ever comes from the script.
+ *
+ * An upload can end in a state that is genuinely neither "posted" nor "failed": the
+ * request passed the 45s deadline, or the answer came back unreadable. In both cases the
+ * photograph MAY be saved, because the server writes bytes before it replies, and there
+ * is no way from the page to find out which happened.
+ *
+ * It used to reload with no query at all, which is a lie by omission. She had just
+ * waited a minute and the page came back with nothing to say — the same silence that
+ * made her count to sixty and refresh by hand in the first place. "I cannot tell, look
+ * below" is a worse-sounding message and a much better one: it names the uncertainty and
+ * points at the thing that settles it.
+ *
+ * `warn` rather than `bad`, because claiming failure would be as wrong as claiming
+ * success, and it is the register the carried-frame notices already use.
+ */
+const maybe = okCode === 'maybe' && !errText && !posted;
+
 /* ---- copy ----------------------------------------------------------------- */
 
 /** `18:42`, in the poster's own timezone. Absent when the store could not say. */
@@ -295,6 +314,11 @@ const whoWord = (w: Who): string => (w === viewer ? 'you' : w === 'her' ? (her |
 
     {errText && <p class="notice" data-kind="bad" role="status">hm &mdash; {errText}</p>}
     {posted && <p class="notice" data-kind="ok" role="status">that's up.</p>}
+    {maybe && (
+        <p class="notice" data-kind="warn" role="status">
+            that took too long to confirm. Have a look below: if it's there, it worked.
+        </p>
+    )}
 
     {!available && (
         /* R2 absent. Said plainly, because photographs are bytes and there is no
@@ -829,12 +853,56 @@ const whoWord = (w: Who): string => (w === viewer ? 'you' : w === 'her' ? (her |
                 land('/samdrea/vault/day', '?ok=posted', '#post');
                 return;
             }
-            say('');
-            if (go) go.disabled = false;
-            /* Hand the real form the job. It re-posts the ORIGINAL file, which is
-               the right move when the failure was the resize or a rejected
-               re-encode — and the endpoint's own error page explains the rest. */
-            form.submit();
+            /* ---- A REFUSAL IS NOT AUTOMATICALLY A REASON TO UPLOAD AGAIN --------
+
+               This used to call form.submit() for EVERY non-success, which re-posts the
+               untouched original. Measured against all nine refusal codes the endpoint
+               can send, that meant two uploads of the photograph every single time, and
+               for most codes the second one cannot possibly do better than the first:
+
+                 too-big       the RESIZED file was refused, so posting the LARGER
+                               original is guaranteed to fail, after spending her
+                               connection on more bytes to find out.
+                 rate          retries straight back into the limiter, so it fails again
+                               and burns another slot doing it.
+                 cross-site    the origin has not changed.
+                 unconfigured  the bucket is still not configured.
+                 store         the resize was never the problem, so the original is the
+                               same request again with a bigger body.
+
+               The endpoint tells us WHICH of these it was, so the decision can be made
+               per code instead of uniformly. Re-posting is kept only where the original
+               file is a materially DIFFERENT attempt and might genuinely succeed. */
+            var code = (data && data.code) || '';
+            var retryWithOriginal = {
+                /* The canvas re-encode is the suspect: it can produce something the
+                   sniffer rejects, or nothing at all, where the original is a perfectly
+                   good JPEG. Posting it untouched is a real second chance. */
+                'not-an-image': 1,
+                'no-photo': 1,
+                /* A body that arrived truncated is the most likely real-world failure
+                   here and is usually just signal. Worth one honest retry. */
+                'bad-upload': 1
+            };
+
+            if (retryWithOriginal[code]) {
+                say('');
+                if (go) go.disabled = false;
+                /* Hand the real form the job, with the file she actually picked. The
+                   endpoint's own 303 carries the outcome back to the page. */
+                form.submit();
+                return;
+            }
+
+            /* Everything else: no second upload. Go and read her the reason. An empty
+               code means the answer was unreadable, and that is genuinely unknown rather
+               than failed — the write may already have happened — so it gets the same
+               honest wording as the deadline below instead of a confident "it failed". */
+            if (code) {
+                land('/samdrea/vault/day', '?e=' + encodeURIComponent(code), '#post');
+            } else {
+                land('/samdrea/vault/day', '?ok=maybe', '#post');
+            }
         }).catch(function () {
             /* ---- AN UNKNOWN OUTCOME IS NOT THE SAME AS A FAILURE ----------------
             
@@ -859,11 +927,18 @@ const whoWord = (w: Who): string => (w === viewer ? 'you' : w === 'her' ? (her |
             stop();
             if (sent) {
                 say('checking…');
-                /* Same land() reasoning, and it matters just as much here: a second
-                   timeout in a row targets the URL she is already on, and an assign()
-                   that quietly does nothing would leave her on 'checking…' forever —
-                   the exact stuck state this whole branch exists to end. */
-                land('/samdrea/vault/day', '', '#post');
+                /* ?ok=maybe RATHER THAN NOTHING, which is the other half of this fix.
+                   Reloading with a bare URL was measurably silent: she had just waited
+                   out the 45s deadline and the page came back with no message at all,
+                   which is the same nothing that made her count to sixty and refresh by
+                   hand. The photograph may well be saved — the server writes bytes
+                   before it answers — so the page says it cannot tell and points at the
+                   frame, instead of guessing in either direction.
+
+                   land() rather than assign() for the same reason as above: a second
+                   timeout targets the URL she is already on, and an assign() that
+                   quietly does nothing would leave her on 'checking…' forever. */
+                land('/samdrea/vault/day', '?ok=maybe', '#post');
                 return;
             }
             say('');
