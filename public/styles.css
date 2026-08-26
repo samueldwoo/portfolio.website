@@ -1538,6 +1538,14 @@ a.bubble.ticker:hover::after { transform: translate(2px, -2px); opacity: 1; }
     text-transform: uppercase;
     line-height: 1.2;
 }
+/* Par leads the line, because it is the fact the difficulty word then qualifies:
+   "Par 3, Brutal" reads as one sentence about the hole. Muted label tone rather
+   than ink so it does not compete with the rating, which is the part that
+   changes most. It is measured per hole — see PAR_TABLE in HeroCanvas.tsx. */
+.hero-sc-par {
+    color: var(--mut);
+    font-variant-numeric: tabular-nums;
+}
 .hero-sc-diff-word { color: var(--ink); font-weight: 500; }
 .hero-sc-diff-pips {
     letter-spacing: .18em;

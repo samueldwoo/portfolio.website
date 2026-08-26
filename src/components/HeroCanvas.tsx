@@ -283,19 +283,75 @@ function slopeAt(
  * VERSIONED — a payload whose `v` is not 1 is discarded rather than coerced, so
  * a future shape change can never be half-read as this one.
  */
-const CARD_KEY = 'sw.green.card.v1';
+/**
+ * PAR, one digit per round, rounds 0..80. Measured, not chosen.
+ *
+ * `tools/golf_par.py` plays each hole 200 times as a competent-but-imperfect
+ * putter — reads the break and the up-slope, then misses by a Gaussian in aim and
+ * pace — and reports expected strokes. Over 81 holes that came out at min 1.26,
+ * median 1.96, max 2.94, with only 0.36% of trials hitting the stroke cap. The
+ * median landing on 2 is golf's two-putt green REPRODUCED rather than imposed;
+ * none of the skill parameters were tuned to put it there.
+ *
+ * WHY A TABLE AND NOT A FORMULA. The card cannot brute-force 65520 putts per
+ * hole, so difficulty is computed from two cheap signals at runtime. Par cannot
+ * be: expected strokes barely correlates with anything cheap. Against the shipped
+ * composite it is +0.184, against distance/reach +0.266, against the sweep's own
+ * `hits` only -0.340, and the four difficulty bands are nearly flat in strokes
+ * (Gentle 1.85, Fair 1.94, Tricky 2.02, Brutal 2.04). `hits` measures how BIG the
+ * sinking window is; expected strokes measures whether a competent read FINDS it,
+ * and those turn out to be different questions. "Par 3 when Brutal" would be
+ * right on 57 of 81 holes; a flat par 2 is right on 73; this table is right on 81.
+ *
+ * A table is legitimate here only because the hole sequence is DETERMINISTIC —
+ * every quantity per round comes from hash2(round), so round 7 is the same green
+ * for every visitor forever. Past round 80 it falls back to 2, which is the
+ * distribution's own median and correct for 73 of the 81 measured holes.
+ *
+ * FLOORED AT 2 ON PURPOSE. Three holes measured under 1.5 and would round to par
+ * 1, but golf has no par-1 and it would make an ordinary two-putt a bogey on the
+ * three EASIEST holes on the course, which reads as punishment for being given a
+ * gift. So the easy end stays par 2 and acing it is a birdie.
+ */
+const PAR_TABLE =
+  '222222232232222232222222222222322222222222222222223223222232222222222222222223222';
+const PAR_DEFAULT = 2;
+const parFor = (round: number): number => {
+  const c = PAR_TABLE.charCodeAt(round) - 48;
+  return c >= 1 && c <= 9 ? c : PAR_DEFAULT;
+};
+
+/* v2: the ledger keys now carry par as well as strokes — see the Card comment. */
+const CARD_KEY = 'sw.green.card.v2';
+const CARD_KEY_V1 = 'sw.green.card.v1';
 
 /**
  * The ledger. A HISTOGRAM of completed holes, not a set of summary numbers:
  *
  *     { "1": 3, "2": 7 }   =  three holes sunk in one putt, seven in two
  *
- * WHY NOT `{ holed: 10, best: 1, aces: 3 }`: because then "best" is a stored
- * number that has to be kept in step with everything else by hand, and the first
- * time some path forgets to update it the card lies. Here every headline is
- * DERIVED on read (see `cardView`) — holes completed is the sum of the values,
- * best is the smallest key, aces is `scores["1"]` — so there is no second copy
- * of any fact and nothing to drift.
+ * WHY NOT `{ holed: 10, toPar: -2, aces: 3 }`: because then each total is a
+ * stored number that has to be kept in step with the others by hand, and the
+ * first time some path forgets to update one the card lies. Here every headline
+ * is DERIVED on read (see `cardView`) — holes completed is the sum of the values,
+ * aces are the entries whose stroke count is 1, and the score against par is
+ * sum((strokes - par) * n) — so there is no second copy of any fact.
+ *
+ * THE KEY CARRIES PAR AS WELL AS STROKES, i.e. "2:1" is a hole-in-one on a par 2:
+ *
+ *     { "2:1": 3, "2:2": 7, "3:4": 1 }
+ *
+ * It has to. Score against par cannot be recovered from strokes alone, and par
+ * varies by hole, so a strokes-only ledger can tell you that you took four putts
+ * but not whether that was level or two over. Keys stay bounded — par is 2 or 3
+ * and strokes are small integers — so the payload is still a few tens of bytes
+ * however long you play.
+ *
+ * `best` USED TO LIVE HERE AND WAS REMOVED. It was the smallest key, so it
+ * saturated at 1 the moment you aced anything and then never moved again — and
+ * since `aces` already counts those, it was a second copy of "you have aced
+ * something" that could only ever read 1. Score against par replaces it because
+ * it cannot saturate: there is always a hole where you can do better.
  *
  * It is also bounded, which a per-hole array would not be: the keys are small
  * integers, so the payload stays a few tens of bytes however long you play.
@@ -310,8 +366,8 @@ const emptyCard = (): Card => ({ scores: {} });
 interface CardView {
   /** Holes actually sunk. */
   holed: number;
-  /** Fewest putts on any sunk hole, or null when nothing has been holed yet. */
-  best: number | null;
+  /** Strokes against par across every sunk hole, or null with nothing holed. */
+  toPar: number | null;
   /** Holes sunk in a single putt. */
   aces: number;
 }
@@ -319,15 +375,20 @@ interface CardView {
 /** Everything the card displays, computed from the ledger. No stored totals. */
 function cardView(c: Card): CardView {
   let holed = 0;
-  let best: number | null = null;
+  let aces = 0;
+  let sum = 0;
   for (const k in c.scores) {
     const n = c.scores[k];
-    const putts = Number(k);
     if (!n) continue;
+    const cut = k.indexOf(':');
+    const par = Number(k.slice(0, cut));
+    const putts = Number(k.slice(cut + 1));
+    if (!Number.isFinite(par) || !Number.isFinite(putts)) continue;
     holed += n;
-    if (best === null || putts < best) best = putts;
+    sum += (putts - par) * n;
+    if (putts === 1) aces += n;
   }
-  return { holed, best, aces: c.scores['1'] || 0 };
+  return { holed, toPar: holed ? sum : null, aces };
 }
 
 /**
@@ -366,12 +427,28 @@ function readCard(): { card: Card; ok: boolean } {
   } catch {
     return { card: emptyCard(), ok: false };
   }
+  /* MIGRATION, so a returning visitor does not lose their history to a schema
+     change. The v1 ledger keyed on strokes alone, so its holes carry no par —
+     they are read back as par 2, which is this course's median and correct for 73
+     of the 81 measured holes. The alternative was discarding them, and silently
+     deleting someone's scorecard to add a feature is not a trade worth making.
+     The v1 key is READ, never written or cleared: if this ever has to be rolled
+     back, the old card is still sitting there intact. */
+  let migrating = false;
+  if (!raw) {
+    try {
+      raw = window.localStorage.getItem(CARD_KEY_V1);
+    } catch {
+      return { card: emptyCard(), ok: false };
+    }
+    migrating = raw !== null;
+  }
   if (!raw) return { card: emptyCard(), ok: true };
   try {
     const parsed = JSON.parse(raw) as unknown;
     if (!parsed || typeof parsed !== 'object') return { card: emptyCard(), ok: true };
     const obj = parsed as Record<string, unknown>;
-    if (obj.v !== 1) return { card: emptyCard(), ok: true };
+    if (obj.v !== (migrating ? 1 : 2)) return { card: emptyCard(), ok: true };
     const src = obj.scores;
     /* ARRAYS ARE REJECTED, not sanitised, and this was a real hole found by the
        test suite. `typeof [] === 'object'` and `for (const k in [1,2,3])` yields
@@ -385,13 +462,28 @@ function readCard(): { card: Card; ok: boolean } {
     const scores: Record<string, number> = {};
     let keys = 0;
     for (const k in src as Record<string, unknown>) {
-      // 64 distinct putt-counts is far more than anyone will ever produce; the
-      // cap exists so a hand-written blob cannot make the derivation loop long.
+      // 64 distinct buckets is far more than anyone will ever produce; the cap
+      // exists so a hand-written blob cannot make the derivation loop long.
       if (++keys > 64) break;
-      const putts = posInt(Number(k));   // keys are strings; NaN falls out in posInt
       const n = posInt((src as Record<string, unknown>)[k]);
-      if (putts === null || n === null) continue;
-      scores[String(putts)] = n;
+      if (n === null) continue;
+      /* v1 keys are "4"; v2 keys are "3:4". Both are parsed strictly and anything
+         else is dropped, for the same reason arrays are rejected above: a junk
+         payload must produce an empty card, never a plausible history. */
+      let par: number | null;
+      let putts: number | null;
+      if (migrating) {
+        par = PAR_DEFAULT;
+        putts = posInt(Number(k));
+      } else {
+        const cut = k.indexOf(':');
+        if (cut < 1) continue;
+        par = posInt(Number(k.slice(0, cut)));
+        putts = posInt(Number(k.slice(cut + 1)));
+      }
+      if (par === null || putts === null) continue;
+      const key = par + ':' + putts;
+      scores[key] = (scores[key] || 0) + n;
     }
     return { card: { scores }, ok: true };
   } catch {
@@ -403,7 +495,7 @@ function readCard(): { card: Card; ok: boolean } {
  *  zero quota, so `getItem` can succeed while `setItem` throws. */
 function writeCard(c: Card): boolean {
   try {
-    window.localStorage.setItem(CARD_KEY, JSON.stringify({ v: 1, scores: c.scores }));
+    window.localStorage.setItem(CARD_KEY, JSON.stringify({ v: 2, scores: c.scores }));
     return true;
   } catch {
     return false;
@@ -812,7 +904,11 @@ export default function HeroCanvas() {
     for (const [key, label] of [
       ['hole', 'This hole'],
       ['holed', 'Holed'],
-      ['best', 'Best'],
+      /* `Best` was here and saturated: it was the smallest stroke count, so one
+         ace pinned it to 1 forever while `Aces` already said the same thing.
+         Score against par cannot saturate — there is always a hole left to play
+         better. See the PAR_TABLE and Card comments. */
+      ['topar', 'To par'],
       ['aces', 'Aces'],
     ] as Array<[string, string]>) {
       // dl > div > (dt, dd) is valid HTML5 and is what lets each pair stay glued
@@ -832,11 +928,17 @@ export default function HeroCanvas() {
        stats below describe your history. */
     const cardDiff = document.createElement('p');
     cardDiff.className = 'hero-sc-diff';
+    /* PAR SITS WITH THE DIFFICULTY, NOT WITH THE SCORE. Both describe the hole in
+       front of you; the stats strip below describes your history. Keeping them in
+       separate boxes is what stops "Par 2" reading as something you achieved. */
+    const cardPar = document.createElement('span');
+    cardPar.className = 'hero-sc-par';
     const cardDiffWord = document.createElement('span');
     cardDiffWord.className = 'hero-sc-diff-word';
     const cardDiffPips = document.createElement('span');
     cardDiffPips.className = 'hero-sc-diff-pips';
     cardDiffPips.setAttribute('aria-hidden', 'true');
+    cardDiff.appendChild(cardPar);
     cardDiff.appendChild(cardDiffWord);
     cardDiff.appendChild(cardDiffPips);
     /* APPEND, in order — do not use insertBefore(cardDiff, cardList) here.
@@ -1038,11 +1140,15 @@ export default function HeroCanvas() {
       const v = cardView(card);
       cardVals.hole.textContent = String(holePutts);
       cardVals.holed.textContent = String(v.holed);
-      // An em dash, not a 0: nothing has been holed, so there IS no best. A zero
-      // there would read as "best score: zero putts", which is a lie about a
-      // number this card exists to make honest.
-      cardVals.best.textContent = v.best === null ? '—' : String(v.best);
+      /* An em dash, not a 0: with nothing holed there IS no score against par,
+         and a 0 would read as "level par", which is a claim about golf you have
+         not played. `E` is the golfer's word for level and is only shown once a
+         hole has actually been completed. */
+      cardVals.topar.textContent = v.toPar === null
+        ? '—'
+        : v.toPar === 0 ? 'E' : v.toPar > 0 ? '+' + v.toPar : String(v.toPar);
       cardVals.aces.textContent = String(v.aces);
+      cardPar.textContent = 'Par ' + parFor(round);
       // Drives the "this session only" note. Cleared as well as set, so a
       // recovered write (a freed quota) takes the notice back down.
       if (storageOk === false) cardEl.dataset.storage = 'off';
@@ -1779,7 +1885,13 @@ export default function HeroCanvas() {
       }
       if (v.holed > 0) {
         parts.push(v.holed + ' ' + plural(v.holed, 'hole', 'holes') + ' holed');
-        if (v.best !== null) parts.push('best ' + v.best);
+        /* Spelled out, not "+2" or "E": a screen reader says "plus two" for the
+           first and either "E" or nothing useful for the second, and this string
+           is the only way a non-sighted player has of hearing the score. */
+        if (v.toPar !== null) {
+          parts.push(v.toPar === 0 ? 'level par'
+            : Math.abs(v.toPar) + (v.toPar > 0 ? ' over par' : ' under par'));
+        }
         if (v.aces > 0) {
           parts.push(v.aces + ' ' + plural(v.aces, 'hole in one', 'holes in one'));
         }
@@ -1986,7 +2098,11 @@ export default function HeroCanvas() {
          if some future path forgets, the bug is a MISSING hole rather than a free
          one. Errors in a scorecard should fall on the side of not crediting. */
       if (holePutts < 1) return;
-      const k = String(holePutts);
+      /* Par is stamped from the round that was just PLAYED, not from the round
+         counter's later value: rollGreen() advances `round` on the re-tee, so
+         reading it after that point would credit this hole against the next
+         hole's par. */
+      const k = parFor(round) + ':' + holePutts;
       card.scores[k] = (card.scores[k] || 0) + 1;
       /* Persisted here, once, on a rare event — never on a timer and never per
          frame. A failed write leaves the in-memory ledger untouched, so the
