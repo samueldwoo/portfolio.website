@@ -316,6 +316,8 @@ function slopeAt(
 const PAR_TABLE =
   '222222232232222232222222222222322222222222222222223223222232222222222222222223222';
 const PAR_DEFAULT = 2;
+/** Par of a hole played before par existed. Counts as played, not as scored. */
+const PAR_UNKNOWN = 0;
 const parFor = (round: number): number => {
   const c = PAR_TABLE.charCodeAt(round) - 48;
   return c >= 1 && c <= 9 ? c : PAR_DEFAULT;
@@ -343,9 +345,13 @@ const CARD_KEY_V1 = 'sw.green.card.v1';
  *
  * It has to. Score against par cannot be recovered from strokes alone, and par
  * varies by hole, so a strokes-only ledger can tell you that you took four putts
- * but not whether that was level or two over. Keys stay bounded — par is 2 or 3
- * and strokes are small integers — so the payload is still a few tens of bytes
+ * but not whether that was level or two over. Keys stay bounded — par is 0, 2 or
+ * 3 and strokes are small integers — so the payload is still a few tens of bytes
  * however long you play.
+ *
+ * A par of 0 means UNKNOWN: the hole came from a v1 card written before par
+ * existed. Those count as holed and as aces, and are excluded from the score
+ * against par. See the migration note in `readCard`.
  *
  * `best` USED TO LIVE HERE AND WAS REMOVED. It was the smallest key, so it
  * saturated at 1 the moment you aced anything and then never moved again — and
@@ -377,6 +383,7 @@ function cardView(c: Card): CardView {
   let holed = 0;
   let aces = 0;
   let sum = 0;
+  let scored = 0;
   for (const k in c.scores) {
     const n = c.scores[k];
     if (!n) continue;
@@ -385,10 +392,15 @@ function cardView(c: Card): CardView {
     const putts = Number(k.slice(cut + 1));
     if (!Number.isFinite(par) || !Number.isFinite(putts)) continue;
     holed += n;
-    sum += (putts - par) * n;
     if (putts === 1) aces += n;
+    /* Par 0 means the hole predates par, so it cannot be scored against it. It
+       still counts as holed and as an ace, because those are facts; folding it
+       into the score against par would be a guess dressed as a total. */
+    if (par === PAR_UNKNOWN) continue;
+    scored += n;
+    sum += (putts - par) * n;
   }
-  return { holed, toPar: holed ? sum : null, aces };
+  return { holed, toPar: scored ? sum : null, aces };
 }
 
 /**
@@ -428,10 +440,16 @@ function readCard(): { card: Card; ok: boolean } {
     return { card: emptyCard(), ok: false };
   }
   /* MIGRATION, so a returning visitor does not lose their history to a schema
-     change. The v1 ledger keyed on strokes alone, so its holes carry no par —
-     they are read back as par 2, which is this course's median and correct for 73
-     of the 81 measured holes. The alternative was discarding them, and silently
-     deleting someone's scorecard to add a feature is not a trade worth making.
+     change. The v1 ledger keyed on strokes alone, so its holes carry no par, and
+     they are read back with par 0 — the "par unknown" sentinel. They still count
+     toward Holed and Aces, which are facts the old ledger really does record, and
+     they are skipped by the score against par, which it does not.
+     THE FIRST VERSION MIGRATED THEM AS PAR 2 and that was wrong. Two putts is
+     this course's median so it looked defensible, but it turns every old ace into
+     a birdie: a returning player with fourteen of them opened on -14, a score
+     against par they had never played a stroke against. Inventing a flattering
+     number is the same failure as inventing a plausible history from a junk
+     payload, which the array check below already refuses to do.
      The v1 key is READ, never written or cleared: if this ever has to be rolled
      back, the old card is still sitting there intact. */
   let migrating = false;
@@ -473,12 +491,15 @@ function readCard(): { card: Card; ok: boolean } {
       let par: number | null;
       let putts: number | null;
       if (migrating) {
-        par = PAR_DEFAULT;
+        par = PAR_UNKNOWN;
         putts = posInt(Number(k));
       } else {
         const cut = k.indexOf(':');
         if (cut < 1) continue;
-        par = posInt(Number(k.slice(0, cut)));
+        // Par 0 is the migration's "unknown" sentinel and must survive a
+        // round-trip, so it is allowed here where posInt would reject it.
+        const p = Number(k.slice(0, cut));
+        par = Number.isInteger(p) && p >= PAR_UNKNOWN && p <= 9 ? p : null;
         putts = posInt(Number(k.slice(cut + 1)));
       }
       if (par === null || putts === null) continue;
