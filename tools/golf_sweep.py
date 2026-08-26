@@ -11,7 +11,7 @@ Field.height. Use --no-selfcheck only when you know why.
 
 Usage:
   golf_sweep.py probe.json [--rounds 24] [--dt-source probe|fps] [--fps 120]
-                [--capture 520] [--maxspeed 900] [--friction 0.12] [--cupr 13]
+                [--capture 175] [--maxspeed 900] [--friction 0.12] [--cupr 13]
 """
 import argparse
 import json
@@ -191,9 +191,9 @@ def sweep(g: S.Green, angles_deg, powers, dt, start=None):
             hot[live] = hot[live] | rim
             hot_min[live] = np.where(rim, np.minimum(hot_min[live], speed),
                                      hot_min[live])
-            inv = 1.0 / np.where(dist == 0, 1.0, dist)
-            wx = np.where(rim, wx - dcx * inv * speed * 0.9, wx)
-            wy = np.where(rim, wy - dcy * inv * speed * 0.9, wy)
+            # MIRROR of HeroCanvas / golf_sim: a putt too fast to be held keeps
+            # its speed and its line and crosses the hole. THIRD MIRROR — the one
+            # that went stale on the height field — so the selfcheck guards it.
 
         rgx = np.where((at_l & (gx < 0)) | (at_r & (gx > 0)), 0.0, gx)
         rgy = np.where((at_t & (gy < 0)) | (at_b & (gy > 0)), 0.0, gy)

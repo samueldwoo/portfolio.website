@@ -22,7 +22,7 @@ REST_SLOPE = 0.03   # mirrors HeroCanvas.tsx
 MAX_ROLL = 7.0
 MAX_SPEED = 900.0
 TAU = math.pi * 2
-CAPTURE_SPEED = 520.0  # the `speed < 520` in the cup test
+CAPTURE_SPEED = 175.0  # the `speed < CAPTURE_SPEED` in the cup test (was 520)
 
 # ---- THE TIMESTEP: ONE STORY, NOT FOUR ----
 # HeroCanvas.tsx tick() computes `Math.min(0.05, (now - last) / 1000)`, seeded at
@@ -409,10 +409,12 @@ class Green:
                             hot_min_speed, path)
                 hot_pass = True
                 hot_min_speed = min(hot_min_speed, speed)
-                nx = dcx / (dist or 1)
-                ny = dcy / (dist or 1)
-                vx -= nx * speed * 0.9
-                vy -= ny * speed * 0.9
+                # MIRROR of HeroCanvas: a putt too fast to be held is simply not
+                # held. No velocity change at all — any damping applied inside the
+                # cup radius walks the ball under CAPTURE_SPEED while it is still
+                # over the hole, so both the old radial 0.9 brake and a 0.85
+                # per-frame damping ended in a capture.
+                pass
 
             rgx, rgy = gx, gy
             if at_l and rgx < 0:

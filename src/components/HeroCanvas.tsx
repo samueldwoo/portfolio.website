@@ -153,6 +153,38 @@ const MAX_ROLL = 7;
 /** Max drag length in px that maps to full power. */
 const MAX_PULL = 150;
 const MAX_SPEED = 900;
+/**
+ * How slowly the ball must be moving, inside the cup radius, for the cup to keep
+ * it. Above this it rims out instead — the deflection already in stepBall.
+ *
+ * WAS 520, A BARE LITERAL, AND IT MADE THE GAME TRIVIAL. 520 of a 900 max meant a
+ * ball arriving at 58% of launch speed still dropped, and since break is
+ * proportional to TIME on the green, more pace means less break: aimed straight at
+ * the cup, median closest-approach fell from 115px at power 0.5 to 49px at 0.7 to
+ * 0px at full power, on every hole sampled. Overshooting cost nothing either — the
+ * ball just stops somewhere and you putt again. So "aim at the hole, full power"
+ * was STRICTLY DOMINANT, and it sank 68 of 81 holes, including the par 4 and the
+ * par 5. A hole a competent player needs five putts for went in one.
+ *
+ * That made the contour lines decorative, which is the one thing this hero cannot
+ * afford: the height field, the difficulty rating and the whole offline
+ * verification stack exist to make reading the green matter.
+ *
+ * 175 is chosen against the measured arrival speed of that mash line, hole by
+ * hole. It now sinks 6 of 81 rather than 68, and 1 of the 13 holes at par 3 or
+ * worse rather than 11 — the par 5 arrives at 195px/s and is now rejected. The
+ * holes it still sinks are the gentle ones, which is correct; a gentle hole should
+ * go in off a straight look.
+ *
+ * The trade this creates is the one real putting has. Capture speed is a CEILING
+ * on pace; break is a FLOOR, because a slow ball has time to be pushed off line.
+ * Between them is a window, and reading the contours is how you find it.
+ *
+ * MIRRORED in tools/golf_sim.py (CAPTURE_SPEED) and as golf_sweep's --capture
+ * default. golf_sweep's selfcheck compares the two engines and will report a
+ * non-zero delta if they drift, which is how the last three-mirror bug was caught.
+ */
+const CAPTURE_SPEED = 175;
 
 type Phase = 'idle' | 'aiming' | 'rolling' | 'sunk';
 
@@ -343,9 +375,15 @@ function slopeAt(
  * relief rule was reverted, which is correct: the recovery is real work.
  *
  * RE-MEASURE IF THE PHYSICS MOVES. Every number here is conditional on
- * CAPTURE_SPEED, MAX_SPEED and FRICTION. In particular a lower CAPTURE_SPEED —
- * under investigation, because at 520 a full-power putt straight at the cup sinks
- * 84% of holes and makes the contour lines decorative — would change every value.
+ * CAPTURE_SPEED, MAX_SPEED and FRICTION.
+ *
+ * CAPTURE_SPEED has since moved 520 -> 175 to kill the aim-and-mash exploit, and
+ * the table was RE-MEASURED against it rather than assumed: median expected
+ * strokes went 2.02 -> 2.04 and the ace rate 36.4% -> 34.1%, both inside the noise
+ * at 500 trials. So the table stands, and the reason it stands is the point of the
+ * change — this player already picks its pace to roll 15% past the hole, so it
+ * never relied on the loophole. Rejecting fast arrivals taxes the degenerate
+ * strategy and leaves competent play alone.
  */
 const PAR_TABLE =
   '232232252232222222212222222222322222222222222322223223222232222232222222223223422';
@@ -1380,7 +1418,7 @@ export default function HeroCanvas() {
      * were unwinnable at 1440x900 and 78 of 201 at 1920x1080, where the box is
      * bigger and the holes longer. The ball's closest possible approach on those
      * was 20-114px on a 13px cup: it never even reached the lip, so this is a
-     * REACH failure, NOT the rim-out rule (`speed < 520` in stepBall). Raising
+     * REACH failure, NOT the rim-out rule (`speed < CAPTURE_SPEED` in stepBall). Raising
      * that threshold, or MAX_SPEED, or FRICTION, cannot fix this and was
      * measured not to: the tee has to be dealt inside the reach envelope.
      *
@@ -1506,7 +1544,7 @@ export default function HeroCanvas() {
         if (bestErr === Infinity) { bestFx = farFx; bestFy = farFy; }
         /* Then pull the tee IN along its own line until a full-power putt can
            reach it. Moving the tee rather than touching the physics is the
-           point: the cup stays 13px, the rim-out speed stays 520, friction and
+           point: the cup stays 13px, the rim-out speed stays CAPTURE_SPEED, friction and
            the slope are untouched, so nothing about how a putt PLAYS is made
            easier — the only thing removed is holes that were never winnable.
            `minD` is a hard floor, so this can never collapse into a gimme
@@ -1638,7 +1676,7 @@ export default function HeroCanvas() {
       const dist = Math.sqrt(dcx * dcx + dcy * dcy);
       const speed = Math.sqrt(velX * velX + velY * velY);
       if (dist < CUP_R) {
-        if (speed < 520) {
+        if (speed < CAPTURE_SPEED) {
           phase = 'sunk';
           sunkAt = clockRef.v;
           ballX = cupX;
@@ -1652,11 +1690,18 @@ export default function HeroCanvas() {
           recordHole();
           return false;
         }
-        // Rim-out: deflect around the lip instead of dropping.
-        const nx = dcx / (dist || 1);
-        const ny = dcy / (dist || 1);
-        velX -= nx * speed * 0.9;
-        velY -= ny * speed * 0.9;
+        /* NOTHING HAPPENS TO THE BALL HERE, AND THAT IS THE POINT.
+           Two earlier versions both fed the ball into the hole they meant to
+           reject. The first subtracted 0.9 of the speed along the vector toward
+           the cup, which left it crawling INSIDE the radius so it dropped on the
+           next frame. Replacing that with a per-frame 0.85 damping was no better
+           and measurably worse — 67 of 81 mash putts still sank — because a ball
+           takes about ten frames to cross a 26px cup, and 0.85^10 is 0.20, so the
+           damping walks it under CAPTURE_SPEED while it is still over the hole.
+           ANY damping applied inside the radius ends in a capture.
+           So a putt too fast to be held is simply not held: it keeps its speed,
+           keeps its line, crosses the hole and runs on past. `hotPass` still
+           records that it happened, which is what the harnesses read. */
       }
 
       /* A ball only comes to rest where the ground is flat enough to hold it.
