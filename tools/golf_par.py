@@ -14,33 +14,48 @@ WHY THE SWEEP CANNOT ANSWER THIS
     number is only as meaningful as the skill model behind it. That model is
     stated here rather than buried, because it is the entire content of par.
 
-THE PLAYER MODEL: reads distance, does not read break
-    Each stroke, the simulated player aims straight at the cup and picks the
-    power that a STRAIGHT, FLAT roll would need to stop there (dist / flat_run,
-    which is exact for the flat case since roll length is v0/k and v0 scales
-    linearly with power). Then aim is perturbed by a Gaussian in degrees and
-    power by a multiplicative Gaussian.
+THE PLAYER MODEL: reads the green competently, then misses by a skill error
+    Each stroke the player reads BOTH things a putt needs, then executes
+    imperfectly:
+      - LINE. Samples the slope across the line at five fractions, works out the
+        drift it will cause, and aims that far the other way. This is the same
+        five-sample integral the shipped reachToward() trusts, used for aim.
+      - PACE. Divides the target roll by reach_toward(), which is how far a
+        full-power putt actually travels here, so an uphill putt is hit harder.
+      - Then aim is perturbed by a Gaussian in degrees and power by a
+        multiplicative Gaussian, and whatever the last putt taught is carried as
+        a small residual correction.
 
-    The player therefore never compensates for slope. That is deliberate and it
-    is the thematic point of the whole hero: the contour lines exist so a HUMAN
-    can read break, so par should be the score of someone who has not read it.
-    Beating par means you read the green. A model that pre-compensated for slope
-    would fold the skill being tested into the baseline and make par unbeatable
-    for the right reason.
+    Reading the green is legitimate and is the whole point: the contour lines
+    exist to be read, so par should be what a competent reader scores, and
+    beating par means reading it better. What is NOT legitimate is evaluating
+    candidate putts — the model never asks the simulator whether a line works, it
+    only uses slope the way a player uses their eyes.
 
-    Not modelled, and both push par UP, so par here is a slightly generous
-    baseline rather than a tight one:
-      - learning. A real player who watches the first putt break left will allow
-        for it on the second. This player re-aims straight at the cup every time.
-      - lag putting. A real player leaves a long putt short on purpose to avoid
-        running past. This one always tries to hole out.
+    THREE MODEL BUGS PRODUCED PLAUSIBLE NUMBERS THAT WERE REALLY THE STROKE CAP,
+    so distrust any version of this whose cap rate is not near zero:
+      1. aiming to STOP at the cup deadlocks — a ball dying at the hole falls
+         short on any error and the next putt is shorter. 48.7% never holed out.
+         Fixed by --overshoot.
+      2. learning break from the FINAL resting position conflates break with
+         everything after the ball passes the cup. `bias` slammed to its cap and
+         sprayed putts 80-210px wide. Fixed by measuring at closest approach.
+      3. taking pace from the FLAT roll formula left every uphill putt short. On
+         round 7 the sinking band is 0.890..1.000 and the flat formula asked for
+         0.775 — 2.1 sd below it — so the hole read as unholeable when the line
+         that sinks it is 0.4deg off straight. This one nearly shipped a false
+         conclusion that the GAME was broken. Fixed by dividing by reach_toward.
+
+    Still not modelled, and it pushes par UP, so par here is a slightly generous
+    baseline: lag putting. A real player leaves a long putt short on purpose
+    rather than risk running past; this one always tries to hole out.
 
 CALIBRATING THE SKILL, RATHER THAN GUESSING IT
     aim-sd and power-sd are free parameters and picking them by feel would make
     par arbitrary. Anchor instead on the convention every golfer already knows: a
-    green is a TWO-PUTT. So choose the aim error at which the MEDIAN hole plays
-    to an expected 2.0 strokes, and report the curve so the choice is auditable
-    (--curve). Everything else follows from that one anchor.
+    green is a TWO-PUTT. At the defaults the median hole plays to 2.02 expected
+    strokes with a 0.31% cap rate, which is that convention reproduced rather than
+    imposed. Use --curve to re-audit the anchor if the field ever changes.
 """
 import argparse
 import json
@@ -81,24 +96,41 @@ def play_hole(g, rng, aim_sd, power_sd, dt, dts, overshoot, read):
     for stroke in range(1, MAX_STROKES + 1):
         dx, dy = g.cup_x - bx, g.cup_y - by
         dist = math.hypot(dx, dy) or 1.0
-        # Straight at the cup, plus what the last putt taught, plus noise.
+        # READ THE GREEN, THEN MISS BY A SKILL ERROR.
         #
-        # THE PLAYER HAS TO LEARN OR PAR IS INFINITE ON SOME HOLES. A player who
-        # only ever aims straight at the cup cannot finish round 4 at all: its
-        # fall line runs into the play box's left wall, the ball parks against it
-        # at x=904.5, and every subsequent putt breaks straight back into the
-        # same wall -- 40 of 40 trials failed to hole out in 8 strokes, on a hole
-        # the sweep proves is a one-putt. That is not the hole being hard, it is
-        # the model being blind, and it would have poisoned par on every
-        # break-heavy green.
+        # Aiming straight at the cup and correcting afterwards does not work, and
+        # the evidence was unambiguous: round 15 has a 38.5deg sinking window,
+        # which 6deg of aim noise should find on the first putt, and the
+        # straight-aiming player stranded on it 53 times in 60. Window size barely
+        # predicted stranding at all (Spearman -0.23), which is the signature of a
+        # broken policy rather than a hard hole. One correction per stroke cannot
+        # cover a green whose line sits well off the direct path.
         #
-        # So the player does what a human does: watches where the ball actually
-        # went versus where it was aimed, and allows for that much break next
-        # time. `read` is how much of the observed bend is believed, which makes
-        # green-reading skill ONE named parameter instead of an assumption. No
-        # slope field is consulted -- the correction comes only from what a
-        # player could actually see.
-        aim = math.atan2(dy, dx) + bias
+        # So the player reads the break the way the contour lines exist to be
+        # read: sample the slope along the line, take the component ACROSS it, and
+        # allow for the drift it will cause. This is not the simulator solving the
+        # hole for itself -- it never evaluates a candidate putt -- it is the same
+        # five-sample slope integral the shipped reachToward() already trusts,
+        # used for aim instead of for reach.
+        #
+        # Roll time comes out near-constant, which is why a single estimate works:
+        # power is chosen as dist*overshoot/flat_run, so v0 scales WITH distance
+        # and t ~ 2*dist/v0 ~ 2/(overshoot*k) regardless of how long the putt is.
+        ux, uy = dx / dist, dy / dist
+        rx, ry = -uy, ux                      # across the line
+        a_lat = 0.0
+        for f in (0.15, 0.35, 0.55, 0.75, 0.95):
+            gx, gy = g.slope_at(bx + ux * dist * f, by + uy * dist * f)
+            a_lat += gx * rx + gy * ry
+        a_lat /= 5.0
+        k = -math.log(g.friction)
+        t_roll = 2.0 / (overshoot * k)
+        drift = 0.5 * a_lat * t_roll * t_roll
+        # Aim OPPOSITE the drift, by `read` of it, plus whatever the last putt
+        # taught. `bias` stays as a smaller second-order term: with a real prior
+        # the residual it has to explain is small, which is also what stops it
+        # saturating the way it did when it was the only correction.
+        aim = math.atan2(dy, dx) - read * math.atan2(drift, dist) + bias
         ang = aim + math.radians(rng.normal(0.0, aim_sd))
         # NEVER UP, NEVER IN. The first version of this aimed to STOP at the cup
         # (power = dist / flat_run) and it deadlocked: a ball dying at the hole
@@ -108,7 +140,24 @@ def play_hole(g, rng, aim_sd, power_sd, dt, dts, overshoot, read):
         # roll is `overshoot` x the remaining distance. This single factor is the
         # difference between a usable model and one whose every mean is really
         # just the stroke cap.
-        want = dist * overshoot / flat_run
+        # PACE MUST ANSWER THE SLOPE, NOT JUST THE DISTANCE.
+        #
+        # This used to be dist*overshoot/flat_run, the FLAT requirement, and it is
+        # what made rounds 4 and 7 look unholeable. Measured on round 7: the
+        # sinking power band is 0.890..1.000 and the flat formula asks for 0.775,
+        # which is 2.1 standard deviations BELOW the band, so the player could
+        # never generate enough pace no matter how well it aimed. And it aimed
+        # essentially perfectly — the line that sinks there is 0.4deg off straight
+        # at the cup. 0 aces in 480 putts came entirely from being too weak uphill.
+        #
+        # The honest reading: an uphill putt needs more pace, which every golfer
+        # knows and this model did not. reach_toward() already integrates the
+        # up-slope over the line and returns how far a FULL-power putt actually
+        # travels, so dividing by that instead of by the flat run is both the
+        # smaller change and the physically correct one. On round 7 it asks for
+        # 1.03, clipped to 1.0, which lands inside the band.
+        reach = g.reach_toward(bx, by) or flat_run
+        want = dist * overshoot / reach
         power = float(np.clip(want * rng.normal(1.0, power_sd), 0.1, 1.0))
         out, _, fx, fy, _, _, _, path = g.putt(math.cos(ang), math.sin(ang),
                                                power, dt=dt, dts=dts,
@@ -141,7 +190,7 @@ def play_hole(g, rng, aim_sd, power_sd, dt, dts, overshoot, read):
             lat = -ex * math.sin(aim) + ey * math.cos(aim)
             if along > 20.0:
                 bend = math.atan2(lat, along)
-                bias = max(-BIAS_CAP, min(BIAS_CAP, bias - read * bend))
+                bias = max(-BIAS_CAP, min(BIAS_CAP, bias - 0.25 * read * bend))
         bx, by = fx, fy
     return MAX_STROKES
 
