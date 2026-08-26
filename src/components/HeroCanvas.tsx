@@ -286,35 +286,69 @@ function slopeAt(
 /**
  * PAR, one digit per round, rounds 0..80. Measured, not chosen.
  *
- * `tools/golf_par.py` plays each hole 200 times as a competent-but-imperfect
+ * `tools/golf_par.py` plays each hole 2000 times as a competent-but-imperfect
  * putter — reads the break and the up-slope, then misses by a Gaussian in aim and
- * pace — and reports expected strokes. Over 81 holes that came out at min 1.26,
- * median 1.96, max 2.94, with only 0.36% of trials hitting the stroke cap. The
- * median landing on 2 is golf's two-putt green REPRODUCED rather than imposed;
- * none of the skill parameters were tuned to put it there.
+ * pace — and reports expected strokes. Over 81 holes: min 1.29, median 2.02, max
+ * 5.40. The median landing on 2 is golf's two-putt green REPRODUCED rather than
+ * imposed; none of the skill parameters were tuned to put it there.
+ *
+ * 2000 TRIALS, NOT 200, AND THE DIFFERENCE MATTERED. At 200 the noise was larger
+ * than the gaps between par values: round 0 read 1.49 and would have become a
+ * par 1, when 2000 trials put it at 1.572. Un-flooring the noisy table would have
+ * made an ordinary two-putt a bogey on the first hole every visitor sees.
+ *
+ * PAR IS A PROPERTY OF THE HOLE **AND OF AN ASSUMED SKILL**, which is worth
+ * saying plainly: 6deg of aim error, 7% of pace error, 70% of the observed break
+ * believed. Real golf's par carries the same assumption (a scratch golfer), but
+ * nobody has measured a HUMAN playing this green, so these are the model's scores
+ * and not yet evidence about anyone's.
  *
  * WHY A TABLE AND NOT A FORMULA. The card cannot brute-force 65520 putts per
  * hole, so difficulty is computed from two cheap signals at runtime. Par cannot
  * be: expected strokes barely correlates with anything cheap. Against the shipped
- * composite it is +0.184, against distance/reach +0.266, against the sweep's own
- * `hits` only -0.340, and the four difficulty bands are nearly flat in strokes
- * (Gentle 1.85, Fair 1.94, Tricky 2.02, Brutal 2.04). `hits` measures how BIG the
- * sinking window is; expected strokes measures whether a competent read FINDS it,
- * and those turn out to be different questions. "Par 3 when Brutal" would be
- * right on 57 of 81 holes; a flat par 2 is right on 73; this table is right on 81.
+ * difficulty composite it is +0.225, against distance +0.164, and against the
+ * sweep's own `hits` only -0.355. The four difficulty bands are nearly FLAT in
+ * strokes — Gentle 1.87, Fair 2.01, Tricky 1.98, Brutal 2.10, not even monotonic.
+ *
+ * That is the finding, not an inconvenience: `hits` measures how BIG the sinking
+ * window is, while expected strokes measures whether a competent read FINDS it,
+ * and they are different questions. So the difficulty word and par are genuinely
+ * independent facts about a hole, which is also why they read as one sentence
+ * rather than as a repetition.
+ *
+ * "Par 3 when Brutal" would be right on 54 of 81 holes; a flat par 2 on 67; this
+ * table on 81 by construction.
  *
  * A table is legitimate here only because the hole sequence is DETERMINISTIC —
  * every quantity per round comes from hash2(round), so round 7 is the same green
  * for every visitor forever. Past round 80 it falls back to 2, which is the
  * distribution's own median and correct for 73 of the 81 measured holes.
  *
- * FLOORED AT 2 ON PURPOSE. Three holes measured under 1.5 and would round to par
- * 1, but golf has no par-1 and it would make an ordinary two-putt a bogey on the
- * three EASIEST holes on the course, which reads as punishment for being given a
- * gift. So the easy end stays par 2 and acing it is a birdie.
+ * NOT FLOORED. An earlier version forced everything to 2 or 3 on the grounds that
+ * golf has no par-1. It does not, but this is a putting green rather than a golf
+ * hole, one hole here measures 1.29 expected strokes, and calling that a par 2
+ * hands out a birdie for the ordinary play. Par is round(E) now, clamped 1..6.
+ *
+ * TIE-BREAK: where the 95% interval straddles a .5 boundary the HARDER par wins.
+ * Eleven holes straddle at n=2000 (round 17 is 1.482, round 45 is 2.514), and
+ * claiming a hole is a one-putt when it is a coin flip is the same overclaim as
+ * the old migration calling every legacy ace a birdie.
+ *
+ * THREE HOLES ARE UNDER-MEASURED AND THEIR PAR IS A LOWER BOUND. The simulator
+ * gives up after 8 strokes, and on the hardest holes it hits that ceiling often
+ * enough to truncate the mean: round 7 capped 1076 of 2000 trials, round 78 757,
+ * round 4 507. So E is biased DOWN there and the true par is at least what the
+ * table says, possibly more — the fix is a higher stroke cap and a re-measure,
+ * not a guess. Those three are the trap-lie holes, and they got harder when the
+ * relief rule was reverted, which is correct: the recovery is real work.
+ *
+ * RE-MEASURE IF THE PHYSICS MOVES. Every number here is conditional on
+ * CAPTURE_SPEED, MAX_SPEED and FRICTION. In particular a lower CAPTURE_SPEED —
+ * under investigation, because at 520 a full-power putt straight at the cup sinks
+ * 84% of holes and makes the contour lines decorative — would change every value.
  */
 const PAR_TABLE =
-  '222222232232222232222222222222322222222222222222223223222232222222222222222223222';
+  '232232252232222222212222222222322222222222222322223223222232222232222222223223422';
 const PAR_DEFAULT = 2;
 /** Par of a hole played before par existed. Counts as played, not as scored. */
 const PAR_UNKNOWN = 0;
