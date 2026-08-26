@@ -109,25 +109,11 @@ def main():
             rr = sweep(g, [adeg], [power], dt)
             oc = int(rr["outcome"][0, 0])
             got = "sunk" if oc == 1 else ("timeout" if oc == 3 else "stopped")
-            # RELIEF IS APPLIED HERE, NOT IN sweep(). The component will not let a
-            # ball rest where the cup cannot be reached, so a predicted resting
-            # place that ignores that rule makes golf_validate report a divergence
-            # that is really a stale prediction — it read 143.7px before this.
-            #
-            # But sweep() is the wrong place to do it: most of ~65000 candidates
-            # per round stop, and screening them all cost the documented 80-round
-            # invariant over 108 minutes against ~25 before. Resting positions are
-            # only CONSUMED by the few trials emitted here, so the rule belongs at
-            # the point of consumption. sweep(relief=True) still exists for the
-            # selfcheck, where there is exactly one candidate and it is free.
-            fx = float(rr["final"][0][0, 0])
-            fy = float(rr["final"][1][0, 0])
-            if oc != 1:
-                fx, fy = g.relief_in(fx, fy)
             return {
                 "round": rnd, "kind": kind, "angle": float(adeg),
                 "power": float(power), "expect": expect, "predict": got,
-                "predictFinal": [fx, fy],
+                "predictFinal": [float(rr["final"][0][0, 0]),
+                                 float(rr["final"][1][0, 0])],
                 "predictClosest": float(rr["closest"][0, 0]),
                 "cup": [g.cup_x, g.cup_y], "ball": list(g.ball0),
                 "runDeg": ln * a.astep,

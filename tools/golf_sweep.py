@@ -110,7 +110,7 @@ def as_dts(dt):
     return out
 
 
-def sweep(g: S.Green, angles_deg, powers, dt, start=None, relief=False):
+def sweep(g: S.Green, angles_deg, powers, dt, start=None):
     """Returns dict of per-candidate result arrays, shape (nA, nP).
 
     `dt` is a float or a measured per-frame sequence (see as_dts).
@@ -224,58 +224,6 @@ def sweep(g: S.Green, angles_deg, powers, dt, start=None, relief=False):
         if done.any():
             live = live[~done]
 
-    # RELIEF, THE THIRD MIRROR. HeroCanvas.tsx will not let a ball REST somewhere
-    # the cup cannot be reached from, and golf_sim.Green.relief_in mirrors that.
-    # This numpy path is a separate integration loop, so it needs the rule too --
-    # and it is the same trap that had Field.height on a stale field for three
-    # days: two mirrors were updated and the vectorised one was forgotten.
-    #
-    # Applied to STOPPED **and TIMED-OUT** putts, not just stopped ones: the
-    # component runs relief from a single rest branch that both conditions fall
-    # into (`rollTime > MAX_ROLL || (speed < STOP_SPEED && ...)`), and so does
-    # golf_sim. A sunk putt is skipped because it is already at the cup.
-    # Sentinels are 0 running, 1 sunk, 2 stopped, 3 timeout -- the first version
-    # of this tested `outcome == 0`, which selects nothing, so the selfcheck
-    # stayed at 2.083e+01 px and said so.
-    #
-    # SCREEN IN NUMPY, BISECT ONLY WHERE IT IS NEEDED. The first version called
-    # the scalar relief_in on every stopped candidate, and since most putts stop,
-    # that is ~65000 reach_toward calls per round at five slope samples each. It
-    # took the documented 80-round invariant from ~25 minutes to over 108, on the
-    # one command HANDOFF tells every future agent to run. A gate nobody will wait
-    # for is a gate nobody runs.
-    #
-    # reach_toward's own first act is the same reachability test, so the screen
-    # below is that test done once for all candidates at once, against the SAME
-    # closed form (`f.slope` mirrors Green.slope_at). Only the genuinely
-    # unreachable lies then pay for the 20-step bisection.
-    #
-    # If --selfcheck ever reports a non-zero final-pos delta again, suspect this
-    # block first. It is what caught the omission in the first place.
-    rest = np.flatnonzero((outcome == 2) | (outcome == 3)) if relief else np.empty(0, int)
-    if rest.size:
-        px, py = bx[rest], by[rest]
-        ddx, ddy = g.cup_x - px, g.cup_y - py
-        dd = np.hypot(ddx, ddy)
-        dd = np.where(dd == 0.0, 1.0, dd)
-        uxr, uyr = ddx / dd, ddy / dd
-        up = np.zeros(rest.size)
-        for fr in (0.15, 0.35, 0.55, 0.75, 0.95):
-            gx, gy = f.slope(px + uxr * dd * fr, py + uyr * dd * fr)
-            up -= gx * uxr + gy * uyr
-        up /= 5.0
-        kk = -math.log(g.friction)
-        flat = g.max_speed / kk
-        reach = np.where(
-            up > 1e-6,
-            flat - (up / (kk * kk)) * np.log1p(kk * g.max_speed / np.where(up > 1e-6, up, 1.0)),
-            flat + (-up / kk) * g.downhill_credit,
-        )
-        bud = g.reach_safety if g.reach_safety is not None else 0.9
-        need = rest[dd > reach * bud]
-        for k in need:
-            bx[k], by[k] = g.relief_in(float(bx[k]), float(by[k]))
-
     return {
         "outcome": outcome.reshape(nA, nP),
         "closest": closest.reshape(nA, nP),
@@ -316,7 +264,7 @@ def selfcheck(g, dt):
     dts = as_dts(dt)
     for adeg in (0.0, 37.0, 111.0, 214.0, 300.5):
         for p in (0.3, 0.6, 0.95):
-            r = sweep(g, [adeg], [p], dt, relief=True)
+            r = sweep(g, [adeg], [p], dt)
             a = math.radians(adeg)
             o, _, fx, fy, _, _, _, _ = g.putt(math.cos(a), math.sin(a), p,
                                               dts=dts)

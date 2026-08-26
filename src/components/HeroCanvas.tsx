@@ -929,7 +929,11 @@ export default function HeroCanvas() {
          ace pinned it to 1 forever while `Aces` already said the same thing.
          Score against par cannot saturate — there is always a hole left to play
          better. See the PAR_TABLE and Card comments. */
-      ['topar', 'To par'],
+      /* "Score", not "To par", because in golf your score IS expressed against
+         par — you shot -2, not "your to-par is -2". It stays SIGNED for the same
+         reason: a bare putt count grows forever and never says whether you are
+         playing well, which is the whole failing of the `Best` it replaced. */
+      ['topar', 'Score'],
       ['aces', 'Aces'],
     ] as Array<[string, string]>) {
       // dl > div > (dt, dd) is valid HTML5 and is what lets each pair stay glued
@@ -1401,48 +1405,6 @@ export default function HeroCanvas() {
     const REACH_BUDGET = 0.9;
 
     /**
-     * Pull a resting ball back inside the region that can still reach the cup.
-     *
-     * Called only from the rest branch of stepBall(), never per frame, so a ball
-     * in flight is untouched and the roll physics are byte-identical to before —
-     * which is what lets golf_verify_port and golf_validate still hold.
-     *
-     * Slides along the straight line to the cup, because that direction is the
-     * one a player is already looking down, so a short settle reads as the green
-     * gathering the ball rather than as a teleport. Bisection rather than a
-     * closed form: `reachToward` integrates five slope samples along a line that
-     * changes as the point moves, so there is nothing to invert.
-     *
-     * MIN_KEEP exists so relief can never be a gift. Landing the ball on the lip
-     * would turn the worst miss on the hole into the easiest putt on it, and
-     * that is a bigger problem than the one being fixed.
-     */
-    const MIN_KEEP = CUP_R * 4;
-    const reliefIn = (): void => {
-      const dx0 = cupX - ballX;
-      const dy0 = cupY - ballY;
-      const d0 = Math.hypot(dx0, dy0) || 1;
-      if (d0 <= reachToward(ballX, ballY) * REACH_BUDGET) return;
-      let lo = 0;
-      let hi = 1;
-      for (let i = 0; i < 20; i++) {
-        const t = (lo + hi) / 2;
-        const px = ballX + dx0 * t;
-        const py = ballY + dy0 * t;
-        const d = Math.hypot(cupX - px, cupY - py) || 1;
-        if (d <= reachToward(px, py) * REACH_BUDGET) hi = t;
-        else lo = t;
-      }
-      // A hair past the boundary: resting exactly on it leaves the next putt
-      // needing a perfect strike, which is the same trap in a smaller form.
-      const t = Math.min(1, hi + 0.02);
-      const cap = Math.max(0, 1 - MIN_KEEP / d0);
-      const tt = Math.min(t, cap);
-      ballX += dx0 * tt;
-      ballY += dy0 * tt;
-    };
-
-    /**
      * Re-tee. `vary` re-rolls the green and drops the ball at a random spot that
      * is far enough from the cup to be a real putt — rejection-sampled rather
      * than nudged, so the ball genuinely moves around the green between rounds.
@@ -1715,25 +1677,6 @@ export default function HeroCanvas() {
         velY = 0;
         stalled = 0;
         rollTime = 0;
-        /* NO RESTING WHERE THE HOLE CANNOT BE REACHED.
-           `REACH_BUDGET` was only ever applied to the TEE, so the guarantee was
-           that the STARTING lie can reach the cup — never that a resting lie
-           can. It could not: on round 4 a straight putt at power 0.77 parks the
-           ball on the left wall at (904.5, 540), and from there every one of
-           16560 swept (aim, power) pairs misses, the closest approach ever being
-           25.4px against a 13px cup. Confirmed in a real browser, 40 putts, none
-           dropped. The hole was unwinnable and the game still felt fine, which
-           is why golf_stuck.py passed it: that suite defines a soft-lock as the
-           phase sticking on 'rolling' so you cannot aim, and here you can aim
-           forever, you simply cannot ever hole out.
-           This is not one bad hole. Every one of 81 measured holes has a dead
-           zone, a median 10.4% of the play box and up to 30.3%, and no cup
-           placement can fix that: the box diagonal is 759px against ~425px of
-           reach. So the region is bounded here instead, at the only moment it
-           matters — the ball may pass through a dead zone, it may not STOP in
-           one. Chosen over a penalty drop because clamping to an edge is a
-           mechanism the box walls already use and players already read. */
-        reliefIn();
         phase = 'idle';
         return false;
       }
