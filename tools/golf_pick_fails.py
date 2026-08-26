@@ -56,14 +56,18 @@ for rnd in [int(v) for v in a.rounds.split(",")]:
     flat = np.argsort(cl, axis=None)[: a.top]
     for f in flat:
         ai, pi = np.unravel_index(f, cl.shape)
+        oc = int(r["outcome"][ai, pi])
+        # Relief at the point of consumption — see the note in golf_pick.py.
+        fx = float(r["final"][0][ai, pi])
+        fy = float(r["final"][1][ai, pi])
+        if oc != 1:
+            fx, fy = g.relief_in(fx, fy)
         trials.append({
             "round": rnd, "kind": f"best-try-{cl[ai, pi]:.0f}px",
             "angle": float(angles[ai]), "power": float(powers[pi]),
             "expect": "not-sunk",
-            "predict": {1: "sunk", 2: "stopped", 3: "timeout"}[
-                int(r["outcome"][ai, pi])],
-            "predictFinal": [float(r["final"][0][ai, pi]),
-                             float(r["final"][1][ai, pi])],
+            "predict": {1: "sunk", 2: "stopped", 3: "timeout"}[oc],
+            "predictFinal": [fx, fy],
             "predictClosest": float(cl[ai, pi]),
             "cup": [g.cup_x, g.cup_y], "ball": list(g.ball0),
         })
