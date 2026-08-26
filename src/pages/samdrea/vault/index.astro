@@ -59,7 +59,7 @@
  * a state this page renders correctly on purpose.
  * ---------------------------------------------------------------------------
  */
-import { HER_NAME, SESSION_SECRET, hasKV, hasPush, pushConfig } from '../../../lib/us/config';
+import { HER_NAME, HER_NAME_OR, SESSION_SECRET, hasKV, hasPush, pushConfig } from '../../../lib/us/config';
 import { readCookie, verify } from '../../../lib/us/session';
 import { getSongs, wingDate, wingDateLabel, type SongRecord } from '../../../lib/us/kv';
 import { countVisitSafe, getMarksSafe } from '../../../lib/us/marks';
@@ -381,9 +381,27 @@ function dayLabel(date: string): string {
   return date ? wingDateLabel(date, { withYear: true }) : '';
 }
 
-/** "you" / "her" / "him" for a list byline, from the reader's side. */
+/**
+ * Who added a line, from the reader's side — and it used to be ungrammatical.
+ *
+ * It returned the OBJECT pronoun, so the byline read "her added this" and "him added
+ * this". Those are not sentences. The subject form would fix the grammar and still be
+ * the wrong register: this list is two people writing to each other, and "she added
+ * this" about the person whose name he knows reads like a system talking about a user.
+ *
+ * So the other person gets their NAME when we have it. Hers lives in US_HER_NAME
+ * because the repo is public, and HER_NAME_OR is used rather than HER_NAME because the
+ * latter falls back to 'you' — which in a byline would credit the reader with her line.
+ * 'she' is the fallback here instead.
+ *
+ * His side stays a pronoun: there is no US_HIS_NAME, and inventing one would mean a
+ * variable that must be set and redeployed before the copy is even correct. "he added
+ * this" is already a sentence, so the asymmetry costs nothing she would notice — she is
+ * the one reading it.
+ */
 function byWord(by: Who): string {
-  return by === viewer ? 'you' : by === 'her' ? 'her' : 'him';
+  if (by === viewer) return 'you';
+  return by === 'her' ? HER_NAME_OR('she') : 'he';
 }
 
 /**

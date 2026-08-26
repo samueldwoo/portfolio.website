@@ -47,6 +47,21 @@ export const ADMIN_PASSCODE_DIGEST = () => env('US_ADMIN_PASSCODE_DIGEST');
  */
 export const HER_NAME = () => env('US_HER_NAME') ?? 'you';
 
+/**
+ * Her name with a CALLER-CHOSEN fallback, for the places where 'you' would be wrong.
+ *
+ * HER_NAME()'s 'you' fallback is right where the copy addresses her directly, and
+ * actively misleading in a third-person byline: with the variable unset, "her added
+ * this" on HIS screen would become "you added this" and credit him with her line. A
+ * byline wants 'she' there, a greeting wants 'you', and neither can be the single
+ * default — so the fallback belongs to the caller who knows which sentence it is in.
+ *
+ * Deliberately not a second env var. There is one name in the environment and this is
+ * one function reading it; adding US_HER_BYLINE_NAME would be two things to keep in
+ * step for no gain.
+ */
+export const HER_NAME_OR = (fallback: string) => env('US_HER_NAME') ?? fallback;
+
 /* ---------------------------------------------------------------------------
    PHASE 2 / 3 BACKING SERVICES
 
