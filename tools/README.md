@@ -249,7 +249,8 @@ proof.
 | `golf_pick_fails.py` | for a round the sweep calls unsolvable, the closest-possible lines, so the claim can be corroborated in a browser instead of trusted |
 | `golf_relief.py` | how much of the height variation is undulation vs plane, per undulation setting |
 | `golf_calibrate.py` | fits `HOLE_CAL` / `HOLE_CUTS` for the hero's difficulty card from a sweep, and prints the two lines to paste. Bands are anchored to an absolute share of the aim/power space, not to quartiles |
-| `golf_par.py` | expected strokes per hole for a competent-but-imperfect putter — this is where `PAR_TABLE` comes from. Its cap rate is the honesty check: a rate far above ~2% means the numbers are really the 8-stroke ceiling |
+| `golf_par.py` | strokes per hole for a competent-but-imperfect putter — this is where `PAR_TABLE` comes from, and `--table` emits the 81-char string so the last mile is not hand-assembled. Par is the **median**, not the mean; see the median note below. `--max-strokes` sets the give-up cap and `--only` targets individual holes |
+| `golf_mash.py` | **the check no other invariant performs**: how many holes fall to aiming straight at the cup at full power. Run it after ANY change to the cup test. `--capture 520` is its positive control and must reproduce the pre-fix 68/81 |
 | `golf_frames.py` | passenger rAF loop that measures the REAL per-frame dt during a roll; `golf_probe.py` uses it for `dt_roll_ms` |
 | `golf_validate.py` | replays picked trials in a real browser and scores agreement (physics only — bypasses the pointer path) |
 | `golf_keys/stuck/mouse/touch/scroll.py`, `hero_ink.py` | the six input/render harnesses — see the golf section below |
@@ -269,6 +270,15 @@ It held the pre-move originals, which had gone stale in a way that failed silent
 Two copies of a harness is worse than one, because the stale copy is the one that reports a pass on
 a page that does not exist. `tools/a11y-motion/gate_dir.py` survives on purpose — it is a lane-local
 copy differing from `tools/gate_dir.py` only in its default port (8130), kept as that audit's record.
+
+**And the same stale list outlived the deletion, in `webkit_runner.mjs` — fixed 2026-08-26.** Its
+defaults were `--base http://127.0.0.1:8899` and `--pages index.html,projects.html,travel.html`:
+a port nothing here serves, and the identical three URLs `suites/gate.py` was deleted for. It
+survived because `crossbrowser.py` always passes `--base` and `--pages` explicitly, so the only way
+to reach the defaults is to run the file by hand — which its own usage block told you to do, with
+the `.html` names spelled out. Now `8020` and `,projects/,travel/`, mirroring
+`crossbrowser.DEFAULT_PAGES`. When you delete a stale copy, grep for what made it stale; the copy
+was the symptom and the literal was the bug.
 
 `probe.js` and `mask_recorder.js` are each a single parenthesised function literal, read as
 text and evaluated by both drivers. That is deliberate: a harness whose engines ask
@@ -357,21 +367,35 @@ physics chain rather than the input suites, so it is documented below.
 Last known-good on the shipped build: `golf_keys` PASS · `golf_stuck` 0 · `golf_mouse` 0 ·
 `golf_touch` 0/7 · `hero_ink` PASS (0% × 12 widths).
 
-### The physics chain, and its measured baseline (2026-08-26, capture 175)
+### The physics chain, and its measured baseline (2026-08-26, capture 225 + lip-out)
 
     $PY tools/golf_probe.py http://localhost:8020 1440 900 80 > probe80.json
     $PY tools/golf_verify_port.py probe80.json 0.9          # base + safety are POSITIONAL
     $PY tools/golf_sweep.py probe80.json --rounds 80 --reach-safety 0.9 --astep 0.5 --pstep 0.01
+    $PY tools/golf_mash.py probe80.json --dt-source fps     # the dominant-strategy check
     $PY tools/golf_pick.py probe80.json trials.json --rounds 6
     $PY tools/golf_validate.py trials.json
     $PY tools/golf_calibrate.py sweep80.json      # -> HOLE_CAL / HOLE_CUTS
-    $PY tools/golf_par.py probe80.json --rounds 80 --trials 2000   # -> PAR_TABLE
+    $PY tools/golf_par.py probe80.json --rounds 80 --trials 500 --max-strokes 32 --table
 
 `golf_verify_port`: hash2 1504/1504 · heightAt Δ 2.220e-16 · **numpy heightAt Δ 2.220e-16** ·
-geometry 81/81 · `PORT VERIFIED`. `golf_sweep`: **SOLVABLE 81/81 = 100%**, selfcheck **0.000e+00**,
-aim tolerance min 3.0° / median 10.0° / max 252.5° (~25 min at this grid). `golf_validate`:
-**24/24 = 100%**, resting error median 0.2px / max 0.4px. `golf_par`: median expected strokes 2.04,
-cap rate ~2%, mean ace rate 34%.
+geometry 81/81 · `PORT VERIFIED`. `golf_sweep`: **SOLVABLE 81/81 = 100%**, selfcheck **0.000e+00**
+(~25 min at this grid). `golf_mash`: **16/81 = 19.8%** dead straight, **29/81 = 35.8%** at `--aim-window 2`. `golf_validate`: **24/24 = 100%**, resting
+error median 0.1px / max 0.5px. Browser harnesses: `golf_stuck` 0 · `golf_keys` PASS ·
+`golf_mouse` 0 · `golf_touch` 0/7 · `hero_ink` PASS.
+
+**`golf_par`'s arguments changed and the old ones give a wrong answer.** Par is now the MEDIAN
+stroke count, not the mean, and `--max-strokes 32` matters as much as the trial count. On rounds 4, 7
+and 78 the player model has no lay-up — it always aims at the cup and power is hard-clipped at 1.0 —
+so roughly a third of its trials never hole out and the MEAN is a function of the give-up cap rather
+than of the golf. Round 78 read 3.98 at cap 8, 17.07 at cap 48 and 77.75 at cap 200 while its median
+stayed 2. A median is unaffected while fewer than half the trials are stuck, which at cap 32 they
+are; the tool prints the stuck share per hole and says so if it crosses half.
+
+500 trials rather than 2000 because a median is far more stable than a mean, and `--table` reports
+which holes are unsettled (the share below par within 2 SE of 50%) so the borderline ones can be
+topped up with `--only` instead of paying 4× on all 81. `--table` refuses to emit from a partial run
+and refuses to clamp a par above 9 to fit the one-character encoding.
 
 Sweep a shipped build **without** `--recompute` — it tests the simulator's own tee picker and has
 reported a false unsolvable round. `--reach-safety 0.9` is a different flag and is REQUIRED: it is
@@ -388,9 +412,22 @@ The green exists so that reading the contour lines pays. Until 2026-08-26 it did
 cup at full power sank 68 of 81 holes, because break is proportional to time on the green so pace
 suppresses it, and nothing punished pace. `CAPTURE_SPEED` 520 → 175 plus removing a mis-implemented
 "rim-out" (which braked the ball to a crawl inside the cup and so dropped it) took that to 16/81
-with **no change to aim tolerance and none to par**. If you touch the cup test, re-measure the mash
-line — aim straight at the cup at power 1.0 on all 81 holes — because it is the check that catches a
-dominant strategy, and no invariant in this directory catches it for you.
+with **no change to aim tolerance**.
+
+**`golf_mash.py` now performs that check, so it no longer depends on remembering.** It was the one
+gap both handoffs named — solvability said 81/81 for the entire time the game was trivially
+winnable, because solvability asks whether AT LEAST ONE (aim, power) pair sinks and a dominant
+strategy makes MORE pairs sink. Measured on the shipped build:
+
+| setting | mash line |
+|---|---|
+| `--capture 520` (pre-fix, the positive control) | **68/81 = 84.0%** |
+| shipped, dead straight at full power | **16/81 = 19.8%** |
+| shipped, `--aim-window 2` (a sloppy aim) | 21/81 = 25.9% |
+
+`--capture` exists so the check can be SEEN to fail. A tool that has only ever printed 16/81 has not
+been shown to measure exploitability, and this directory has shipped a test that could not fail
+before. Run the control alongside the real number.
 
 `golf_scroll.py` exists because the hero pin used to scrub the canvas plane
 (`y: 0 -> 6vh, scale: 1 -> 1.12`), which both moved an interactive playfield under the player and

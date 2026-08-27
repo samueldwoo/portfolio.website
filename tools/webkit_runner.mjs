@@ -16,9 +16,9 @@
  * stays machine-parseable for crossbrowser.py.
  *
  * Usage:
- *   node webkit_runner.mjs --base http://127.0.0.1:8899 \
- *     --pages index.html,projects.html,travel.html \
- *     --shots /tmp/ov-shots --probe ./probe.js
+ *   node webkit_runner.mjs --base http://127.0.0.1:8020 \
+ *     --pages ,projects/,travel/ \
+ *     --shots ~/.pf-verify/ov-shots --probe ./probe.js
  * ==========================================================================*/
 import { readFileSync, mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -34,8 +34,17 @@ function arg(name, dflt) {
   return i > -1 && process.argv[i + 1] ? process.argv[i + 1] : dflt;
 }
 
-const BASE = arg("base", "http://127.0.0.1:8899").replace(/\/$/, "");
-const PAGES = arg("pages", "index.html,projects.html,travel.html").split(",");
+/* THESE DEFAULTS ARE THE ONES THAT DELETED tools/suites/, so they are pinned to
+   what the build actually serves. crossbrowser.py always passes --base and
+   --pages explicitly, which is why the stale pair below survived unnoticed: the
+   only way to reach them is to run this file by hand, exactly as the usage block
+   above tells you to. `suites/gate.py` was deleted for carrying this same
+   `index.html, projects.html, travel.html` list -- three URLs the Vercel adapter
+   301s -- and `a11y_chrome.py`'s header records projects.html "passing" while the
+   page was blank. Port 8899 was likewise a port nothing here serves; 8020 is the
+   documented fallback. Directory format, mirroring crossbrowser.DEFAULT_PAGES. */
+const BASE = arg("base", "http://127.0.0.1:8020").replace(/\/$/, "");
+const PAGES = arg("pages", ",projects/,travel/").split(",");
 const SHOTS = resolve(arg("shots", "/tmp/ov-shots"));
 const PROBE_PATH = resolve(arg("probe", new URL("./probe.js", import.meta.url).pathname));
 const WIDTH = parseInt(arg("width", "1440"), 10);
