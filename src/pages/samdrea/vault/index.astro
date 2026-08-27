@@ -1145,8 +1145,25 @@ const vapidKey = pushReady ? pushConfig().publicKey ?? '' : '';
                                         <button class="tg-btn" type="submit">answer it</button>
                                     </form>
                                 ) : d.mine ? (
-                                    /* My own answer on a day nobody completed. I can
-                                       always read what I wrote; theirs is absent. */
+                                    /* MY ANSWER IS IN AND THEIRS IS NOT, and the two
+                                       endings of that are different facts.
+
+                                       This branch used to say "never answered this
+                                       one, and it has closed" for both of them, and
+                                       the reason is worth keeping: `canAnswer` is
+                                       false the moment `mine` exists, so once the
+                                       revealed and canAnswer branches above have both
+                                       failed, `d.mine` catches EVERY one-sided day at
+                                       ANY age. Yesterday, with my answer in and theirs
+                                       still to come, read "they never answered this
+                                       one, and it has closed" — while `d.editable` was
+                                       true on the same object, six days still on the
+                                       clock, and their answer about to reveal both
+                                       halves. The page foreclosed a live day.
+
+                                       d.expired is a new flag rather than the existing
+                                       `closed`, because `closed` means "*I* never
+                                       answered" and is false in exactly this case. */
                                     <>
                                         <article class="tg-a tg-a--mine">
                                             <p class="tg-a-who">you</p>
@@ -1155,8 +1172,9 @@ const vapidKey = pushReady ? pushConfig().publicKey ?? '' : '';
                                             ))}
                                         </article>
                                         <p class="tg-past-half">
-                                            {sentenceCase(themWord)} never answered this one,
-                                            and it has closed. Yours stays here.
+                                            {d.expired
+                                                ? `${sentenceCase(themWord)} never answered this one, and it has closed. Yours stays here.`
+                                                : `${sentenceCase(themWord)} hasn’t answered this one yet. There’s still time, and the moment it lands you’ll both see.`}
                                         </p>
                                     </>
                                 ) : (

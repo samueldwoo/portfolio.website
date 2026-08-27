@@ -861,8 +861,12 @@ export function sentLine(record: Thinking, nowMs: number, readerTz: string): str
  *
  * It also bounds the write surface: at most eight day records are mutable at any
  * moment, so the document's hot region is small no matter how long this runs.
+ *
+ * THE VALUE ITSELF NOW LIVES IN day-seal.ts, beside the two flags that read it, and
+ * is re-exported below. This comment stays here because the reasoning is about the
+ * conversation rather than about the seal, and that is the part worth finding from
+ * this file.
  */
-export const LATE_ANSWER_DAYS = 7;
 
 /**
  * How long an answer may be.
@@ -1148,92 +1152,33 @@ export function promptFor(date: string): string {
   return list[i] ?? '';
 }
 
-/** One day's exchange, as STORED. Never handed to a page — see visibleDay(). */
-export interface DayRecord {
-  /** `YYYY-MM-DD` in WING_TZ. Also the primary key. */
-  date: string;
-  /** Her answer, or ''. */
-  her: string;
-  /** Epoch millis she answered. 0 when she has not. */
-  herAt: number;
-  him: string;
-  himAt: number;
-}
+/* THE SEAL AND ITS TYPES NOW LIVE IN day-seal.ts, and are re-exported from here so
+   that not one call site had to change.
 
-export function emptyDay(date: string): DayRecord {
-  return { date, her: '', herAt: 0, him: '', himAt: 0 };
-}
+   The move was not tidying. The rule that neither answer is visible until both are
+   written is the most consequential thing in this file, and it was the only such
+   rule with no test — because it sat in a module that imports the Upstash config
+   and the question list, which bare `node` cannot load. day-seal.ts has no runtime
+   imports at all. See its header, and scripts/test-day-seal.mts. */
+/* IMPORTED **AND** RE-EXPORTED, which is two statements for a reason worth writing
+   down: `export { x } from './y'` forwards x to this module's consumers WITHOUT
+   binding it in this module's own scope. This file calls emptyDay() and sealDay()
+   in fourteen places, and with only the re-export they were free identifiers.
 
-/**
- * One day as it is ALLOWED to reach the browser.
- *
- * THIS TYPE IS THE SEAL. Compare letters.ts's VisibleLetter: the field that must
- * not be sent is not blanked at render time, it is absent from the object. There is
- * no code path from a DayRecord to a page — everything goes through visibleDay().
- */
-export interface VisibleDay {
-  date: string;
-  /** The question. Never secret; it is in a public repository. */
-  prompt: string;
-  /** MY answer. Always mine to read, revealed or not. '' when I have not answered. */
-  mine: string;
-  mineAt: number;
-  /**
-   * THEIR answer, and ONLY when both of us have answered. '' otherwise, and '' here
-   * means ABSENT rather than empty: an unrevealed answer never enters this object.
-   */
-  theirs: string;
-  theirsAt: number;
-  /**
-   * Have they answered yet?
-   *
-   * Safe to expose while sealed, and necessary: "she answered, yours is missing" is
-   * the entire call to action, and it leaks nothing about WHAT she said. The same
-   * judgement letters.ts makes about `teaser` — one fact is allowed out because its
-   * whole contract is being safe to read early.
-   */
-  theyAnswered: boolean;
-  /** Both answered. The only state in which `theirs` is populated. */
-  revealed: boolean;
-  /** May I still answer this one? False once it is past LATE_ANSWER_DAYS. */
-  canAnswer: boolean;
-  /** Nobody can answer it any more and it never got its second half. */
-  closed: boolean;
-  /**
-   * May I REPLACE what I already wrote?
-   *
-   * ---------------------------------------------------------------------------
-   * EDITABLE UNTIL THE REVEAL, FROZEN AFTER IT. THIS IS PART OF THE MECHANIC.
-   *
-   * Before both of us have answered there is nothing to react to, so changing my
-   * answer is fixing a typo or finishing a sentence — and refusing that would mean a
-   * mistyped answer is stuck on the page for a day. Harmless, so it is allowed.
-   *
-   * AFTER the reveal it is not harmless and it is not editing, it is rewriting. I
-   * would be able to read what she said and then adjust what I "had" said to match,
-   * agree with it, or be funnier about it. The whole value of the seal is that both
-   * answers were written blind; an editable revealed answer hands that back on a
-   * plate, and neither of us would ever be able to trust the coincidences again.
-   *
-   * So the freeze is not a storage constraint, it is the second half of the same
-   * promise the seal makes. It lives on this object — rather than as a check inside
-   * the endpoint — because the HUB needs the identical rule to decide whether to
-   * render the form at all, and a rule enforced in one place and re-derived in the
-   * other is a rule that eventually disagrees with itself.
-   *
-   * The window applies too: `age <= LATE_ANSWER_DAYS`. A day nobody can answer any
-   * more is not a day whose answer can be swapped either.
-   */
-  editable: boolean;
-  /**
-   * Whole days from this record's date to today. 0 is today, 1 is yesterday.
-   *
-   * Exposed because both callers were otherwise going to recompute it, and the
-   * arithmetic is the DST-safe UTC-anchored kind (see wholeDaysBetween) that kv.ts
-   * and status.ts each had to get right separately. One number beats a third copy.
-   */
-  age: number;
-}
+   `npm run build` compiled it happily — esbuild transpiles each module without
+   resolving names — so the first symptom would have been a ReferenceError on her
+   hub. `npm run typecheck` caught all seventeen. That is the whole argument for
+   astro check being the gate rather than a formality. */
+import {
+  LATE_ANSWER_DAYS,
+  emptyDay,
+  sealDay,
+  type DayRecord,
+  type VisibleDay,
+} from './day-seal.ts';
+
+export { LATE_ANSWER_DAYS, emptyDay, sealDay, type DayRecord, type VisibleDay };
+
 
 /**
  * A stored day, from one person's side.
@@ -1243,35 +1188,10 @@ export interface VisibleDay {
  * needs to know who is looking.
  */
 export function visibleDay(rec: DayRecord, who: Who, today: string): VisibleDay {
-  const them = otherOne(who);
-  const mine = rec[who];
-  const theirs = rec[them];
-  const revealed = mine.length > 0 && theirs.length > 0;
-  const age = wholeDaysBetween(rec.date, today);
-
-  return {
-    date: rec.date,
-    prompt: promptFor(rec.date),
-    mine,
-    mineAt: rec[`${who}At` as 'herAt' | 'himAt'],
-    /* THE SEAL, in one expression. `theirs` is only ever read when `revealed` is
-       already true, so there is no version of this object that carries their words
-       alongside `revealed: false`. */
-    theirs: revealed ? theirs : '',
-    theirsAt: revealed ? rec[`${them}At` as 'herAt' | 'himAt'] : 0,
-    theyAnswered: theirs.length > 0,
-    revealed,
-    /* A day is answerable if I have not answered it and it is inside the window.
-       `age <= 0` covers today and — defensively — a date in the future, which can
-       only come from a hand-edited record and should not be answerable-blocked on
-       top of being wrong. */
-    canAnswer: mine.length === 0 && age <= LATE_ANSWER_DAYS,
-    closed: mine.length === 0 && age > LATE_ANSWER_DAYS,
-    // Mine is written, theirs is not, and the day is still in the window. See the
-    // field comment — the `!revealed` half of this is the mechanic, not a detail.
-    editable: mine.length > 0 && !revealed && age <= LATE_ANSWER_DAYS,
-    age,
-  };
+  /* The two things day-seal.ts deliberately cannot work out for itself: the prompt
+     needs the question list, and the age needs the DST-safe arithmetic. Both live
+     in this file, and keeping them here is what leaves the seal itself pure. */
+  return sealDay(rec, who, wholeDaysBetween(rec.date, today), promptFor(rec.date));
 }
 
 /**
