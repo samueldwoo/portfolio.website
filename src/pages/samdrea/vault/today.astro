@@ -822,6 +822,17 @@ interface Mini {
   track: TrackRecord;
   /** The reactions on THIS track. '' when there are none. */
   glyphs: string;
+  /**
+   * THE WHOLE SENTENCE, BECAUSE THE DAY IS NOT INSIDE THE LINK.
+   *
+   * The date sits in a sibling <p>, and the glyphs render as bare emoji, so
+   * someone tabbing link to link would hear a song title with no day on it and
+   * a row of unnamed characters. Naming the day inside each link repeats it
+   * visually-redundantly for that reason, which is the trade we want; the
+   * alternative — an aria-labelledby pointing at the date <p> — reads the day
+   * before the song for both halves and can't fold the reactions in at all.
+   */
+  label: string;
 }
 
 /**
