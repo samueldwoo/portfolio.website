@@ -110,10 +110,28 @@ def as_dts(dt):
     return out
 
 
-def sweep(g: S.Green, angles_deg, powers, dt, start=None):
+def sweep(g: S.Green, angles_deg, powers, dt, start=None, starts=None):
     """Returns dict of per-candidate result arrays, shape (nA, nP).
 
     `dt` is a float or a measured per-frame sequence (see as_dts).
+
+    `starts` SWEEPS MANY LIES IN ONE CALL, and results are then shaped
+    (nStarts, nA, nP). Pass it as (xs, ys), two equal-length sequences.
+
+    WHY THIS EXISTS RATHER THAN A LOOP OVER `start`, AND WHY IT IS NOT A FOURTH
+    MIRROR. The frame loop below runs a fixed ~844 iterations (MAX_ROLL / the
+    smallest dt), so its cost is dominated by PYTHON overhead, not by how many
+    candidates ride along: 300 putts measured 1.23s and 65520 measured 15.4s, i.e.
+    4.1 ms/putt against 0.235. golf_lies.py needs a sweep per reachable lie --
+    hundreds per hole -- and at ~1.2s of fixed cost per call that is ~11 hours of
+    pure overhead across 81 holes.
+
+    The rejected alternative was a batched copy of this loop inside golf_lies.py.
+    That would have made a FOURTH place every physics rule has to be mirrored, in
+    a subsystem whose recurring bug is exactly that (see the three-mirror note in
+    both handoffs; the vectorised path has been forgotten twice). So the loop is
+    left as the single numpy implementation and only its INITIALISATION is
+    generalised -- everything after this block already operated per-candidate.
     """
     f = Field(g)
     b = g.box
@@ -124,19 +142,37 @@ def sweep(g: S.Green, angles_deg, powers, dt, start=None):
     A = np.deg2rad(np.asarray(angles_deg, dtype=np.float64))
     P = np.asarray(powers, dtype=np.float64)
     nA, nP = A.size, P.size
-    N = nA * nP
-    ang = np.repeat(A, nP)
-    pw = np.tile(P, nA)
 
-    bx = np.full(N, sx)
-    by = np.full(N, sy)
+    if starts is None:
+        N = nA * nP
+        ang = np.repeat(A, nP)
+        pw = np.tile(P, nA)
+        bx = np.full(N, sx)
+        by = np.full(N, sy)
+        out_shape = (nA, nP)
+    else:
+        xs = np.asarray(starts[0], dtype=np.float64)
+        ys = np.asarray(starts[1], dtype=np.float64)
+        if xs.size != ys.size:
+            raise ValueError("starts x and y must be the same length")
+        nS = xs.size
+        N = nS * nA * nP
+        # Candidate i decodes as lie i//(nA*nP), angle (i%(nA*nP))//nP, power i%nP.
+        # Each lie therefore owns a contiguous nA*nP block laid out exactly as the
+        # single-start case, so the (nA, nP) sub-blocks stay directly comparable.
+        ang = np.tile(np.repeat(A, nP), nS)
+        pw = np.tile(P, nA * nS)
+        bx = np.repeat(xs, nA * nP)
+        by = np.repeat(ys, nA * nP)
+        out_shape = (nS, nA, nP)
+
     vx = np.cos(ang) * pw * g.max_speed
     vy = np.sin(ang) * pw * g.max_speed
     on_wall = np.zeros(N, dtype=bool)
     in_cup = np.zeros(N, dtype=bool)   # inside the cup radius LAST frame
     stalled = np.zeros(N)
     roll = np.zeros(N)
-    closest = np.full(N, math.hypot(g.cup_x - sx, g.cup_y - sy))
+    closest = np.hypot(g.cup_x - bx, g.cup_y - by)
     hot = np.zeros(N, dtype=bool)
     hot_min = np.full(N, np.inf)
     outcome = np.zeros(N, dtype=np.int8)     # 0 running, 1 sunk, 2 stop, 3 t/o
@@ -252,11 +288,11 @@ def sweep(g: S.Green, angles_deg, powers, dt, start=None):
             live = live[~done]
 
     return {
-        "outcome": outcome.reshape(nA, nP),
-        "closest": closest.reshape(nA, nP),
-        "hot": hot.reshape(nA, nP),
-        "hot_min": hot_min.reshape(nA, nP),
-        "final": (bx.reshape(nA, nP), by.reshape(nA, nP)),
+        "outcome": outcome.reshape(out_shape),
+        "closest": closest.reshape(out_shape),
+        "hot": hot.reshape(out_shape),
+        "hot_min": hot_min.reshape(out_shape),
+        "final": (bx.reshape(out_shape), by.reshape(out_shape)),
         "angles": np.asarray(angles_deg, dtype=np.float64),
         "powers": P,
     }
