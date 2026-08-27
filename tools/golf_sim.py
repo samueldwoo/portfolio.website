@@ -22,7 +22,83 @@ REST_SLOPE = 0.03   # mirrors HeroCanvas.tsx
 MAX_ROLL = 7.0
 MAX_SPEED = 900.0
 TAU = math.pi * 2
-CAPTURE_SPEED = 175.0  # the `speed < CAPTURE_SPEED` in the cup test (was 520)
+# CAPTURE_SPEED: the `speed < CAPTURE_SPEED` in the cup test. 520 -> 175 -> 225.
+#
+# Read it as a DISTANCE, not a speed: a rolling ball has v/k of travel left with
+# k = -ln(FRICTION) = 2.12, so the threshold is how far past the hole the ball
+# would still have run when it dropped. 520 allowed 245px, most of the green, and
+# made aiming straight at full power sink 68 of 81 holes. 175 allowed 83px; 225
+# allows 106px, i.e. a putt struck ~28% firmer can still hole.
+#
+# MEASURE THIS ON BOTH AIM WINDOWS, BECAUSE THEY DISAGREE. Dead straight at full
+# power, 225 sinks 16/81 -- identical to 175 without the lip-out, which was the
+# reviewed state. Allow +-2deg of aim slop, which is closer to what a person does
+# when they "aim at the hole", and 225 sinks 29/81 against that baseline's 21/81.
+#
+#     capture   dead straight   +-2deg slop
+#     175 (no lip-out)  16/81       21/81
+#     205 + lip-out     12/81       21/81
+#     225 + lip-out     16/81       29/81
+#
+# 205 was proposed on the strength of the +-2deg row. THE OWNER CHOSE 225 KNOWING
+# THE COST, for feel: 106px of run-past instead of 97px. Recorded rather than
+# re-litigated -- the argument for 205 is above if it ever needs revisiting, and
+# the counter-arguments were that the +-2deg window is an arbitrary slop figure and
+# that exploitability is already viewport-dependent and worse on large screens
+# (32% at 4K) whichever value is used.
+#
+# Re-run tools/golf_mash.py --aim-window 2 if you move it again. The curve is
+# steep: 250 sinks 24/81 dead straight, 275 sinks 28/81, 300 sinks 33/81.
+CAPTURE_SPEED = 225.0
+# LIP-OUT: A ROTATION, DELIBERATELY, BECAUSE ANY DAMPING ENDS IN A CAPTURE.
+#
+# Two previous attempts to reject a fast ball both fed it into the hole: a radial
+# 0.9 brake and a 0.85 per-frame damping, the second measurably worse (67 of 81
+# mash putts still sank). A ball crosses a 26px cup in about ten frames and
+# 0.85^10 = 0.20, so anything that shrinks |v| inside the radius walks the ball
+# under CAPTURE_SPEED while it is still over the hole.
+#
+# A rotation cannot do that: |v| is invariant, so the capture test sees exactly
+# the speed it saw before. Deflecting AWAY from the cup centre also bends the path
+# outward, so the failure mode is impossible for two independent reasons rather
+# than merely tuned away. Applied ONCE on the frame the ball enters the radius --
+# per-frame rotation would spiral the ball around the cup.
+#
+# Magnitude scales with the impact parameter, which is what removes the need for a
+# tie-break: at zero lateral offset the rotation is zero, so no arbitrary side has
+# to be invented for the degenerate case and three ports agree without one.
+#
+# AIMING AT THE CUP IS NOT THE ZERO CASE. The offset is measured on the ENTRY
+# FRAME, after break has bent the ball and quantised to that frame's heading. Over
+# rounds 0..11 with the aim laid exactly on the cup it runs 1.2px to 10.1px, i.e.
+# deflections of 5.4deg to 46.5deg. Read this as "always deflects, sometimes
+# barely", not as "spares a straight putt".
+LIP_DEFLECT = math.radians(60.0)
+# LIP_LOSS: ENERGY GIVEN UP TO THE LIP, SCALED ON THE EXCESS ABOVE CAPTURE_SPEED.
+#
+# A real ball that catches the lip loses pace; a pure rotation gave none away. But
+# a naive multiply walks straight back into the original bug: at CAPTURE_SPEED 225
+# a ball arriving at 260 with a flat 20% loss leaves at 208, which is BELOW the
+# threshold while still inside the radius, so it drops next frame. That is exactly
+# what made the old radial 0.9 brake a capture device.
+#
+# So the loss applies to the EXCESS, not the total:
+#     speed' = CAPTURE_SPEED + (speed - CAPTURE_SPEED) * (1 - LIP_LOSS)
+# A putt hammered in at 800 gives up a lot, one trickling in at 180 almost nothing,
+# and the result cannot fall below CAPTURE_SPEED from the hit itself. That is also
+# the physically sensible grading: the harder you strike the lip, the more you lose.
+#
+# THE PROOF IS THE GATE, THOUGH, NOT THE FORMULA. Friction keeps acting on the
+# frames after the hit, so scaling the excess alone only makes a capture unlikely.
+# Once a ball has been lipped out it is not tested for capture again until it leaves
+# the radius (see `in_cup`), which makes re-capture impossible for ANY value here.
+#
+# What that costs, deliberately: a ball can no longer rattle the lip and drop in on
+# the same pass. That is a real golf shot, but it is mechanically identical to the
+# exploit this subsystem just spent a day removing -- enter fast, decelerate inside
+# the radius, drop -- so it is traded away on purpose rather than left as a loophole
+# shaped like the old one.
+LIP_LOSS = 0.35
 
 # ---- THE TIMESTEP: ONE STORY, NOT FOUR ----
 # HeroCanvas.tsx tick() computes `Math.min(0.05, (now - last) / 1000)`, seeded at
@@ -128,6 +204,7 @@ class Green:
 
     def __init__(self, css_w, css_h, copy_bottom, narrow, round_no,
                  cup_r=CUP_R, capture_speed=CAPTURE_SPEED, max_speed=MAX_SPEED,
+                 lip_deflect=LIP_DEFLECT, lip_loss=LIP_LOSS, lip_gate=True,
                  friction=FRICTION, reach_safety=None,
                  downhill_credit=1.0 / -math.log(FRICTION),
                  undul_scale=1.0, tilt_scale=1.0, copy_edge=None):
@@ -161,6 +238,14 @@ class Green:
         self.cup_r = cup_r
         self.capture_speed = capture_speed
         self.max_speed = max_speed
+        self.lip_deflect = lip_deflect
+        self.lip_loss = lip_loss
+        # MEASUREMENT KNOB, NOT A PHYSICS DIAL. Always True in the shipped game;
+        # False reproduces the pre-gate behaviour so the gate's own contribution to
+        # the mash line can be measured instead of inferred. It turned out to be
+        # the dominant term (about 4 holes against the deflection's 3), which is
+        # exactly the kind of claim that should be reproducible on demand.
+        self.lip_gate = lip_gate
         self.friction = friction
 
         # home() / span for the height field
@@ -360,6 +445,7 @@ class Green:
         roll_time = 0.0
         closest = math.hypot(self.cup_x - bx, self.cup_y - by)
         hot_pass = False
+        in_cup = False   # was the ball inside the cup radius LAST frame?
         hot_min_speed = math.inf
         path = [] if trace else None
         i = 0
@@ -404,17 +490,34 @@ class Green:
             if trace:
                 path.append((bx, by, speed))
             if dist < self.cup_r:
-                if speed < self.capture_speed:
+                # THE GATE: only a ball that has NOT already been lipped out on
+                # this pass may be captured. See LIP_LOSS -- this is what makes a
+                # speed reduction inside the radius provably safe.
+                if (not (in_cup and self.lip_gate)) and speed < self.capture_speed:
                     return ("sunk", i, self.cup_x, self.cup_y, 0.0, hot_pass,
                             hot_min_speed, path)
                 hot_pass = True
                 hot_min_speed = min(hot_min_speed, speed)
-                # MIRROR of HeroCanvas: a putt too fast to be held is simply not
-                # held. No velocity change at all — any damping applied inside the
-                # cup radius walks the ball under CAPTURE_SPEED while it is still
-                # over the hole, so both the old radial 0.9 brake and a 0.85
-                # per-frame damping ended in a capture.
-                pass
+                # MIRROR of HeroCanvas: too fast to be held, so the lip throws it
+                # off line and takes some pace -- see LIP_DEFLECT and LIP_LOSS.
+                if not in_cup:
+                    in_cup = True
+                    inv = 1.0 / (speed or 1.0)
+                    ux, uy = vx * inv, vy * inv
+                    # Signed lateral offset of the cup centre from the line of
+                    # travel, on the axis p = (-uy, ux). Zero means dead centre.
+                    lat = -dcx * uy + dcy * ux
+                    frac = min(1.0, abs(lat) / self.cup_r)
+                    sgn = 0.0 if lat == 0.0 else (1.0 if lat > 0.0 else -1.0)
+                    ang = -sgn * self.lip_deflect * frac
+                    ca, sa = math.cos(ang), math.sin(ang)
+                    excess = speed - self.capture_speed
+                    target = self.capture_speed + excess * (1.0 - self.lip_loss)
+                    scale = target / (speed or 1.0)
+                    vx, vy = ((vx * ca - vy * sa) * scale,
+                              (vx * sa + vy * ca) * scale)
+            else:
+                in_cup = False
 
             rgx, rgy = gx, gy
             if at_l and rgx < 0:

@@ -11,7 +11,7 @@ Field.height. Use --no-selfcheck only when you know why.
 
 Usage:
   golf_sweep.py probe.json [--rounds 24] [--dt-source probe|fps] [--fps 120]
-                [--capture 175] [--maxspeed 900] [--friction 0.12] [--cupr 13]
+                [--capture 225] [--maxspeed 900] [--friction 0.12] [--cupr 13]
 """
 import argparse
 import json
@@ -133,6 +133,7 @@ def sweep(g: S.Green, angles_deg, powers, dt, start=None):
     vx = np.cos(ang) * pw * g.max_speed
     vy = np.sin(ang) * pw * g.max_speed
     on_wall = np.zeros(N, dtype=bool)
+    in_cup = np.zeros(N, dtype=bool)   # inside the cup radius LAST frame
     stalled = np.zeros(N)
     roll = np.zeros(N)
     closest = np.full(N, math.hypot(g.cup_x - sx, g.cup_y - sy))
@@ -185,15 +186,41 @@ def sweep(g: S.Green, angles_deg, powers, dt, start=None):
         closest[live] = np.minimum(closest[live], dist)
 
         near = dist < g.cup_r
-        drop = near & (speed < g.capture_speed)
+        # THE GATE (mirror of golf_sim / HeroCanvas): a ball already lipped out on
+        # this pass cannot be captured, which is what makes LIP_LOSS safe.
+        gated = in_cup[live] if g.lip_gate else np.zeros_like(in_cup[live])
+        drop = near & ~gated & (speed < g.capture_speed)
         rim = near & ~drop
         if rim.any():
             hot[live] = hot[live] | rim
             hot_min[live] = np.where(rim, np.minimum(hot_min[live], speed),
                                      hot_min[live])
-            # MIRROR of HeroCanvas / golf_sim: a putt too fast to be held keeps
-            # its speed and its line and crosses the hole. THIRD MIRROR — the one
-            # that went stale on the height field — so the selfcheck guards it.
+            # MIRROR of HeroCanvas / golf_sim: too fast to be held, so the lip
+            # throws it off line -- a ROTATION, never a damping, see
+            # golf_sim.LIP_DEFLECT. THIRD MIRROR — the one that went stale on the
+            # height field — so the selfcheck guards it.
+            #
+            # `enter` must be computed BEFORE in_cup is updated, and in_cup is
+            # written every frame (not only when `rim`), so leaving the radius
+            # re-arms the deflection. Same edge-detect shape as `begin`/`on_wall`
+            # above; a per-frame rotation would spiral the ball around the cup.
+            enter = rim & ~in_cup[live]
+            if enter.any():
+                safe = np.where(speed > 0.0, speed, 1.0)
+                inv = 1.0 / safe
+                ux, uy = wx * inv, wy * inv
+                lat = -dcx * uy + dcy * ux
+                frac = np.minimum(1.0, np.abs(lat) / g.cup_r)
+                ang = np.where(enter, -np.sign(lat) * g.lip_deflect * frac, 0.0)
+                ca, sa = np.cos(ang), np.sin(ang)
+                # Loss on the EXCESS above capture speed, so the hit itself can
+                # never put the ball under the threshold. See golf_sim.LIP_LOSS.
+                excess = speed - g.capture_speed
+                target = g.capture_speed + excess * (1.0 - g.lip_loss)
+                scale = np.where(enter, target / safe, 1.0)
+                wx, wy = np.where(enter, (wx * ca - wy * sa) * scale, wx), \
+                    np.where(enter, (wx * sa + wy * ca) * scale, wy)
+        in_cup[live] = rim
 
         rgx = np.where((at_l & (gx < 0)) | (at_r & (gx > 0)), 0.0, gx)
         rgy = np.where((at_t & (gy < 0)) | (at_b & (gy > 0)), 0.0, gy)

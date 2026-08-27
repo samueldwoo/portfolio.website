@@ -170,11 +170,32 @@ const MAX_SPEED = 900;
  * afford: the height field, the difficulty rating and the whole offline
  * verification stack exist to make reading the green matter.
  *
- * 175 is chosen against the measured arrival speed of that mash line, hole by
- * hole. It now sinks 6 of 81 rather than 68, and 1 of the 13 holes at par 3 or
- * worse rather than 11 — the par 5 arrives at 195px/s and is now rejected. The
- * holes it still sinks are the gentle ones, which is correct; a gentle hole should
- * go in off a straight look.
+ * READ THIS AS A DISTANCE, NOT A SPEED. A rolling ball has v/k of travel left in
+ * it with k = -ln(FRICTION) = 2.12, so the threshold is how far past the hole the
+ * ball would still have run when it dropped. 520 allowed 245px — most of the green.
+ * 175 allowed 83px. 225 allows 106px, so a putt struck ~28% firmer can still hole.
+ *
+ * 520 -> 175 took the mash line to 16/81, measured by tools/golf_mash.py. An
+ * earlier version of this comment claimed 6/81; that number came from scoring the
+ * ball's speed on ENTRY to the cup rather than every frame while inside, and it was
+ * wrong in the flattering direction. Do not reintroduce it.
+ *
+ * 175 -> 225 loosens it deliberately so a firm putt can drop. MEASURE BOTH AIM
+ * WINDOWS, because they disagree:
+ *
+ *     capture              dead straight   ±2° slop
+ *     175 (no lip-out)         16/81         21/81
+ *     205 + lip-out            12/81         21/81
+ *     225 + lip-out            16/81         29/81
+ *
+ * 205 was proposed on the ±2° row, which is closer to what a person actually does
+ * when they "aim at the hole". THE OWNER CHOSE 225 KNOWING THAT COST, for feel:
+ * 106px of run-past rather than 97px. Recorded, not re-litigated. The counter-
+ * arguments were that ±2° is an arbitrary slop figure, and that exploitability is
+ * viewport-dependent and worse on large displays anyway (32% at 4K either way).
+ *
+ * Re-run `golf_mash.py --aim-window 2` if you move it again — the curve is steep:
+ * 250 sinks 24/81 dead straight, 275 sinks 28/81, 300 sinks 33/81.
  *
  * The trade this creates is the one real putting has. Capture speed is a CEILING
  * on pace; break is a FLOOR, because a slow ball has time to be pushed off line.
@@ -184,7 +205,66 @@ const MAX_SPEED = 900;
  * default. golf_sweep's selfcheck compares the two engines and will report a
  * non-zero delta if they drift, which is how the last three-mirror bug was caught.
  */
-const CAPTURE_SPEED = 175;
+const CAPTURE_SPEED = 225;
+/**
+ * LIP-OUT: A ROTATION, DELIBERATELY, BECAUSE ANY DAMPING ENDS IN A CAPTURE.
+ *
+ * Two earlier attempts to reject a fast ball both fed it into the hole — a radial
+ * 0.9 brake, then a 0.85 per-frame damping which was measurably worse (67 of 81
+ * mash putts still sank). A ball crosses a 26px cup in about ten frames and
+ * 0.85^10 = 0.20, so anything that shrinks |v| inside the radius walks the ball
+ * under CAPTURE_SPEED while it is still over the hole.
+ *
+ * Rotating cannot: |v| is invariant, so the capture test sees the same speed it
+ * saw before. Deflecting AWAY from the cup centre also bends the path outward, so
+ * a re-capture is impossible for two independent reasons rather than tuned away.
+ *
+ * Applied ONCE, on the frame the ball enters the radius — rotating every frame
+ * would spiral it around the cup.
+ *
+ * Magnitude scales with the impact parameter, which is what removes the need for
+ * a tie-break: at zero lateral offset the rotation is zero, so no arbitrary side
+ * has to be invented for the degenerate case, and three ports stay in agreement
+ * without one.
+ *
+ * AIMING AT THE CUP IS NOT THE ZERO CASE, and an earlier version of this comment
+ * claimed it was. The offset is measured on the ENTRY FRAME, after break has bent
+ * the ball and quantised to that frame's heading. Measured over rounds 0..11 with
+ * the aim laid exactly on the cup, it runs 1.2px to 10.1px — deflections of 5.4°
+ * to 46.5°. The zero case is real but essentially unreachable in play, so treat
+ * this as "always deflects, sometimes barely" rather than "spares a straight
+ * putt". What a player reads as a pop with no deflection is a 5–7° turn arriving
+ * in one frame.
+ *
+ * MIRRORED in golf_sim.py (LIP_DEFLECT) and golf_sweep.py's numpy path.
+ */
+const LIP_DEFLECT = (60 * Math.PI) / 180;
+/**
+ * LIP_LOSS: pace given up to the lip, scaled on the EXCESS above CAPTURE_SPEED.
+ *
+ * A real ball that catches the lip loses speed; a pure rotation gave none away. A
+ * naive multiply walks back into the original bug though — at CAPTURE_SPEED 225 a
+ * ball arriving at 260 with a flat 20% loss leaves at 208, below the threshold and
+ * still inside the radius, so it drops next frame. That is precisely what made the
+ * old radial 0.9 brake a capture device.
+ *
+ * So the loss applies to the excess, not the total:
+ *     speed' = CAPTURE_SPEED + (speed - CAPTURE_SPEED) * (1 - LIP_LOSS)
+ * A putt hammered in at 800 gives up a lot, one trickling in at 180 almost nothing,
+ * and the hit itself can never drop the ball under CAPTURE_SPEED. It also grades
+ * the way the physics should: the harder you strike the lip, the more you lose.
+ *
+ * THE PROOF IS THE GATE, NOT THE FORMULA. Friction keeps acting on the frames after
+ * the hit, so scaling the excess alone only makes a capture unlikely. Once a ball
+ * has been lipped out it is not tested for capture again until it leaves the radius
+ * (`inCup`), which makes re-capture impossible for ANY value here.
+ *
+ * Deliberately given up: a ball can no longer rattle the lip and drop on the same
+ * pass. Real shot, but mechanically identical to the exploit this subsystem exists
+ * to prevent — enter fast, decelerate inside the radius, drop.
+ * MIRRORED in golf_sim.py (LIP_LOSS) and golf_sweep.py's numpy path.
+ */
+const LIP_LOSS = 0.35;
 
 type Phase = 'idle' | 'aiming' | 'rolling' | 'sunk';
 
@@ -348,45 +428,49 @@ function slopeAt(
  * independent facts about a hole, which is also why they read as one sentence
  * rather than as a repetition.
  *
- * "Par 3 when Brutal" would be right on 54 of 81 holes; a flat par 2 on 67; this
- * table on 81 by construction.
- *
  * A table is legitimate here only because the hole sequence is DETERMINISTIC —
  * every quantity per round comes from hash2(round), so round 7 is the same green
- * for every visitor forever. Past round 80 it falls back to 2, which is the
- * distribution's own median and correct for 73 of the 81 measured holes.
+ * for every visitor forever. Past round 80 it falls back to 2, the distribution's
+ * own median.
  *
- * NOT FLOORED. An earlier version forced everything to 2 or 3 on the grounds that
- * golf has no par-1. It does not, but this is a putting green rather than a golf
- * hole, one hole here measures 1.29 expected strokes, and calling that a par 2
- * hands out a birdie for the ordinary play. Par is round(E) now, clamped 1..6.
+ * PAR IS THE MEDIAN STROKE COUNT, NOT THE MEAN, AND THAT WAS A CORRECTION.
+ * On rounds 4, 7, 78 and to a lesser extent 25 and 59, the player model has no
+ * lay-up: it always aims at the cup and power is clipped at full, so on a steep
+ * uphill lie it hits short, lands in much the same place, and repeats. Around a
+ * third of its trials there never hole out. The MEAN therefore measured where the
+ * give-up cap sat rather than the golf — round 78 read 3.98 at cap 8, 17.07 at
+ * cap 48 and 77.75 at cap 200 — while its median barely moved. A median is
+ * immune while fewer than half the trials are stuck, which at cap 32 they are.
+ * `golf_par.py --table` prints the stuck share per hole and refuses to emit a
+ * table if any median reaches the cap.
  *
- * TIE-BREAK: where the 95% interval straddles a .5 boundary the HARDER par wins.
- * Eleven holes straddle at n=2000 (round 17 is 1.482, round 45 is 2.514), and
- * claiming a hole is a one-putt when it is a coin flip is the same overclaim as
- * the old migration calling every legacy ace a birdie.
+ * Measured at capture 225 with the lip-out, 500 trials, cap 32, and the twelve
+ * borderline holes re-run at 2000. Borderline means the share of trials below par
+ * sits within 2 SE of 50%, i.e. a different seed could move the par by one; the
+ * tool reports them rather than letting the arithmetic decide silently.
  *
- * THREE HOLES ARE UNDER-MEASURED AND THEIR PAR IS A LOWER BOUND. The simulator
- * gives up after 8 strokes, and on the hardest holes it hits that ceiling often
- * enough to truncate the mean: round 7 capped 1076 of 2000 trials, round 78 757,
- * round 4 507. So E is biased DOWN there and the true par is at least what the
- * table says, possibly more — the fix is a higher stroke cap and a re-measure,
- * not a guess. Those three are the trap-lie holes, and they got harder when the
- * relief rule was reverted, which is correct: the recovery is real work.
+ * ROUNDS 7 AND 78 ARE SET BY HAND: par 3 and par 2. The simulator says 9 and 3,
+ * and those are its own deadlock speaking. A person plays a 286px uphill putt in
+ * about three and a 221px one in about two, and par exists to tell a person what
+ * a good score is. The alternatives were rejected on purpose: shipping 9 reads as
+ * broken on a green this size, and marking them unscored hides a hole from the
+ * scorecard to flatter a model nobody plays against.
  *
- * RE-MEASURE IF THE PHYSICS MOVES. Every number here is conditional on
- * CAPTURE_SPEED, MAX_SPEED and FRICTION.
+ * RE-MEASURE IF THE PHYSICS MOVES. Every number is conditional on CAPTURE_SPEED,
+ * MAX_SPEED and FRICTION, and it is also conditional on CANVAS SIZE — the cup and
+ * tee come from playBox(), so a different viewport is a different hole. This table
+ * was measured at 1440x900 and is approximate everywhere else. See §5g: the
+ * picture wins over difficulty consistency, deliberately.
  *
- * CAPTURE_SPEED has since moved 520 -> 175 to kill the aim-and-mash exploit, and
- * the table was RE-MEASURED against it rather than assumed: median expected
- * strokes went 2.02 -> 2.04 and the ace rate 36.4% -> 34.1%, both inside the noise
- * at 500 trials. So the table stands, and the reason it stands is the point of the
- * change — this player already picks its pace to roll 15% past the hole, so it
- * never relied on the loophole. Rejecting fast arrivals taxes the degenerate
- * strategy and leaves competent play alone.
+ * WHAT IT COSTS, STATED: 72 of 81 holes are par 2, so a flat par-2 table would now
+ * be right on 72 and this one on 81. Par discriminates on 9 holes, down from 14
+ * under the mean. That is the honest trade — the old spread came from means
+ * inflated by stuck trials, so it was discriminating on an artefact — but par is
+ * closer to decoration than it was. The lever for more spread is the difficulty
+ * word, which is an absolute measure and still spreads over four bands.
  */
 const PAR_TABLE =
-  '232232252232222222212222222222322222222222222322223223222232222232222222223223422';
+  '222222232222222221212221222222221222222222222222222222222222222232122212222223222';
 const PAR_DEFAULT = 2;
 /** Par of a hole played before par existed. Counts as played, not as scored. */
 const PAR_UNKNOWN = 0;
@@ -883,6 +967,7 @@ export default function HeroCanvas() {
     let pullY = 0;
     let putts = 0;
     let sunkAt = 0; // clock time the ball dropped, for the flourish
+    let inCup = false; // inside the cup radius LAST frame — arms the lip-out
     let flagSway = 0;
     /** True while the ball was already touching a wall last frame. Tangential
      *  damping is applied only on the frame contact BEGINS — see the wall block
@@ -1669,14 +1754,23 @@ export default function HeroCanvas() {
       }
       onWall = touching;
 
-      // Cup capture: close enough AND slow enough. Too hot and it rims out,
-      // which is both realistic and stops the game being trivial.
+      /* Cup capture: close enough AND slow enough. Too hot and it lips out.
+         The second clause is the whole gate — rejection is what happens when the
+         `if` below does not fire, so the lip-out adds a visible consequence and
+         never decides in-or-out. An earlier version of this comment claimed the
+         rim-out "stops the game being trivial", which was false for months: the
+         game was winnable by aiming at the hole and mashing on 68 of 81 holes
+         (94% at 4K) until CAPTURE_SPEED came down. tools/golf_mash.py measures
+         that now, because no other invariant here does. */
       const dcx = cupX - ballX;
       const dcy = cupY - ballY;
       const dist = Math.sqrt(dcx * dcx + dcy * dcy);
       const speed = Math.sqrt(velX * velX + velY * velY);
       if (dist < CUP_R) {
-        if (speed < CAPTURE_SPEED) {
+        /* THE GATE: only a ball that has NOT already been lipped out on this pass
+           may be captured. See LIP_LOSS — this is what makes taking pace off the
+           ball inside the radius provably safe rather than merely tuned. */
+        if (!inCup && speed < CAPTURE_SPEED) {
           phase = 'sunk';
           sunkAt = clockRef.v;
           ballX = cupX;
@@ -1690,18 +1784,34 @@ export default function HeroCanvas() {
           recordHole();
           return false;
         }
-        /* NOTHING HAPPENS TO THE BALL HERE, AND THAT IS THE POINT.
-           Two earlier versions both fed the ball into the hole they meant to
-           reject. The first subtracted 0.9 of the speed along the vector toward
-           the cup, which left it crawling INSIDE the radius so it dropped on the
-           next frame. Replacing that with a per-frame 0.85 damping was no better
-           and measurably worse — 67 of 81 mash putts still sank — because a ball
-           takes about ten frames to cross a 26px cup, and 0.85^10 is 0.20, so the
-           damping walks it under CAPTURE_SPEED while it is still over the hole.
-           ANY damping applied inside the radius ends in a capture.
-           So a putt too fast to be held is simply not held: it keeps its speed,
-           keeps its line, crosses the hole and runs on past. `hotPass` still
-           records that it happened, which is what the harnesses read. */
+        /* TOO FAST TO BE HELD, SO THE LIP THROWS IT OFF LINE — see LIP_DEFLECT
+           for why this rotates rather than damps, and why it fires only on entry.
+           Before this the ball passed straight over unchanged, which was correct
+           but invisible: the player got no feedback that the hole had rejected
+           the putt rather than the putt having missed. */
+        if (!inCup) {
+          inCup = true;
+          const inv = 1 / (speed || 1);
+          const ux = velX * inv;
+          const uy = velY * inv;
+          /* Signed lateral offset of the cup centre from the line of travel, on
+             the axis p = (-uy, ux). Zero means the ball is heading dead centre. */
+          const lat = -dcx * uy + dcy * ux;
+          const frac = Math.min(1, Math.abs(lat) / CUP_R);
+          const ang = -Math.sign(lat) * LIP_DEFLECT * frac;
+          const ca = Math.cos(ang);
+          const sa = Math.sin(ang);
+          /* Pace off the EXCESS above capture speed, so the hit can never put the
+             ball under the threshold on its own. See LIP_LOSS. */
+          const excess = speed - CAPTURE_SPEED;
+          const scale = (CAPTURE_SPEED + excess * (1 - LIP_LOSS)) / (speed || 1);
+          const nvx = (velX * ca - velY * sa) * scale;
+          const nvy = (velX * sa + velY * ca) * scale;
+          velX = nvx;
+          velY = nvy;
+        }
+      } else {
+        inCup = false;
       }
 
       /* A ball only comes to rest where the ground is flat enough to hold it.
