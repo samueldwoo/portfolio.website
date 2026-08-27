@@ -30,6 +30,7 @@
 import { defineMiddleware } from 'astro:middleware';
 import { TTL, readCookie, sign, verify, writeCookie } from './lib/us/session';
 import { SESSION_SECRET } from './lib/us/config';
+import { trace } from './lib/us/trace';
 
 /** The wing's base path. Renaming this also means renaming src/pages/samdrea/. */
 const WING = '/samdrea';
@@ -103,6 +104,37 @@ export const onRequest = defineMiddleware(async (ctx, next) => {
     if (valid) renew(ctx);
 
     if (!valid) {
+      /* ONE LINE FOR EVERY REFUSAL THAT NEVER REACHES AN ENDPOINT, and it is here
+         because instrumenting the endpoints revealed that it had to be.
+
+         All five write endpoints carry an `unauthorized` branch, and every one of them
+         is unreachable in practice: this check runs first and verifies the same cookie,
+         so if the request arrives at the handler it is already authenticated. Traced
+         from inside them, an unauthenticated attempt produces NOTHING — verified, not
+         assumed: five no-cookie POSTs emitted zero trace lines.
+
+         That is the exact shape of the complaint the tracing exists to answer. Her
+         session is 30 days; when it lapses she taps a reaction and gets bounced to the
+         gate, and "I pressed it and nothing happened" would have had no log line
+         anywhere. `kind` separates the two audiences, because they mean different
+         things: a `form` refusal is a real person losing their place mid-tap, a `json`
+         one is a fetch or a crawler.
+
+         No path and no cookie value — trace() would reduce a path to its length anyway,
+         and `needsAdmin` plus the kind is what actually distinguishes the cases. */
+      const isApiPath = path.startsWith('/api/');
+      const ct = (ctx.request.headers.get('content-type') ?? '').toLowerCase();
+      const accept = (ctx.request.headers.get('accept') ?? '').toLowerCase();
+      const isFormNavigation =
+        !accept.includes('application/json') &&
+        (ct.includes('application/x-www-form-urlencoded') ||
+          ct.includes('multipart/form-data'));
+
+      trace('gate.refused', {
+        kind: isApiPath ? (isFormNavigation ? 'api-form' : 'api-json') : 'page',
+        admin: needsAdmin,
+      });
+
       /* A SCRIPT gets a status code; a PERSON gets sent to the front door — and
          "is this an API path" was the wrong way to tell them apart.
 
@@ -122,14 +154,7 @@ export const onRequest = defineMiddleware(async (ctx, next) => {
          multipart POST is a navigation and goes to the gate. Everything else —
          fetch, JSON, anything asking for JSON back — still gets the 401 it can
          parse. */
-      if (path.startsWith('/api/')) {
-        const ct = (ctx.request.headers.get('content-type') ?? '').toLowerCase();
-        const accept = (ctx.request.headers.get('accept') ?? '').toLowerCase();
-        const isFormNavigation =
-          !accept.includes('application/json') &&
-          (ct.includes('application/x-www-form-urlencoded') ||
-            ct.includes('multipart/form-data'));
-
+      if (isApiPath) {
         if (!isFormNavigation) {
           return withPrivacyHeaders(
             new Response(JSON.stringify({ ok: false, error: 'unauthorized' }), {

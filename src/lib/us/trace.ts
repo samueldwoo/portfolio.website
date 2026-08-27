@@ -153,10 +153,17 @@ export function trace(op: string, data: Record<string, Field> = {}): void {
  * ---------------------------------------------------------------------------
  * WHAT THIS EXISTS TO MAKE VISIBLE
  *
- * The free tier is 50,000 commands a month and development spent 19,000 of it in a
+ * The free tier is 500,000 commands a month and development spent 19,000 of it in a
  * few days, almost none of it real usage. Nothing in the wing could see a command,
  * so the only evidence was a dashboard number going up after the fact — which tells
  * you that you overspent and not where.
+ *
+ * ~~50,000~~ — this said 50,000, a misreading of Upstash's pricing page, corrected
+ * against it on 2026-08-25. Left visible rather than quietly fixed because the wrong
+ * figure made development look like it had burned 38% of the quota when it had burned
+ * about 4%, and that number was used to argue for keeping agents off the live store.
+ * The conclusion was right and the reason was wrong: the reason is WRITE SAFETY. A cost
+ * estimate must not be allowed to carry an argument that belongs to data loss.
  *
  * A pipeline is ONE HTTP request and MANY billed commands, and that gap is exactly
  * where the surprise lives. `getAll()` on the hub is two round trips and around

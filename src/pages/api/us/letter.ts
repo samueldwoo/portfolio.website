@@ -61,6 +61,7 @@
 import type { APIRoute } from 'astro';
 import { SESSION_SECRET } from '../../../lib/us/config';
 import { readCookie, verify } from '../../../lib/us/session';
+import { timer, trace } from '../../../lib/us/trace';
 import { clientKey, hit } from '../../../lib/us/ratelimit';
 import { crossSite } from '../../../lib/us/together';
 import { wingDate } from '../../../lib/us/kv';
@@ -104,6 +105,7 @@ function isJsonRequest(request: Request): boolean {
 
 export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect, url }) => {
   const wantsJson = isJsonRequest(request);
+  const t = timer();
 
   /**
    * One exit point, so the fetch and no-JS paths can never drift apart.
@@ -118,6 +120,16 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
     error: string | null,
     extra: Record<string, unknown> = {},
   ): Response => {
+    /* ONE LINE PER REPLY, at the only place every outcome passes through.
+
+       NO `who` FIELD, deliberately. This endpoint authenticates with the session
+       cookie alone and never calls identify(), so the actor is 'her' by construction —
+       logging a constant would read like a fact that had been checked. The op name
+       carries it.
+
+       NOR the letter id, which is not in trace()'s STRING_KEYS and would come out as
+       `id=len:3` anyway. What she wrote is a `text` the logger refuses outright. */
+    trace('letter.reply', { ok, status, code: error, ms: t.total() });
     if (wantsJson) return json({ ok, ...(error ? { error } : {}), ...extra }, status);
     const id = typeof extra.id === 'string' ? extra.id : '';
     const where = id ? `${LETTERS_PAGE}?read=${encodeURIComponent(id)}` : LETTERS_PAGE;

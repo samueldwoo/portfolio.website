@@ -67,6 +67,7 @@
 import type { APIRoute } from 'astro';
 import { SESSION_SECRET } from '../../../lib/us/config';
 import { readCookie, verify } from '../../../lib/us/session';
+import { timer, trace } from '../../../lib/us/trace';
 import { clientKey, hit } from '../../../lib/us/ratelimit';
 import {
   MARK_NOTE_MAX,
@@ -300,6 +301,14 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
      this is the endpoint's default, not the page's markup. */
   const backTo = RETURN_TO[url.searchParams.get('from') ?? ''] ?? BOARD_PAGE;
 
+  const t = timer();
+  /* THE ACTION, for the log only, and it needs its own binding.
+     `landOn` above is a card id, not an action — mark.ts's query hint carries `?m=`
+     rather than `?a=`, unlike together.ts. So there is nothing in scope before the body
+     is parsed that says whether this was a keep, a note or a seen, and those three are
+     worth telling apart: `keep` and `seen` are taps, `note` is something she wrote. */
+  let act: Action | null = null;
+
   /** One exit point, so the fetch and no-JS paths cannot drift apart. */
   const answer = (
     ok: boolean,
@@ -307,6 +316,13 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
     error: string | null,
     extra: Record<string, unknown> = {},
   ): Response => {
+    /* ONE LINE PER MARK. `kind` is null until the body is validated, which is the
+       honest reading of an early exit: we genuinely do not know yet what was asked.
+
+       No `who`, and no card id: this endpoint authenticates on the session cookie alone
+       so the actor is 'her' by construction, and the id is not in trace()'s
+       STRING_KEYS — it would print as a length. Her note never could. */
+    trace('mark.post', { ok, status, code: error, kind: act, ms: t.total() });
     if (wantsJson) return json({ ok, ...(error ? { error } : {}), ...extra }, status);
     const frag = landOn ? `#m-${encodeURIComponent(landOn)}` : '';
     const query = ok ? '' : `?e=${encodeURIComponent(error ?? 'no')}`;
@@ -380,6 +396,7 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
   }
 
   if (!isAction(action)) return answer(false, 400, 'bad-action');
+  act = action;
   /* Rejected, not coerced. An unknown id is checked against the manifest rather
      than against a shape — see isMarkId(). The point is not traversal (nothing
      here builds a key from input) but a BOUNDED store: without the check a caller

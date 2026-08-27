@@ -99,6 +99,7 @@ import { SESSION_SECRET } from '../../../lib/us/config';
 import { clientKey, hit } from '../../../lib/us/ratelimit';
 import { notify } from '../../../lib/us/push';
 import { crossSite, identify, type Who } from '../../../lib/us/together';
+import { timer, trace } from '../../../lib/us/trace';
 import {
   MAX_REACTIONS_PER_DAY,
   MAX_REACTION_UNITS,
@@ -174,6 +175,16 @@ function readSide(value: unknown): Side | null {
 
 export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect, url }) => {
   const wantsJson = isJsonRequest(request);
+  const t = timer();
+
+  /* WHO, AS A MUTABLE BINDING, AND NOT A REFERENCE TO `who` BELOW.
+     `answer()` closes over this so every exit can name the actor, and `const who` is
+     declared further down — so reading it here would work today only because no call
+     happens before that line, and would become a TDZ ReferenceError the moment
+     somebody adds an earlier one. That is precisely the shape of the bug that made the
+     upload silently never confirm (`killer`, out of scope, in a sibling callback), so
+     it is not a hypothetical worth accepting to save a line. */
+  let actor: Who | null = null;
 
   /** One exit point, so the fetch and no-JS paths cannot drift apart. */
   const answer = (
@@ -182,6 +193,20 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
     error: string | null,
     extra: Record<string, unknown> = {},
   ): Response => {
+    /* ONE LINE PER TAP, AT THE ONLY PLACE EVERY OUTCOME PASSES THROUGH. Instrumenting
+       the twelve call sites instead would mean twelve chances to forget one, and the
+       ones that get forgotten are the refusals — which are the interesting half.
+
+       On success the code lives in `extra.outcome`, not in `error`: see the note below
+       about why it is not called `ok`. trace() cannot print their content, so nothing
+       here can leak a reaction's meaning even if `extra` grows a field. */
+    trace('react.tap', {
+      ok,
+      status,
+      code: error ?? (typeof extra.outcome === 'string' ? extra.outcome : null),
+      who: actor,
+      ms: t.total(),
+    });
     if (wantsJson) return json({ ok, ...(error ? { error } : {}), ...extra }, status);
     /* 303 forces a GET, so the page she lands on re-renders from the store and a
        refresh does not resubmit the tap.
@@ -221,6 +246,7 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
   if (!who) {
     return answer(false, 401, 'unauthorized');
   }
+  actor = who;
 
   /* CROSS-SITE. Checked AFTER the cookie, so an unauthenticated probe learns
      nothing it did not already know.

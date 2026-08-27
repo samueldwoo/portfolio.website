@@ -77,6 +77,7 @@ import {
   warmAgo,
   type Who,
 } from '../../../lib/us/together';
+import { timer, trace } from '../../../lib/us/trace';
 
 export const prerender = false;
 
@@ -146,6 +147,11 @@ function tzOf(who: Who): string {
 
 export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect, url }) => {
   const wantsJson = isJsonRequest(request);
+  const t = timer();
+
+  /* Mutable rather than a reference to `who` below — see react.ts for why closing over
+     a `const` declared further down is a TDZ hazard waiting for the next edit. */
+  let actor: Who | null = null;
 
   /**
    * One exit point, so the fetch and no-JS paths can never drift apart.
@@ -160,6 +166,12 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
     code: string | null,
     extra: Record<string, unknown> = {},
   ): Response => {
+    /* ONE LINE PER TAP. The debounce makes this the most misleading endpoint to reason
+       about without a log: `sent: false` is a SUCCESS (see the note at the bottom), so
+       "she tapped and nothing appeared on his phone" is an expected outcome roughly as
+       often as it is a bug. `code` separates them — `already` versus `sent` — and no
+       amount of staring at the store afterwards can. */
+    trace('thinking.send', { ok, status, code, who: actor, ms: t.total() });
     if (wantsJson) return json({ ok, ...(code ? { code } : {}), ...extra }, status);
     /* `ok` and `e` are separate parameters rather than one `code`, because the hub
        renders a success and a failure in different elements with different wording,
@@ -193,6 +205,7 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
     }
     return answer(false, 401, 'unauthorized');
   }
+  actor = who;
 
   /* Request forgery. Checked AFTER the cookie so an unauthenticated cross-site probe
      learns nothing it did not already know. There is no body to protect here, but the

@@ -102,7 +102,9 @@ import {
   tidyAnswer,
   tidyItem,
   visibleDay,
+  type Who,
 } from '../../../lib/us/together';
+import { timer, trace } from '../../../lib/us/trace';
 
 export const prerender = false;
 
@@ -208,6 +210,10 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
   const hinted = url.searchParams.get('a');
   let landOn: Action | null = isAction(hinted) ? hinted : null;
 
+  const t = timer();
+  /* Mutable rather than a reference to `who` below — see react.ts on the TDZ hazard. */
+  let actor: Who | null = null;
+
   /** One exit point, so the fetch and no-JS paths can never drift apart. */
   const answer = (
     ok: boolean,
@@ -215,6 +221,14 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
     code: string | null,
     extra: Record<string, unknown> = {},
   ): Response => {
+    /* ONE LINE PER ACTION, and `kind` is what makes it worth having: this endpoint is
+       four features behind one handler (answer, add, tick, remove), and 28 exits share
+       it. Without the action, a refusal here says only "something on the hub failed".
+
+       `landOn` doubles as the action because it already is one — the query hint,
+       overwritten by the body once we get that far. Before validation it may be null,
+       which is honest: that IS the state where we do not yet know what was asked. */
+    trace('together.post', { ok, status, code, kind: landOn, who: actor, ms: t.total() });
     if (wantsJson) return json({ ok, ...(code ? { code } : {}), ...extra }, status);
     const frag = landOn ? FRAGMENTS[landOn] : '';
     const query = ok
@@ -241,6 +255,7 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
     }
     return answer(false, 401, 'unauthorized');
   }
+  actor = who;
 
   /* Request forgery. AFTER the cookie so an unauthenticated cross-site probe learns
      nothing, and BEFORE the body is parsed so nothing untrusted is read until the
