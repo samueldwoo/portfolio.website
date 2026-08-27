@@ -56,6 +56,7 @@ import {
 } from '../../../../lib/us/photos';
 import { clientKey, hitLocal } from '../../../../lib/us/ratelimit';
 import { readCookie, verify } from '../../../../lib/us/session';
+import { trace } from '../../../../lib/us/trace';
 
 export const prerender = false;
 
@@ -156,6 +157,20 @@ const RATE_LIMIT = 200;
 const RATE_WINDOW_SEC = 600;
 
 function fail(status: number, error: string, extra?: Record<string, string>): Response {
+  /* REFUSALS ONLY, AND THAT IS THE DESIGN RATHER THAN A SHORTCUT.
+     This endpoint fires once per <img> — sixteen on the board — so tracing successes
+     would add sixteen identical "presigned ok" lines to every render, drowning the
+     wing's other traces in the one place volume is highest and information lowest. The
+     same volume argument that made this endpoint use hitLocal() instead of hit().
+
+     The success path is also the one response that must never be logged: it redirects
+     to a presigned R2 URL, which is a bearer credential for one of her photographs.
+     Tracing only here means there is no code path from that URL to a log line.
+
+     All four refusals come through this function, so the half worth seeing is total:
+     an unconfigured secret, an unauthorized read, a rate-limited loop, an id that is
+     not in the manifest. */
+  trace('photo.fail', { status, code: error });
   return new Response(JSON.stringify({ ok: false, error }), {
     status,
     headers: { 'Content-Type': 'application/json', ...NO_STORE, ...extra },

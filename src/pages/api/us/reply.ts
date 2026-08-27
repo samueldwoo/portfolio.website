@@ -100,6 +100,7 @@ import { isTimeZone, isWingDate, putReply, wingDate, type ReplyRecord } from '..
 // field caps as his side — a shorter note on her card would be an asymmetry
 // nobody chose. See the header.
 import { MAX_ARTIST, MAX_NOTE, cleanText, resolveMetadata, resolveTrackId } from './song';
+import { timer, trace } from '../../../lib/us/trace';
 
 export const prerender = false;
 
@@ -133,6 +134,7 @@ function isJsonRequest(request: Request): boolean {
 
 export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect, url }) => {
   const wantsJson = isJsonRequest(request);
+  const t = timer();
 
   /** One exit point, so the fetch and no-JS paths can never drift apart. */
   const answer = (
@@ -141,6 +143,8 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
     error: string | null,
     extra: Record<string, unknown> = {},
   ): Response => {
+    // One line per reply, at the shared exit. No `who`: this endpoint is hers alone.
+    trace('reply.post', { ok, status, code: error, ms: t.total() });
     if (wantsJson) return json({ ok, ...(error ? { error } : {}), ...extra }, status);
     // 303 forces a GET, so the page she lands on re-renders from the store and a
     // refresh does not resubmit the reply. `sent` carries the date so the page can

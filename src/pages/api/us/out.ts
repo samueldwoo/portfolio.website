@@ -28,6 +28,7 @@
 import type { APIRoute } from 'astro';
 import { crossSite } from '../../../lib/us/together';
 import { clearCookie } from '../../../lib/us/session';
+import { trace } from '../../../lib/us/trace';
 
 export const prerender = false;
 
@@ -41,6 +42,7 @@ export const POST: APIRoute = ({ request, cookies, redirect, url }) => {
      refuses only on a positive mismatch. */
   if (crossSite(request, url)) {
     console.warn('[us] refused a cross-site sign-out.');
+    trace('out.post', { ok: false, status: 403, code: 'cross-site' });
     return new Response(JSON.stringify({ ok: false, error: 'cross-site' }), {
       status: 403,
       headers: { 'Content-Type': 'application/json' },
@@ -55,6 +57,11 @@ export const POST: APIRoute = ({ request, cookies, redirect, url }) => {
      other person through the gate would leave them identified as HIM — the whole
      bug this cookie was added to fix, arriving from the other direction. */
   clearCookie(cookies, 'whoami');
+  /* Two exits, so two lines, and no shared helper invented for the sake of one.
+     A sign-out is worth seeing because of what it does to the NEXT session: all four
+     cookies go, including the 180-day identity one, so an unexplained "the wing thinks
+     I'm the other person" starts by asking whether this ran. */
+  trace('out.post', { ok: true, status: 303, code: 'signed-out' });
   // Back to the front door, which will now render the gate rather than
   // redirecting onward — proving the cookies really are gone.
   return redirect('/samdrea', 303);

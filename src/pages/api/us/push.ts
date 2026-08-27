@@ -39,6 +39,7 @@ import { SESSION_SECRET, hasKV, hasPush } from '../../../lib/us/config';
 import { clientKey, hit } from '../../../lib/us/ratelimit';
 import { crossSite, identify } from '../../../lib/us/together';
 import { subscribeDevice, unsubscribeDevice } from '../../../lib/us/push';
+import { trace } from '../../../lib/us/trace';
 
 export const prerender = false;
 
@@ -64,6 +65,23 @@ const PRIVACY: Record<string, string> = {
 };
 
 function json(body: unknown, status = 200): Response {
+  /* THE TRACE GOES HERE, not at twelve `return json(...)` sites.
+     This is the only response constructor in the file, and it already receives both
+     halves of what a trace line needs — the status and the body carrying `code`. So one
+     insertion is total, and it needs no per-request state, which is what makes putting
+     it in a module-level function safe: nothing is remembered between invocations.
+
+     No `who`: this endpoint identifies the caller, but the interesting question here is
+     whether a device registration landed, and `code` answers that. `endpoint` and the
+     subscription keys are never passed to trace() at all — they are a URL and two
+     secrets, and both would come back as `len:` anyway. */
+  trace('push.sub', {
+    status,
+    code:
+      body && typeof body === 'object' && typeof (body as { code?: unknown }).code === 'string'
+        ? (body as { code: string }).code
+        : null,
+  });
   return new Response(JSON.stringify(body), {
     status,
     headers: { 'Content-Type': 'application/json', ...PRIVACY },

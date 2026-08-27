@@ -52,6 +52,7 @@ import { clientKey, hit } from '../../../lib/us/ratelimit';
 import { crossSite, identify } from '../../../lib/us/together';
 import { forget } from '../../../lib/us/presence';
 import { dropDevices } from '../../../lib/us/push';
+import { timer, trace } from '../../../lib/us/trace';
 
 export const prerender = false;
 
@@ -80,7 +81,13 @@ function json(body: unknown, status = 200): Response {
 export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect, url }) => {
   const wantsJson = (request.headers.get('accept') ?? '').toLowerCase().includes('application/json');
 
+  const t = timer();
+
   const answer = (ok: boolean, status: number, code: string | null, extra: Record<string, unknown> = {}) => {
+    /* One line per identity switch. Low volume and high consequence: this is the
+       cookie whose absence once filed his photograph as hers, so knowing when it was
+       set — and to which side — is worth a line even though it grants nothing. */
+    trace('whoami.switch', { ok, status, code, ms: t.total() });
     if (wantsJson) return json({ ok, ...(code ? { code } : {}), ...extra }, status);
     const q = ok ? `?ok=${encodeURIComponent(code ?? 'switched')}` : `?e=${encodeURIComponent(code ?? 'no')}`;
     const res = redirect(`${HUB}${q}`, 303);
