@@ -691,6 +691,12 @@ const whoWord = (w: Who): string => (w === viewer ? 'you' : w === 'her' ? (her |
            A ticking counter is a promise that something is still happening. Nothing
            below may be able to break that promise by throwing, which is what stop()
            is for. */
+        /* How long a confirmation stays on screen before the server takes over. 700ms,
+           the same as the song post, so the two halves of the wing do not feel like two
+           different products. Named rather than inlined twice, because two literals is
+           how they drift. */
+        var HANDOVER_MS = 700;
+
         var sent = false;
         var ticker = 0;
         var killer = 0;
@@ -842,11 +848,37 @@ const whoWord = (w: Who): string => (w === viewer ? 'you' : w === 'her' ? (her |
         }).then(function (data) {
             stop();
             if (data && data.ok) {
-                /* A server render rather than a DOM patch: the new frame needs a
-                   freshly signed URL and the server is the only thing that can mint
-                   one. land() rather than assign() because posting a second time in
-                   a day targets the URL she is already on — see land(). */
-                land('/samdrea/vault/day', '?ok=posted', '#post');
+                /* ---- SAY IT FIRST, THEN HAND OVER ------------------------------
+
+                   This used to go straight to land(), and the difference was reported
+                   before it was measured: the song post "feels much faster and more
+                   graceful than the photograph upload". Both take about as long as the
+                   bytes take; only one of them ever acknowledged her.
+
+                   Measured under a 2.5s post, the whole timeline on this path was
+                   `[{text:"sending…", at:62}]`. The last thing on screen was a ticking
+                   count and then the page was simply replaced, so the only confirmation
+                   arrived after a full reload — a blank moment, then a new page. The
+                   song has said `it's up` in place and held it for 700ms since it
+                   shipped, which is why that one felt finished and this one felt
+                   interrupted.
+
+                   THE SAME WORDS THE RELOADED PAGE USES, deliberately. `?ok=posted`
+                   renders "that's up." so she reads it here, the page reloads, and it is
+                   still there — continuity rather than two different confirmations for
+                   one upload.
+
+                   700ms matches the song exactly. Long enough to read three words,
+                   short enough that nobody waits. The button stays disabled through it,
+                   so the pause cannot become a second upload. */
+                say("that's up.");
+                setTimeout(function () {
+                    /* A server render rather than a DOM patch: the new frame needs a
+                       freshly signed URL and the server is the only thing that can mint
+                       one. land() rather than assign() because posting a second time in
+                       a day targets the URL she is already on — see land(). */
+                    land('/samdrea/vault/day', '?ok=posted', '#post');
+                }, HANDOVER_MS);
                 return;
             }
             /* ---- A REFUSAL IS NOT AUTOMATICALLY A REASON TO UPLOAD AGAIN --------
@@ -922,6 +954,10 @@ const whoWord = (w: Who): string => (w === viewer ? 'you' : w === 'her' ? (her |
                  find out, done automatically. */
             stop();
             if (sent) {
+                /* Held for the same beat as the success path, for the same reason: an
+                   immediate land() meant 'checking…' was written and then thrown away
+                   in the same frame, so she waited out 45 seconds and was told nothing
+                   at all. */
                 say('checking…');
                 /* ?ok=maybe RATHER THAN NOTHING, which is the other half of this fix.
                    Reloading with a bare URL was measurably silent: she had just waited
@@ -934,7 +970,9 @@ const whoWord = (w: Who): string => (w === viewer ? 'you' : w === 'her' ? (her |
                    land() rather than assign() for the same reason as above: a second
                    timeout targets the URL she is already on, and an assign() that
                    quietly does nothing would leave her on 'checking…' forever. */
-                land('/samdrea/vault/day', '?ok=maybe', '#post');
+                setTimeout(function () {
+                    land('/samdrea/vault/day', '?ok=maybe', '#post');
+                }, HANDOVER_MS);
                 return;
             }
             say('');

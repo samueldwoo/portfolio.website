@@ -112,6 +112,12 @@ const RESPONSES = {
   notAnImage:   { status: 415, body: { ok: false, code: 'not-an-image' } },
   store:        { status: 502, body: { ok: false, code: 'store' } },
   htmlGateway:  { status: 502, body: '<html>bad gateway</html>', raw: true },
+  /* HER CONNECTION, NOT THIS MACHINE'S. Over localhost the whole post finishes in
+     milliseconds and navigates before anything can be observed, which is exactly why
+     the shape of the wait was never noticed here: it only exists when the wait does.
+     2.5s is a modest phone-on-mobile upload of a few hundred KB. */
+  slowPosted:   { status: 200, delayMs: 2500,
+                  body: { ok: true, code: 'posted', date: '2026-08-25', who: 'her', note: '', bytes: 1234 } },
   hang:         { hang: true },
 };
 
@@ -133,6 +139,7 @@ const server = createServer(async (req, res) => {
 
     const r = RESPONSES[mode];
     if (r.hang) return;                       // never answer: exercises the 45s deadline
+    if (r.delayMs) await new Promise((rs) => setTimeout(rs, r.delayMs));
 
     /* Accept decides the shape, exactly as answer() in frame.ts does. The script's
        failure fallback is form.submit(), a NATIVE post sending Accept: text/html, which
@@ -304,16 +311,41 @@ try {
 
     /* The real submit path: a cancelable submit event, which is what a click produces.
        form.submit() bypasses the handler entirely — that is the FALLBACK, not this. */
+    /* THE TIMELINE OF WHAT SHE IS TOLD, sampled rather than reasoned about. Installed
+       before the submit so nothing is missed, and it records into the PAGE so a
+       navigation ends the recording naturally — the last sample before the document goes
+       away is the last thing she saw. */
+    await ev(`window.__seen = []; window.__t0 = Date.now();
+      window.__tick = setInterval(function () {
+        var el = document.querySelector('[data-fr-status]');
+        var t = el ? el.textContent : null;
+        var last = window.__seen.length ? window.__seen[window.__seen.length - 1].text : undefined;
+        if (t !== last) window.__seen.push({ text: t, at: Date.now() - window.__t0 });
+      }, 60); 1`);
+
     await ev(`document.querySelector('[data-fr-form]')
       .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); 1`);
 
-    await sleep(opts.wait ?? 2500);
+    /* Read back before the wait finishes, because a successful post navigates and takes
+       the recording with it. Sampled repeatedly and the longest run is kept. */
+    let seen = [];
+    for (let i = 0; i < Math.ceil((opts.wait ?? 2500) / 120); i += 1) {
+      const snap = await ev('window.__seen ? JSON.stringify(window.__seen) : null');
+      if (typeof snap === 'string') {
+        try {
+          const parsed = JSON.parse(snap);
+          if (parsed.length > seen.length) seen = parsed;
+        } catch { /* mid-navigation */ }
+      }
+      await sleep(120);
+    }
 
     const said1 = await ev('(document.querySelector("[data-fr-status]")||{}).textContent');
     await sleep(1400);
     const said2 = await ev('(document.querySelector("[data-fr-status]")||{}).textContent');
 
     return {
+      timeline: seen,
       said: said2,
       stillTicking: typeof said1 === 'string' && typeof said2 === 'string' && said1 !== said2,
       uploads: log.filter((l) => l.kind === 'upload'),
@@ -356,6 +388,26 @@ try {
     is('the clock is not still ticking', r.stillTicking === false, r.said);
     is('nothing 404ed', r.notFound.length === 0, r.notFound);
     is('no thrown exception', r.thrown.length === 0, r.thrown);
+
+  }
+
+  /* ---- THE SHAPE OF THE WAIT — a separate question from correctness -------------
+     The song post says "it's up. I'll see it." in place and holds it 700ms before it
+     hands over to the server. This path is being compared against that. Run against a
+     SLOW response, because over localhost the post finishes before there is any wait to
+     have a shape. */
+  console.log('\n  --- 3b. what she is told during a slow post (her phone, not this machine) ---');
+  {
+    const r = await trial('POST -> {ok:true} after 2.5s', 'slowPosted', '', { wait: 5200 });
+    if (r) {
+      console.log(`      timeline ${JSON.stringify(r.timeline)}`);
+      is('something was said during the wait', r.timeline.length > 0, r.timeline);
+      const last = r.timeline.length ? String(r.timeline[r.timeline.length - 1].text) : '';
+      is('SHE IS ACKNOWLEDGED before the page is taken away',
+        Boolean(last) && !/^(sending|shrinking)/.test(last), last);
+      is('and it still re-fetched', r.renders.length >= 1, r.renders);
+      is('with ?ok=posted', r.search === '?ok=posted', r.search);
+    }
   }
 
   console.log('\n  --- 4. success with a 2400px source, so shrink() really re-encodes ---');
