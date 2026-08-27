@@ -1245,20 +1245,51 @@ export default function HeroCanvas() {
 
        `HOLE_CUTS` are then the z thresholds that reproduce those classes, fitted
        by `tools/golf_calibrate.py` so this is re-runnable rather than frozen.
-       The cuts match the true MIX rather than maximising per-hole hits: 63.0%
-       exact agreement with 14 holes called harsh against 16 called soft, where
-       accuracy-maximising cuts score 70.4% but skew 16 harsh to 8 soft. An
+       The cuts match the true MIX rather than maximising per-hole hits: 60.5%
+       exact agreement with 15 holes called harsh against 17 called soft, where
+       accuracy-maximising cuts score 67.9% but skew 15 harsh to 11 soft. An
        unbiased rule that is wrong slightly more often beats a sharper one that
        leans hard, because leaning hard is the bug being fixed.
 
        Median sinking lines per band, monotonic as they must be:
-       2442 / 789 / 464 / 178.
+       2398 / 592 / 445 / 204.
+
+       REFITTED 2026-08-27 AT THE SHIPPED PHYSICS (capture 225 + lip-out + gate),
+       from a full 81-hole sweep at 0.5deg x 0.01 power. The previous values were
+       fitted at capture 175 with NO lip-out and were stale.
+
+       AND THE STALENESS RAN THE OPPOSITE WAY TO WHAT WAS WRITTEN DOWN. Both
+       handoffs said the stale cuts made the word OVERSTATE difficulty, reasoning
+       that capture 175 -> 225 widened the sinking window so the real classes must
+       have moved easier. Measured against the fresh truth, the old cuts were
+       SOFTER than the truth on 26 holes and harsher on only 13 (mean difficulty
+       index 1.72 against a true 1.93) — the word was UNDERSTATING. The reasoning
+       missed that the lip-out and the gate shipped in the SAME change and narrow
+       the window, and the "hits 157 -> 174" evidence behind it was capture-only,
+       on five rounds, with no lip-out. Two factors moved; only one was counted.
+
+       So this refit makes the card HARSHER, not gentler: Brutal goes 24 -> 32 of
+       81 holes. That is the absolute-band design working as specified — a harder
+       green is supposed to produce more Brutal holes with no re-fit — but it is a
+       visible change to what the hero says, so it is called out rather than buried.
 
        This does NOT flatten the difficulty skew — it reports it. The tee sampler
        deliberately draws 0.55-1.00 of the reach budget (mean 0.775, "lean
-       towards brutal usually"), and on 81 holes that yields 24 Brutal and 24
-       Tricky against 14 Gentle. The card now says so honestly instead of
+       towards brutal usually"), and on 81 holes that yields 32 Brutal and 24
+       Tricky against 13 Gentle. The card now says so honestly instead of
        manufacturing a flat quartile split or inflating it.
+
+       `uW` LIVES IN HOLE_CAL BUT IS FITTED, NOT GEOMETRIC — it moved 1.25 -> 2.05
+       in this refit while dMean/dSd/uMean/uSd came out byte-identical. Those four
+       really are pure distance/up-slope geometry and are unaffected by the cup
+       test; `uW` is a weight chosen against the truth classes and is as stale as
+       the cuts whenever the physics moves. Do not treat "HOLE_CAL is not stale"
+       as covering all five numbers.
+
+       WHICH SIGNAL DOMINATES ALSO FLIPPED. Distance was the strong term (-0.63 on
+       the old field, and the docs said so); on the corrected field it is only
+       -0.259 while mean up-slope is -0.676, which is why `uW` nearly doubled. The
+       composite is -0.772, down from -0.828.
 
        HONEST LIMIT — AND THE EXPLANATION HERE WAS WRONG ONCE, so read the numbers
        rather than the intuition. This comment used to say wide viewports skew
@@ -1292,8 +1323,8 @@ export default function HeroCanvas() {
        picture wins here. Nobody compares hole difficulty across monitors, and the
        scorecard's "best" is per-browser localStorage, so there is no scoreboard
        for the inconsistency to be unfair on. */
-    const HOLE_CAL = { dMean: 292.5, dSd: 43.6, uMean: 3.8, uSd: 89.8, uW: 1.25 };
-    const HOLE_CUTS = [-1.364, -0.203, 0.768];
+    const HOLE_CAL = { dMean: 292.5, dSd: 43.6, uMean: 3.8, uSd: 89.8, uW: 2.05 };
+    const HOLE_CUTS = [-2.049, -0.912, 0.857];
     const HOLE_BANDS = ['Gentle', 'Fair', 'Tricky', 'Brutal'];
 
     /** 0..3. Recomputed per hole and on resize, never per frame. */
