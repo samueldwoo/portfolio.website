@@ -250,6 +250,7 @@ proof.
 | `golf_relief.py` | how much of the height variation is undulation vs plane, per undulation setting |
 | `golf_calibrate.py` | fits `HOLE_CAL` / `HOLE_CUTS` for the hero's difficulty card from a sweep, and prints the two lines to paste. Bands are anchored to an absolute share of the aim/power space, not to quartiles |
 | `golf_par.py` | strokes per hole for a competent-but-imperfect putter — this is where `PAR_TABLE` comes from, and `--table` emits the 81-char string so the last mile is not hand-assembled. Par is the **median**, not the mean; see the median note below. `--max-strokes` sets the give-up cap and `--only` targets individual holes |
+| `golf_tune.py` | searches the player model's skill parameters for the ones that make par DISCRIMINATE — maximise spread across holes subject to the median still playing par 2. Reuses `golf_par`'s model by import, never a copy. Combos are independent, so `--slice i/n` shards across processes |
 | `golf_mash.py` | **the check no other invariant performs**: how many holes fall to aiming straight at the cup at full power. Run it after ANY change to the cup test. `--capture 520` is its positive control and must reproduce the pre-fix 68/81 |
 | `golf_frames.py` | passenger rAF loop that measures the REAL per-frame dt during a roll; `golf_probe.py` uses it for `dt_roll_ms` |
 | `golf_validate.py` | replays picked trials in a real browser and scores agreement (physics only — bypasses the pointer path) |
@@ -367,7 +368,7 @@ physics chain rather than the input suites, so it is documented below.
 Last known-good on the shipped build: `golf_keys` PASS · `golf_stuck` 0 · `golf_mouse` 0 ·
 `golf_touch` 0/7 · `hero_ink` PASS (0% × 12 widths).
 
-### The physics chain, and its measured baseline (2026-08-26, capture 225 + lip-out)
+### The physics chain, and its measured baseline (2026-08-27, capture 225 + lip-out)
 
     $PY tools/golf_probe.py http://localhost:8020 1440 900 80 > probe80.json
     $PY tools/golf_verify_port.py probe80.json 0.9          # base + safety are POSITIONAL
@@ -377,12 +378,26 @@ Last known-good on the shipped build: `golf_keys` PASS · `golf_stuck` 0 · `gol
     $PY tools/golf_validate.py trials.json
     $PY tools/golf_calibrate.py sweep80.json      # -> HOLE_CAL / HOLE_CUTS
     $PY tools/golf_par.py probe80.json --rounds 80 --trials 500 --max-strokes 32 --table
+    $PY tools/golf_mash.py probe80.json --aim-window 2 --dt-source fps   # run BOTH windows
 
 `golf_verify_port`: hash2 1504/1504 · heightAt Δ 2.220e-16 · **numpy heightAt Δ 2.220e-16** ·
 geometry 81/81 · `PORT VERIFIED`. `golf_sweep`: **SOLVABLE 81/81 = 100%**, selfcheck **0.000e+00**
 (~25 min at this grid). `golf_mash`: **16/81 = 19.8%** dead straight, **29/81 = 35.8%** at `--aim-window 2`. `golf_validate`: **24/24 = 100%**, resting
-error median 0.1px / max 0.5px. Browser harnesses: `golf_stuck` 0 · `golf_keys` PASS ·
+error median 0.2px / max 0.7px. Browser harnesses: `golf_stuck` 0 · `golf_keys` PASS ·
 `golf_mouse` 0 · `golf_touch` 0/7 · `hero_ink` PASS.
+
+**`golf_par`'s DEFAULT SKILL PARAMETERS CHANGED on 2026-08-27: 10 / 0.10 / 0.9, not 6 / 0.07 / 0.7.**
+They came from `golf_tune.py`, not from feel. The two-putt anchor turned out to constrain almost
+nothing — it pins the median ACROSS holes, and 34 of 36 grid combos held it — so the old values were
+the FLATTEST feasible point, giving 72 of 81 holes par 2. At 10 / 0.10 / 0.9 it is 37 of 81 off par 2
+with four holes at par 4 on ~0% stuck trials. Mean par rose 1.98 → 2.49, so par is deliberately a
+more generous target than "what a competent player scores". Re-run `golf_tune.py` rather than editing
+the defaults by hand.
+
+**FOUR ATTEMPTS TO MAKE THE PLAYER MODEL SMARTER ALL MEASURED WORSE** — a lay-up, two pace-learning
+variants and a roll-time correction. The long notes are in `golf_par.py` beside the code they would
+have touched. The cause is that these parameters were fitted jointly, so adding a term breaks the
+balance. Search the parameters; do not add to the model.
 
 **`golf_par`'s arguments changed and the old ones give a wrong answer.** Par is now the MEDIAN
 stroke count, not the mean, and `--max-strokes 32` matters as much as the trial count. On rounds 4, 7
