@@ -1,7 +1,16 @@
 """Expected strokes per hole, for a player of bounded skill — i.e. par.
 
-Usage: golf_par.py probe.json [--rounds 80] [--trials 240] [--aim-sd 6]
-                             [--power-sd 0.07] [--seed 7] [--json out.json]
+Usage: golf_par.py probe.json [--rounds 80] [--trials 500] [--max-strokes 32]
+                             [--aim-sd 10] [--power-sd 0.10] [--read 0.9]
+                             [--overshoot 1.15] [--only 4,7,78] [--table]
+                             [--seed 7] [--json out.json]
+
+    The documented invocation is
+        golf_par.py probe80.json --rounds 80 --trials 500 --max-strokes 32 --table
+    and `--max-strokes` matters as much as the trial count -- see the median note
+    below. This usage line advertised `--aim-sd 6 --power-sd 0.07` for a while
+    after the defaults became 10 / 0.10, which is the same stale-mirror bug this
+    file's own comments warn about, one screen above the code that disproves it.
 
 WHY THE SWEEP CANNOT ANSWER THIS
     golf_sweep.py proves a one-stroke line EXISTS on every hole -- 81/81. That
@@ -98,7 +107,19 @@ import numpy as np
 
 import golf_sim as S
 
-MAX_STROKES = 8   # a cap, not a rule: reported separately so it cannot hide
+# A CAP, NOT A RULE: reported separately so it cannot hide.
+#
+# 32, NOT 8, SINCE 2026-08-27. It was 8 while every documented invocation passed
+# `--max-strokes 32` and golf_tune.py -- which shares this model by import and
+# produced the shipped parameters -- already defaulted to 32. So a bare run of this
+# file was the only thing in the chain still measuring at a cap its own comments
+# call "the ceiling wearing a decimal point": at 8, rounds 7/78/4 capped
+# 1076/757/507 of 2000 trials. The median is what ships and is stable at 32.
+#
+# A default that disagrees with every documented invocation is a bug, not a thing
+# to document around -- the same reasoning CLAUDE.md applies to a non-zero
+# typecheck baseline.
+MAX_STROKES = 32
 
 
 def build_green(probe, rnd):
@@ -265,21 +286,41 @@ def hole_expectation(g, rng, aim_sd, power_sd, dt, dts, trials, overshoot,
     s = np.array([play_hole(g, rng, aim_sd, power_sd, dt, dts, overshoot, read,
                             max_strokes)
                   for _ in range(trials)], float)
-    # SD AND SE ARE REPORTED BECAUSE PAR IS A ROUNDING OF THIS MEAN, so the only
-    # thing that decides a displayed par is whether the mean sits clear of a .5
-    # boundary. Quoting the mean alone hid that: the shipped table tie-broke four
-    # holes to the harder par by hand, with nothing in the output saying which
-    # holes were close enough to need it.
+    # SD AND SE ARE KEPT AS DIAGNOSTICS, NOT AS WHAT DECIDES PAR. Par was a
+    # rounding of the MEAN when this comment was first written, so SE-vs-.5 was
+    # the settledness test; par is the MEDIAN now (see below), and the test that
+    # matters is median_settled(), which asks how far the CDF sits from 0.5 at the
+    # par boundary. SD/SE still print because a hole whose mean and median diverge
+    # wildly is one with a stuck tail, and that is worth seeing on the same line.
     sd = float(s.std(ddof=1)) if trials > 1 else 0.0
     # PAR IS THE MEDIAN, AND THE HISTOGRAM IS KEPT BECAUSE THE MEAN LIED.
     #
     # On rounds 4, 7 and 78 the player model has no lay-up: it always aims at the
     # cup, power is hard-clipped at 1.0, so a lie needing a deliberate sideways
     # putt to escape traps it forever. Those trials record `max_strokes`, which
-    # makes the mean a function of the CAP rather than of the golf -- round 78
-    # read 3.98 at cap 8, 17.07 at cap 48 and 77.75 at cap 200 while its MEDIAN
-    # stayed 2. The median is unaffected as long as fewer than half the trials are
-    # stuck, so it is what par is taken from now.
+    # makes the mean a function of the CAP rather than of the golf. Round 78, at
+    # the SHIPPED 10 / 0.10 / 0.9 (200 trials, fps dt), reads:
+    #
+    #     cap   mean    median   stuck
+    #      8    4.58      3        43%
+    #     32   15.81      4        46%
+    #     48   20.57      3        41%
+    #
+    # -- the mean climbs without bound as the cap rises while the median stays 3-4,
+    # which is the whole reason par is taken from the median. The stuck FRACTION
+    # barely moves with the cap (43/46/41%), which is what proves these trials are
+    # non-terminating rather than merely slow: a slow-but-finishing trial would
+    # drop out of "stuck" as the ceiling rose.
+    #
+    # These numbers were 3.98 / 17.07 / 77.75 with "median stayed 2" until
+    # 2026-08-27 -- that was the OLD 6 / 0.07 / 0.7 player, before golf_tune moved
+    # the defaults. The argument is unchanged; the figures were stale.
+    #
+    # CAVEAT MADE HONEST: round 78 sits at ~46% stuck, just under half, so its
+    # median is near the boundary where even the median stops being safe -- which
+    # is why it wobbles 3<->4 with the cap and seed, and why median_settled() flags
+    # it. The median is well-defined only while under half the trials are stuck;
+    # near 50% it is sensitive, and 78 is hand-set in PAR_TABLE for that reason.
     #
     # The histogram is returned so that claim is checkable rather than asserted:
     # it is what `emit_table` uses to ask whether the 50th percentile sits clear
@@ -334,7 +375,10 @@ def emit_table(rows, a):
     WHY THE MEDIAN AND NOT THE MEAN. See hole_expectation: on three holes the
     model has no recovery move and a third of its trials never hole out, so the
     mean is the stroke cap wearing a decimal point. The median ignores that tail
-    for as long as the tail is under half the sample, which it is at cap 48.
+    for as long as the tail is under half the sample, which it is at the cap of 32
+    this file now defaults to -- the worst hole (78) sits under 50% stuck. This
+    said "at cap 48", a cap nothing in the chain has used since the table was
+    emitted; the claim holds at 32, which is what the number needed to be.
 
     Nothing here is auto-resolved. An unsettled hole and a par too large for the
     component's one-character encoding are both REPORTED, never silently rounded
@@ -419,7 +463,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("probe")
     ap.add_argument("--rounds", type=int, default=80)
-    ap.add_argument("--trials", type=int, default=240)
+    # 500 MATCHES THE DOCUMENTED INVOCATION. A median is far more stable than a
+    # mean, so 500 settles the table where a mean wanted 2000; it was 240 while the
+    # usage line and README both said 500, which is a contradiction, not a choice.
+    ap.add_argument("--trials", type=int, default=500)
     # 10 / 0.10 / 0.9 REPLACED 6 / 0.07 / 0.7, chosen by tools/golf_tune.py rather
     # than by feel -- see the calibration note in the module docstring.
     ap.add_argument("--aim-sd", type=float, default=10.0, help="degrees")
@@ -430,9 +477,11 @@ def main():
                     help="how much of the observed break the player believes")
     ap.add_argument("--seed", type=int, default=7)
     # THE CAP IS A FLAG BECAUSE THREE HOLES' PAR WAS ONLY EVER A LOWER BOUND.
-    # At 8, rounds 7/78/4 capped 1076/757/507 of 2000 trials, so their means were
-    # really the ceiling. Editing the constant to re-measure left no record of
-    # which cap produced a table; a flag lands in the JSON's config block.
+    # At a cap of 8, rounds 7/78/4 capped 1076/757/507 of 2000 trials, so their
+    # means were really the ceiling. Editing the constant to re-measure left no
+    # record of which cap produced a table; a flag lands in the JSON's config
+    # block. The default is now 32 (see MAX_STROKES) so a bare run matches the
+    # documented one; pass more only to size a hole that still caps at 32.
     ap.add_argument("--max-strokes", type=int, default=MAX_STROKES)
     ap.add_argument("--only", default="",
                     help="comma-separated rounds to measure instead of 0..N, "

@@ -25,11 +25,18 @@ PY=~/personal/finance/finance/.venv/bin/python
 $PY -c "import selenium, PIL; print(selenium.__version__)"   # 4.46.0, PIL required
 
 # Playwright's WebKit, installed OUTSIDE the repo so a 70 MB browser download
-# never becomes a dependency of the site itself.
-mkdir -p /tmp/pw-webkit && cd /tmp/pw-webkit
-npm init -y && npm i playwright@1.56.0
-npx playwright install webkit
+# never becomes a dependency of the site itself. NOT in /tmp: it is mode 1777 and
+# world-readable, and CLAUDE.md puts every artefact under a 700 dir in $HOME.
+mkdir -p ~/.pf-verify/pw-webkit && chmod 700 ~/.pf-verify
+npm --prefix ~/.pf-verify/pw-webkit init -y
+npm --prefix ~/.pf-verify/pw-webkit i playwright@1.56.0
+(cd ~/.pf-verify/pw-webkit && npx playwright install webkit)
 ```
+
+The `--prefix` form and the subshell are deliberate: a bare `cd` here leaves the shell parked
+outside the repo, and this tool's working directory **persists between calls**, so every later
+`tools/…` path silently resolves under the directory you cd'd into. That cost three runs once,
+each of which looked like a missing file.
 
 Chrome and Firefox drivers are fetched automatically by Selenium Manager; nothing to
 install by hand.
@@ -40,8 +47,12 @@ Both harnesses test the **built output**, not the dev server:
 
 ```bash
 npm run build
-cd .vercel/output/static && python3 -m http.server 8020
+(cd .vercel/output/static && python3 -m http.server 8020)   # subshell: see below
 ```
+
+**Keep that `cd` in a subshell.** This tool's working directory persists between calls, so a bare
+`cd .vercel/output/static` to start the server leaves every later `tools/…` path resolving to
+`.vercel/output/static/tools/…`. Three runs failed that way once, each looking like a missing file.
 
 **The static build is in `.vercel/output/static`, NOT `dist/`.** `dist/` contains only a
 `client/` subdirectory, so serving `dist/` itself returns 404 for every path — which looks
@@ -372,7 +383,8 @@ Last known-good on the shipped build: `golf_keys` PASS · `golf_stuck` 0 · `gol
 
     $PY tools/golf_probe.py http://localhost:8020 1440 900 80 > probe80.json
     $PY tools/golf_verify_port.py probe80.json 0.9          # base + safety are POSITIONAL
-    $PY tools/golf_sweep.py probe80.json --rounds 80 --reach-safety 0.9 --astep 0.5 --pstep 0.01
+    $PY tools/golf_sweep.py probe80.json --rounds 80 --reach-safety 0.9 --astep 0.5 --pstep 0.01 \
+        --json sweep80.json                                 # --json IS REQUIRED, see below
     $PY tools/golf_mash.py probe80.json --dt-source fps     # the dominant-strategy check
     $PY tools/golf_pick.py probe80.json trials.json --rounds 6
     $PY tools/golf_validate.py trials.json
@@ -385,6 +397,33 @@ geometry 81/81 · `PORT VERIFIED`. `golf_sweep`: **SOLVABLE 81/81 = 100%**, self
 (~25 min at this grid). `golf_mash`: **16/81 = 19.8%** dead straight, **29/81 = 35.8%** at `--aim-window 2`. `golf_validate`: **24/24 = 100%**, resting
 error median 0.2px / max 0.7px. Browser harnesses: `golf_stuck` 0 · `golf_keys` PASS ·
 `golf_mouse` 0 · `golf_touch` 0/7 · `hero_ink` PASS.
+
+> **THE SWEEP WRITES NOTHING WITHOUT `--json`, AND THE NEXT LINE OF THE CHAIN READS THAT FILE.**
+> `golf_sweep.py`'s `--json` defaults to `None`, so the chain as printed here until 2026-08-27 spent
+> ~25 minutes, printed its verdict, and left `golf_calibrate.py sweep80.json` with nothing to open.
+> The failure lands at the *end* of the expensive step, which is the worst place for it. A documented
+> pipeline has to name the artefact each stage hands the next one.
+
+> **SWEEP RE-RUN AT SHIPPED PHYSICS 2026-08-27** (capture 225 + lip-out + gate, full 81 holes,
+> 0.5° × 0.01): **SOLVABLE 81/81**, selfcheck **0.000e+00** on every shard, min `hits` **71**,
+> aim tolerance **min 3.0° / median 10.0° / max 252.5°** — the tolerance figures are byte-identical to
+> the capture-175 sweep, independently confirming that the cup test moves the PACE window and not the
+> aim window. `HOLE_CUTS` was refitted from it; see the next note.
+>
+> **Sharding:** 6 × `--only <13–14 rounds>` ran in **~13 min** against ~25 single-process. Each shard
+> runs its own selfcheck (keep it). Merge by concatenating `rows` and taking any shard's `config` —
+> `golf_calibrate` derives its grid from `astep`/`pmin`/`pstep`, which are shard-invariant — but
+> **assert the physics fields match across shards and that rounds 0..80 appear exactly once**, or a
+> silent concat fits the bands to two different greens. Note there is **no `sunk` field** in a row:
+> solvability is `hits > 0`, and guessing `r["sunk"]` reports a confident `0/81`.
+>
+> **And the refit went the OPPOSITE way to the prediction.** Both handoffs said the stale cuts made
+> the word *overstate* difficulty. Measured, the old cuts were **softer** than truth on 26 of 81 holes
+> and harsher on 13, so the word **understated** — the refit made the card harsher (Brutal 24 → 32).
+> The premise counted capture 175 → 225 widening the window and missed that the lip-out and gate ship
+> in the same change and narrow it. `HOLE_CAL`'s four statistics were genuinely unchanged; its fifth
+> field `uW` is a **fitted** weight and moved 1.25 → 2.05, because distance stopped being the dominant
+> signal (ρ −0.63 → **−0.259**) and mean up-slope took over (**−0.676**).
 
 **`golf_par`'s DEFAULT SKILL PARAMETERS CHANGED on 2026-08-27: 10 / 0.10 / 0.9, not 6 / 0.07 / 0.7.**
 They came from `golf_tune.py`, not from feel. The two-putt anchor turned out to constrain almost
@@ -413,8 +452,16 @@ topped up with `--only` instead of paying 4× on all 81. `--table` refuses to em
 and refuses to clamp a par above 9 to fit the one-character encoding.
 
 Sweep a shipped build **without** `--recompute` — it tests the simulator's own tee picker and has
-reported a false unsolvable round. `--reach-safety 0.9` is a different flag and is REQUIRED: it is
-the shipped tee rule, and dropping it takes geometry to 38/42 with a 61.7px worst ball error.
+reported a false unsolvable round. `--reach-safety 0.9` is REQUIRED: it is the shipped tee rule, and
+dropping it takes geometry to 38/42 with a 61.7px worst ball error.
+
+> **THE TWO FLAGS ARE NOT MECHANICALLY DIFFERENT, THOUGH THIS SAID THEY WERE.** `golf_sweep.py:397`
+> is `if rnd in measured and not a.recompute and a.reach_safety is None:` — so `--reach-safety`
+> *also* discards the probe's measured tee/cup for computed ones, and its own `--help` says it
+> "forces `--recompute`". The reason 0.9 is trustworthy is that `golf_verify_port.py probe.json 0.9`
+> proves the computed tee matches the browser's to **3.4e-13 px across 81/81 rounds**; the bare
+> recompute path (safety `None`) uses a *different* rule and drifts to 38/42 / 61.7px. Pass 0.9 —
+> just don't believe the claim that it leaves the measured geometry alone. Verified 2026-08-27.
 
 **`--selfcheck` runs by default and is the guard on the THIRD MIRROR.** Every physics rule lives in
 `HeroCanvas.tsx`, `golf_sim.py` and `golf_sweep.py`'s numpy path, and the vectorised one has been
@@ -438,7 +485,13 @@ strategy makes MORE pairs sink. Measured on the shipped build:
 |---|---|
 | `--capture 520` (pre-fix, the positive control) | **68/81 = 84.0%** |
 | shipped, dead straight at full power | **16/81 = 19.8%** |
-| shipped, `--aim-window 2` (a sloppy aim) | 21/81 = 25.9% |
+| shipped, `--aim-window 2` (a sloppy aim) | **29/81 = 35.8%** |
+
+> That last row read **21/81 = 25.9%** until 2026-08-27, which is the **capture 175** figure, not
+> the shipped one. It contradicted this file's own baseline 60 lines up and `golf_mash.py`'s table.
+> Of every number in this directory it is the worst one to get wrong: the ±2° window is the whole
+> reason capture 225 was known to cost 8 holes, and a stale copy reading 21/81 says it cost nothing.
+> When a measurement exists in two places, the flattering copy is the one that gets quoted.
 
 `--capture` exists so the check can be SEEN to fail. A tool that has only ever printed 16/81 has not
 been shown to measure exploitability, and this directory has shipped a test that could not fail
