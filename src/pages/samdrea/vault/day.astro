@@ -384,9 +384,32 @@ const whoWord = (w: Who): string => (w === viewer ? 'you' : w === 'her' ? (her |
                                     arrives and the page does not jump. `loading`
                                     is eager for today: this is the content, not
                                     something below the fold. */}
+                                {/* WIDTH AND HEIGHT, WHICH ARE THE WHOLE POINT OF
+                                    STORING THEM. With these the browser knows the
+                                    aspect ratio before a single byte of the image
+                                    arrives, reserves exactly the right box, and nothing
+                                    below the frame moves when it loads. Without them
+                                    `height: auto` cannot resolve until the bytes are
+                                    decoded, so the frame is zero-height and then
+                                    suddenly is not — which is what made this page feel
+                                    jerky where the song page, whose embed has a fixed
+                                    height, never did.
+
+                                    `undefined` rather than 0 when unknown, because
+                                    Astro omits an undefined attribute entirely while
+                                    width="0" is a real instruction to reserve nothing.
+                                    Both or neither: one alone gives no ratio, and
+                                    frames.ts already guarantees they arrive as a pair.
+
+                                    The CSS still sizes it — width:100% and height:auto
+                                    override these for LAYOUT. The attributes survive
+                                    only as the intrinsic ratio, which is exactly the
+                                    division of labour wanted here. */}
                                 <img
                                     class="fr-img"
                                     src={f.url}
+                                    width={f.w || undefined}
+                                    height={f.h || undefined}
                                     alt={f.note
                                         ? `${whoWord(w)}: ${f.note}`
                                         : `a photograph ${w === viewer ? 'you' : whoWord(w)} put up${
@@ -638,7 +661,11 @@ const whoWord = (w: Who): string => (w === viewer ? 'you' : w === 'her' ? (her |
                 /* Already small enough AND already an accepted type: send it
                    untouched rather than re-encoding, which would only lose
                    quality for nothing. */
-                if (scale === 1 && f.size < maxBytes * 0.5) return resolve(f);
+                /* THE DIMENSIONS COME BACK TOO, from both exits. Without them the page
+                   cannot reserve the image's box on the next render, and everything
+                   below the frame jumps down when the bytes land — see frames.ts. This
+                   exit resolves the ORIGINAL, so its own pixel size is what to report. */
+                if (scale === 1 && f.size < maxBytes * 0.5) return resolve({ file: f, w: w, h: h });
 
                 var cw = Math.max(1, Math.round(w * scale));
                 var ch = Math.max(1, Math.round(h * scale));
@@ -654,7 +681,9 @@ const whoWord = (w: Who): string => (w === viewer ? 'you' : w === 'her' ? (her |
                        cosmetic — but a canvas re-encode of a photograph is smaller
                        as JPEG than as PNG by a wide margin, and PNG is what
                        toBlob defaults to. */
-                    resolve(new File([blob], 'frame.jpg', { type: 'image/jpeg' }));
+                    /* cw/ch, not w/h: this exit re-encoded to the canvas, so the
+                       canvas size is the stored image's size. */
+                    resolve({ file: new File([blob], 'frame.jpg', { type: 'image/jpeg' }), w: cw, h: ch });
                 }, 'image/jpeg', QUALITY);
             };
             img.onerror = function () {
@@ -747,9 +776,20 @@ const whoWord = (w: Who): string => (w === viewer ? 'you' : w === 'her' ? (her |
             }),
         ]);
 
-        raced.then(function (small) {
+        raced.then(function (shrunk) {
+            /* shrink() resolves { file, w, h } now rather than a bare File. `small` is
+               kept as the name for the FILE so every line below reads as it did. */
+            var small = shrunk.file;
             var body = new FormData();
             body.append('photo', small, 'frame.jpg');
+            /* Two integers, so the next render can reserve the box. The endpoint refuses
+               anything that is not a sane positive integer and treats absence as normal,
+               so a browser that somehow reported nothing degrades to the old behaviour
+               rather than failing the upload. */
+            if (shrunk.w > 0 && shrunk.h > 0) {
+                body.append('w', String(shrunk.w));
+                body.append('h', String(shrunk.h));
+            }
             var note = form.querySelector('input[name=note]');
             if (note) body.append('note', note.value);
 

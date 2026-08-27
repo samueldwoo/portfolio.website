@@ -132,10 +132,24 @@ const server = createServer(async (req, res) => {
   const url = new URL(req.url, `http://127.0.0.1:${PORT}`);
 
   if (url.pathname === '/api/us/frame' && req.method === 'POST') {
-    for await (const _ of req) { /* drain, so the upload genuinely completes */ }
+    /* The body is COLLECTED, not just drained, so the multipart fields can be checked.
+       Bounded, because an unbounded accumulate in a test server is its own bug. */
+    const chunks = [];
+    let size = 0;
+    for await (const c of req) {
+      size += c.length;
+      if (size <= 2 * 1024 * 1024) chunks.push(c);
+    }
+    const raw = Buffer.concat(chunks).toString('latin1');
+    /* `w` and `h` exist so the next render can reserve the image's box. A missing pair
+       is the old jerky behaviour, and it would be invisible from the outside. */
+    const field = (name) => {
+      const m = new RegExp(`name="${name}"\\r\\n\\r\\n([^\\r]*)\\r\\n`).exec(raw);
+      return m ? m[1] : null;
+    };
     const accept = req.headers.accept ?? '';
     const wantsJson = accept.includes('application/json');
-    log.push({ kind: 'upload', wantsJson });
+    log.push({ kind: 'upload', wantsJson, w: field('w'), h: field('h'), bytes: size });
 
     const r = RESPONSES[mode];
     if (r.hang) return;                       // never answer: exercises the 45s deadline
@@ -385,6 +399,10 @@ try {
     is('with ?ok=posted', r.search === '?ok=posted', r.search);
     is(`on ${FRAGMENT}`, r.hash === FRAGMENT, r.hash);
     is('the server was asked for ?ok=posted', r.renders.some((x) => x.search === '?ok=posted'), r.renders);
+    /* The 40x40 source is under the resizer's early-return threshold, so shrink()
+       resolves the ORIGINAL and must still report its own pixel size. */
+    is('it sent the image dimensions (40x40, the untouched path)',
+      r.uploads[0]?.w === '40' && r.uploads[0]?.h === '40', [r.uploads[0]?.w, r.uploads[0]?.h]);
     is('the clock is not still ticking', r.stillTicking === false, r.said);
     is('nothing 404ed', r.notFound.length === 0, r.notFound);
     is('no thrown exception', r.thrown.length === 0, r.thrown);
@@ -418,6 +436,11 @@ try {
       is('re-fetched', r.renders.length >= 1, r.renders);
       is('with ?ok=posted', r.search === '?ok=posted', r.search);
       is('no thrown exception from the resize path', r.thrown.length === 0, r.thrown);
+      /* 2400x1200 against LONG_EDGE 1600 scales by 2/3, so the CANVAS size is what must
+         be reported — not the original's. Getting this backwards would reserve a box
+         twice the right size, which is a worse shift than reserving none. */
+      is('it sent the RESIZED dimensions (1600x800, not 2400x1200)',
+        r.uploads[0]?.w === '1600' && r.uploads[0]?.h === '800', [r.uploads[0]?.w, r.uploads[0]?.h]);
     }
   }
 

@@ -203,6 +203,26 @@ export interface Frame {
    * uploaded in August still resolves to the object it has always been at.
    */
   key: string;
+  /**
+   * PIXEL DIMENSIONS OF THE STORED IMAGE, or 0 0 when they were never recorded.
+   *
+   * These exist for ONE reason and it is not metadata: without them the page cannot
+   * reserve space for the photograph, so `<img>` renders at zero height, the bytes
+   * arrive from R2, the intrinsic size becomes known, and everything below jumps down
+   * the page. That shift is what "the picture upload was jerky" turned out to be — the
+   * song page never did it because a Spotify embed has a fixed height.
+   *
+   * The client resizer already knows them: it computed the canvas size, or it resolved
+   * the original untouched and read naturalWidth/naturalHeight. They cost two integers
+   * on a write that was happening anyway.
+   *
+   * ZERO IS A REAL AND PERMANENT STATE. Every photograph posted before this field
+   * existed has none, and the no-JavaScript path has no way to measure an image before
+   * sending it, so the page must render correctly without them rather than treating
+   * them as guaranteed.
+   */
+  w: number;
+  h: number;
   /** Epoch ms it was posted. Also the discriminator in the key. */
   atMs: number;
   /** Her or his words under it. '' when there are none, which is common. */
@@ -365,6 +385,22 @@ function foldHash(raw: unknown): Record<string, string> {
    security-relevant half of keyFromHash(): the caller already knows which day it
    asked the store for, so a stored key is checked against that instead of against
    anything the hash claims about itself. */
+/**
+ * A stored dimension, or 0.
+ *
+ * Re-validated on the way OUT for the same reason coordinates are: the store is not a
+ * validation boundary. These land in `width`/`height` attributes, so a NaN or a negative
+ * would produce markup the browser silently ignores — which is the old behaviour wearing
+ * a disguise, and much harder to notice than an obviously missing attribute.
+ *
+ * 20000 is a ceiling no phone camera approaches and no resized upload can reach; it is
+ * here so a corrupted value cannot ask a browser to reserve a screen-height of blank.
+ */
+export function frameDim(raw: unknown): number {
+  const n = Number(raw ?? 0);
+  return Number.isInteger(n) && n > 0 && n <= 20000 ? n : 0;
+}
+
 function frameFrom(h: Record<string, string>, who: Who, date: string): Frame | null {
   const ext = h[`${who}Ext`] ?? '';
   if (!/^(jpg|png|webp)$/.test(ext)) return null;
@@ -377,6 +413,10 @@ function frameFrom(h: Record<string, string>, who: Who, date: string): Frame | n
   return {
     ext,
     key: keyFromHash(h, who, date, ext),
+    /* BOTH OR NEITHER. A width without a height reserves nothing and would make the
+       page emit one attribute, which browsers treat as no intrinsic ratio at all. */
+    w: frameDim(h[`${who}W`]) && frameDim(h[`${who}H`]) ? frameDim(h[`${who}W`]) : 0,
+    h: frameDim(h[`${who}W`]) && frameDim(h[`${who}H`]) ? frameDim(h[`${who}H`]) : 0,
     atMs: Number.isFinite(atMs) && atMs > 0 ? atMs : 0,
     note: h[`${who}Note`] ?? '',
     lat: at ? at.lat : null,
@@ -425,8 +465,10 @@ export async function putFrame(input: {
   atMs: number;
   /** Where it was taken, if the page or the server could work it out. */
   coords?: { lat: number; lon: number } | null;
+  /** Pixel size, when the client could measure it. 0 means "not recorded". */
+  dims?: { w: number; h: number } | null;
 }): Promise<Frame> {
-  const { date, who, bytes, sniffed, note, atMs, coords = null } = input;
+  const { date, who, bytes, sniffed, note, atMs, coords = null, dims = null } = input;
 
   /* THE TWO WRITES ARE TIMED SEPARATELY, because one number for both cannot be acted
      on. The endpoint reports a single `storeMs` and it covers an R2 PUT of up to four
@@ -481,6 +523,10 @@ export async function putFrame(input: {
     key,
     atMs,
     note,
+    /* Validated here as well as on the way out, so a bad value never reaches the store
+       in the first place — the read-side check is the backstop, not the only guard. */
+    w: dims ? frameDim(dims.w) : 0,
+    h: dims ? frameDim(dims.h) : 0,
     lat: coords ? coords.lat : null,
     lon: coords ? coords.lon : null,
     /* Resolved AFTER the bytes are safe, by the caller, and written separately —

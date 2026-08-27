@@ -48,6 +48,7 @@ import { crossSite, identify } from '../../../lib/us/together';
 import {
   FramesError,
   MAX_BYTES,
+  frameDim,
   framesAvailable,
   putFrame,
   sniff,
@@ -297,6 +298,29 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
     }
   }
 
+  /* ---- HOW BIG THE PICTURE IS, SO THE PAGE CAN RESERVE ITS BOX ----------------
+
+     Sent by the resizer, which already knew: it either scaled to a canvas of a size it
+     chose, or resolved the original untouched having read naturalWidth/naturalHeight.
+
+     THIS IS A LAYOUT FIX, NOT METADATA. Without it `<img>` has no intrinsic size, so
+     the frame renders at zero height, the bytes arrive from R2, and everything below
+     jumps down the page. That shift is what made the upload feel jerky where the song
+     never did — a Spotify embed has a fixed height and cannot move.
+
+     NEVER TRUSTED AND NEVER REQUIRED. frameDim() takes only a positive integer inside a
+     sane ceiling; anything else becomes 0, and 0 is a state the page already renders
+     because every photograph posted before today has it and the no-JavaScript path
+     cannot measure an image before sending it. A wrong value here would reserve a box
+     of the wrong shape, which is worse than reserving none, so it is checked on the way
+     in as well as on the way out. */
+  const dims = (() => {
+    const w = frameDim(form.get('w'));
+    const h = frameDim(form.get('h'));
+    // Both or neither: one dimension reserves nothing and produces half an aspect ratio.
+    return w && h ? { w, h } : null;
+  })();
+
   /* ONE clock reading, taken here and passed down, so the day it files under and
      the timestamp it records cannot straddle midnight and disagree. */
   const nowMs = Date.now();
@@ -316,7 +340,7 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
   let frame;
   let storeMs = 0;
   try {
-    frame = await putFrame({ date: today, who, bytes, sniffed, note, atMs: nowMs, coords });
+    frame = await putFrame({ date: today, who, bytes, sniffed, note, atMs: nowMs, coords, dims });
     storeMs = t.lap();
   } catch (err) {
     /* The bytes-first order in putFrame() means the worst case here is an
