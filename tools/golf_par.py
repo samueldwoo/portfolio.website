@@ -51,11 +51,44 @@ THE PLAYER MODEL: reads the green competently, then misses by a skill error
     rather than risk running past; this one always tries to hole out.
 
 CALIBRATING THE SKILL, RATHER THAN GUESSING IT
-    aim-sd and power-sd are free parameters and picking them by feel would make
-    par arbitrary. Anchor instead on the convention every golfer already knows: a
-    green is a TWO-PUTT. At the defaults the median hole plays to 2.02 expected
-    strokes with a 0.31% cap rate, which is that convention reproduced rather than
-    imposed. Use --curve to re-audit the anchor if the field ever changes.
+    aim-sd, power-sd and read are free parameters and picking them by feel would
+    make par arbitrary. Anchor on the convention every golfer knows: a green is a
+    TWO-PUTT. The defaults hold it -- the MEDIAN hole plays to par 2.
+
+    BUT THE ANCHOR BARELY CONSTRAINS ANYTHING, which was the useful discovery.
+    tools/golf_tune.py searched a 36-combo grid and 34 of them held median par 2,
+    because the anchor pins the median ACROSS holes rather than each hole. So the
+    old 6 / 0.07 / 0.7 was not the only value satisfying it; it happened to be the
+    FLATTEST one. Par came out 72 of 81 holes at 2, i.e. barely distinguishable
+    from printing "2" everywhere.
+
+    Re-posed as an optimisation -- maximise spread across holes SUBJECT TO the
+    median staying at 2 -- the answer is 10 / 0.10 / 0.9, now the defaults:
+
+        parameters        off par 2   distribution
+        6 / 0.07 / 0.7      10/81     par1x6  par2x71 par3x4
+        8 / 0.10 / 0.4      29/81     par1x2  par2x52 par3x25 par4x1 par7x1
+        10 / 0.10 / 0.9     37/81     par1x1  par2x44 par3x31 par4x5
+
+    aim-sd dominates and 6 was its flattest point -- spread rises in BOTH
+    directions from it. A better player (4deg) spreads into par 1s, a worse one
+    into par 3s; the worse direction was chosen because a human two-putting a par 3
+    earns a birdie, whereas two-putting a par 1 is a bogey on nine holes. `read`
+    was expected to matter most and does not, though it is not inert: pairing
+    aim-sd 8 with read 0.4 drove round 78's median to the stroke cap outright.
+
+    WHAT THIS COSTS, PLAINLY: mean par is 2.49 rather than 1.98, so par is no
+    longer "what a competent player scores" -- 10deg of aim error is a worse player
+    than the 6deg that was originally calibrated. It is a target chosen to make the
+    green's own differences visible, and it errs generous. Four holes (1, 10, 30,
+    77) are par 4 on clean measurements with ~0% stuck trials, which is the evidence
+    the spread is real rather than noise.
+
+    FOUR SINGLE-FACTOR MODEL CHANGES WERE TRIED FIRST AND ALL FOUR LOST -- a lay-up,
+    two pace-learning variants and a roll-time correction. See the lay-up note
+    below. They failed for one reason: these parameters were fitted jointly, so
+    adding a term breaks the balance instead of improving it. Searching the
+    parameters worked where changing the model did not.
 """
 import argparse
 import json
@@ -387,11 +420,13 @@ def main():
     ap.add_argument("probe")
     ap.add_argument("--rounds", type=int, default=80)
     ap.add_argument("--trials", type=int, default=240)
-    ap.add_argument("--aim-sd", type=float, default=6.0, help="degrees")
-    ap.add_argument("--power-sd", type=float, default=0.07, help="fraction")
+    # 10 / 0.10 / 0.9 REPLACED 6 / 0.07 / 0.7, chosen by tools/golf_tune.py rather
+    # than by feel -- see the calibration note in the module docstring.
+    ap.add_argument("--aim-sd", type=float, default=10.0, help="degrees")
+    ap.add_argument("--power-sd", type=float, default=0.10, help="fraction")
     ap.add_argument("--overshoot", type=float, default=1.15,
                     help="target roll as a multiple of the remaining distance")
-    ap.add_argument("--read", type=float, default=0.7,
+    ap.add_argument("--read", type=float, default=0.9,
                     help="how much of the observed break the player believes")
     ap.add_argument("--seed", type=int, default=7)
     # THE CAP IS A FLAG BECAUSE THREE HOLES' PAR WAS ONLY EVER A LOWER BOUND.

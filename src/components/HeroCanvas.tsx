@@ -449,12 +449,17 @@ function slopeAt(
  * sits within 2 SE of 50%, i.e. a different seed could move the par by one; the
  * tool reports them rather than letting the arithmetic decide silently.
  *
- * ROUNDS 7 AND 78 ARE SET BY HAND: par 3 and par 2. The simulator says 9 and 3,
- * and those are its own deadlock speaking. A person plays a 286px uphill putt in
- * about three and a 221px one in about two, and par exists to tell a person what
- * a good score is. The alternatives were rejected on purpose: shipping 9 reads as
- * broken on a green this size, and marking them unscored hides a hole from the
- * scorecard to flatter a model nobody plays against.
+ * ROUNDS 4, 7 AND 78 ARE SET BY HAND: par 3, 4 and 3. The simulator says 10, 15
+ * and 4, and those are its own deadlock speaking — all three sit above 23% stuck
+ * trials. A person does not wander; par exists to tell a person what a good score
+ * is. The alternatives were rejected on purpose: shipping 10 reads as broken on a
+ * green this size, and marking them unscored hides holes from the scorecard to
+ * flatter a model nobody plays against.
+ *
+ * These three are scaled to THIS table, not to a human in the abstract. An earlier
+ * pass set rounds 7 and 78 to 3 and 2, which was right when mean par was 2.09; on a
+ * table averaging 2.49 with 31 holes at par 3, those same values would have marked
+ * the two trap holes as the EASY ones, inverting what they are.
  *
  * RE-MEASURE IF THE PHYSICS MOVES. Every number is conditional on CAPTURE_SPEED,
  * MAX_SPEED and FRICTION, and it is also conditional on CANVAS SIZE — the cup and
@@ -462,15 +467,29 @@ function slopeAt(
  * was measured at 1440x900 and is approximate everywhere else. See §5g: the
  * picture wins over difficulty consistency, deliberately.
  *
- * WHAT IT COSTS, STATED: 72 of 81 holes are par 2, so a flat par-2 table would now
- * be right on 72 and this one on 81. Par discriminates on 9 holes, down from 14
- * under the mean. That is the honest trade — the old spread came from means
- * inflated by stuck trials, so it was discriminating on an artefact — but par is
- * closer to decoration than it was. The lever for more spread is the difficulty
- * word, which is an absolute measure and still spreads over four bands.
+ * THE SKILL LEVEL WAS SEARCHED, NOT CHOSEN. aim-sd 10 / power-sd 0.10 / read 0.9
+ * comes from tools/golf_tune.py maximising spread across holes subject to the median
+ * hole still playing to par 2. The previous 6 / 0.07 / 0.7 also held that anchor —
+ * 34 of 36 grid combos do, because it pins the median across holes rather than each
+ * hole — but it was the FLATTEST point, giving 72 of 81 holes par 2. Par was barely
+ * distinguishable from printing "2" everywhere.
+ *
+ *     parameters        off par 2   distribution
+ *     6 / 0.07 / 0.7      10/81     par1x6  par2x71 par3x4
+ *     10 / 0.10 / 0.9     37/81     par1x1  par2x44 par3x31 par4x5
+ *
+ * WHAT IT COSTS, STATED: mean par is 2.49 rather than 1.98, so par is no longer
+ * "what a competent player scores" — 10deg of aim error is a worse player than the
+ * 6deg originally calibrated. It is a target chosen to make the green's differences
+ * visible, and it errs GENEROUS on purpose: a human two-putting a par 3 earns a
+ * birdie, where the better-player direction (aim-sd 4, which spreads into par 1s)
+ * would have made an ordinary two-putt a bogey on nine holes.
+ *
+ * The spread is real rather than noise: rounds 1, 10, 30 and 77 are par 4 on clean
+ * measurements with ~0% stuck trials.
  */
 const PAR_TABLE =
-  '222222232222222221212221222222221222222222222222222222222222222232122212222223222';
+  '242333243243232232322222232323422222322322323222323333232332222232232312223334323';
 const PAR_DEFAULT = 2;
 /** Par of a hole played before par existed. Counts as played, not as scored. */
 const PAR_UNKNOWN = 0;
