@@ -776,6 +776,7 @@ function replyParagraphs(text: string): string[] {
     )}
 </main>
 
+<script is:inline src="/us-land.js"></script>
 <script is:inline define:vars={{ replyMax: REPLY_MAX }}>
 /* --------------------------------------------------------------------------
    TWO JOBS, AND DELIBERATELY NO MORE.
@@ -898,10 +899,14 @@ function replyParagraphs(text: string): string[] {
            <details> — that can disagree with the Astro one, and a card that
            disagrees with the store is worse than a reload. The short pause is so
            the line above is readable first. */
+        /* usLand rather than assign: `?read=<id>&sent=1` repeats when she answers the
+           same letter twice, and an assign() to the URL she is already on re-fetches
+           nothing. See public/us-land.js. */
         setTimeout(function () {
-            window.location.assign(
-                '/samdrea/vault/letters?read=' + encodeURIComponent(data.id) + '&sent=1'
-            );
+            var path = '/samdrea/vault/letters';
+            var search = '?read=' + encodeURIComponent(data.id) + '&sent=1';
+            if (window.usLand) window.usLand(path, search, '');
+            else location.assign(path + search);
         }, 700);
     });
 })();

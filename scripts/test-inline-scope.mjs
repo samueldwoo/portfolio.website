@@ -102,7 +102,10 @@ function pages(dir) {
  */
 function inlineBlocks(src) {
   const out = [];
-  const re = /<script\s+is:inline([^>]*)>([\s\S]*?)<\/script>/g;
+  /* EXTERNAL references are skipped. `<script is:inline src="/us-land.js">` carries the
+     directive too, and its body is empty — counting those inflated the block count and
+     diluted the check with blocks that trivially pass. */
+  const re = /<script\s+is:inline(?![^>]*\bsrc=)([^>]*)>([\s\S]*?)<\/script>/g;
   let m;
   while ((m = re.exec(src))) {
     const injected = [];

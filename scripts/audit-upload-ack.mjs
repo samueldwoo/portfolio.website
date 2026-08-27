@@ -59,9 +59,23 @@ const fatal = (msg) => { console.error(`  FATAL: ${msg}`); process.exit(2); };
    --------------------------------------------------------------------------- */
 
 const pageSrc = readFileSync(join(ROOT, 'src/pages/samdrea/vault/day.astro'), 'utf8');
-const scriptMatch = /<script\s+is:inline[^>]*>([\s\S]*?)<\/script>/.exec(pageSrc);
+/* NOT just `is:inline`: `<script is:inline src="/us-land.js">` also carries that
+   directive and has an EMPTY body, so the old pattern matched it first and this
+   harness silently tested an empty string. It failed loudly, which is the only reason
+   it was caught — see the sanity check below, which is what makes that guaranteed. */
+const scriptMatch = /<script\s+is:inline(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/.exec(pageSrc);
 if (!scriptMatch) fatal('no inline script found in day.astro — refusing to test nothing.');
 const CLIENT = scriptMatch[1];
+/* THE EXTRACTION MUST HAVE GRABBED THE RIGHT BLOCK. A harness that quietly tests an
+   empty string reports success about nothing, which is worse than no harness. */
+if (!CLIENT.includes('data-fr-form') || CLIENT.length < 2000) {
+  fatal(`extracted ${CLIENT.length} chars from day.astro and it is not the upload script.`);
+}
+
+/* The shared navigation helper, verbatim. If it ever stops defining window.usLand the
+   audit fails loudly here rather than testing the fallback path by accident. */
+const US_LAND = readFileSync(join(ROOT, 'public/us-land.js'), 'utf8');
+if (!US_LAND.includes('window.usLand')) fatal('public/us-land.js no longer defines window.usLand');
 
 const framesSrc = readFileSync(join(ROOT, 'src/lib/us/frames.ts'), 'utf8');
 const mb = /export const MAX_BYTES = (\d+) \* 1024 \* 1024;/.exec(framesSrc);
@@ -138,8 +152,13 @@ const server = createServer(async (req, res) => {
   if (url.pathname === PAGE) {
     log.push({ kind: 'render', search: url.search });
     res.writeHead(200, { 'Content-Type': 'text/html', 'Cache-Control': 'no-store' });
+    /* us-land.js is served from the real file, not stubbed. day.astro's land() now
+       delegates to window.usLand, so a harness that omitted it would exercise the
+       console.error fallback and quietly pass on the OLD assign() behaviour — the very
+       bug case 2 exists to catch. Read from disk so it cannot drift from what ships. */
     return res.end(`<!doctype html><meta charset=utf-8><title>day</title>
 <body>${FORM}<div id="post" style="margin-top:1500px">anchor</div>
+<script>${US_LAND}</script>
 <script>var maxBytes=${MAX_BYTES};</script>
 <script>${CLIENT}</script>
 </body>`);

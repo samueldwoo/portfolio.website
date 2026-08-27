@@ -293,6 +293,8 @@ const whoWord = (w: Who): string => (w === viewer ? 'you' : w === 'her' ? (her |
     <link rel="stylesheet" href="/css/us.css">
     <link rel="stylesheet" href="/css/us-song.css">
     <link rel="stylesheet" href="/css/us-frames.css">
+    <script is:inline src="/us-land.js"></script>
+
     <script src="/us-pull.js" defer></script>
     <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2032%2032%27%3E%3Crect%20width%3D%2732%27%20height%3D%2732%27%20fill%3D%27%23000%27%2F%3E%3Ctext%20x%3D%2716%27%20y%3D%2722.5%27%20font-family%3D%27Helvetica%2CArial%2Csans-serif%27%20font-size%3D%2716%27%20font-weight%3D%27700%27%20text-anchor%3D%27middle%27%3E%3Ctspan%20fill%3D%27%233e7bff%27%3E%5B%3C%2Ftspan%3E%3Ctspan%20fill%3D%27%23fff%27%3Eus%3C%2Ftspan%3E%3Ctspan%20fill%3D%27%233e7bff%27%3E%5D%3C%2Ftspan%3E%3C%2Ftext%3E%3C%2Fsvg%3E">
 </head>
@@ -706,30 +708,24 @@ const whoWord = (w: Who): string => (w === viewer ? 'you' : w === 'her' ? (her |
 
         /* ---- GO SOMEWHERE AND ACTUALLY GET A SERVER RENDER --------------------
 
-           `location.assign()` DOES NOT RELOAD IF THE TARGET DIFFERS ONLY IN THE
-           FRAGMENT, or not at all. It is a same-document navigation: the browser
-           scrolls to the anchor and nothing is re-fetched. Verified in Chrome — a
-           marker set on `window` survived the call and the server never saw a second
-           request, while `location.reload()` cleared it.
+           The whole argument now lives in public/us-land.js, because three other pages
+           had the identical bug — the song, a letter and the daily question all hand
+           control back to the server through a URL that repeats when you do the thing
+           twice. Four copies of this would have meant fixing it four times and
+           discovering the missed one the next time somebody re-posted.
 
-           Which makes it the wrong primitive here, because the second upload of a day
-           is a real and now-encouraged thing to do. Unique R2 keys made swapping a
-           photograph safe, so she can post again — and the success path wanted
-           `?ok=posted#post` while she was ALREADY sitting on `?ok=posted#post` from
-           the first one. Same URL, no reload, and the page would keep showing the
-           previous photograph under a "that's up." that was already there. The upload
-           would have worked perfectly and looked like it had done nothing.
+           Short version: `location.assign()` does not reload when the target differs
+           from the current URL only in the fragment, or not at all. The second upload
+           of a day targets `?ok=posted#post` while she is already on it, so the write
+           succeeded and the page did nothing.
 
-           So: if the target names the same document, set the fragment and force a
-           reload. Only a genuinely different path or query gets assign(). The current
-           page is always a GET, so reload() cannot re-post anything. */
+           The fallback is not decoration. A navigation that silently does nothing is
+           the exact failure being fixed, and it must not come back as "the helper did
+           not load" — so a missing usLand degrades to the old behaviour, which is right
+           for every case except the repeat. */
         function land(path, search, hash) {
-            var sameDocument = location.pathname === path && location.search === search;
-            if (sameDocument) {
-                if (location.hash !== hash) location.hash = hash;
-                location.reload();
-                return;
-            }
+            if (window.usLand) return window.usLand(path, search, hash);
+            console.error('[us] us-land.js did not load; a repeat post may not refresh.');
             location.assign(path + search + hash);
         }
 
