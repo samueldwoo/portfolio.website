@@ -626,19 +626,35 @@ const showPlaceholderNotice = import.meta.env.DEV && !hasR2();
                                     default is what lets the keep form carry
                                     nothing but the id. */}
                                 {p.kept && <input type="hidden" name="on" value="0">}
+                                {/* With captions empty the only stable per-photo
+                                    name is its position, and 16 buttons must not
+                                    all announce "keep this". The aria-label
+                                    CONTAINS the visible label, so 2.5.3 Label in
+                                    Name holds.
+
+                                    THIS COMMENT USED TO SIT BETWEEN TWO ATTRIBUTES
+                                    of the button below, which is not a place a JSX
+                                    comment can go. That alone was all three of the
+                                    "pre-existing" typecheck errors this file carried
+                                    — confirmed by putting the nested template literal
+                                    back inline afterwards, which astro check parses
+                                    perfectly well and which was never the cause
+                                    despite being what the messages pointed at.
+
+                                    astro build accepted the comment, so the only
+                                    symptom was three permanent errors reading
+                                    "Unterminated string literal" and "':' expected"
+                                    against the lines AFTER it. Nothing was wrong with
+                                    any string. A whole session recorded them as astro
+                                    check misparsing and moved on, which is the real
+                                    cost: a standing error count teaches the next
+                                    reader to skip the output. */}
                                 <button
                                     class="bo-btn"
                                     type="submit"
                                     aria-pressed={p.kept ? 'true' : 'false'}
-                                    {/* With captions empty the only stable
-                                        per-photo name is its position, and 16
-                                        buttons must not all announce "keep this". */}
                                     aria-label={`${p.kept ? 'kept' : 'keep this'}: ${p.m.caption || `photograph ${p.i + 1}`}`}
                                 >{p.kept ? 'kept' : 'keep this'}</button>
-                                {/* aria-label CONTAINS the visible label, so
-                                    2.5.3 Label in Name holds — and thirteen keep
-                                    buttons on one page no longer announce as
-                                    thirteen identical "keep this". */}
                             </form>
 
                             <a class="bo-shut" href={`#t-${p.m.id}`}>close</a>

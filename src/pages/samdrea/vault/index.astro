@@ -337,6 +337,25 @@ const totalLeft = TOTAL_CAP - (list.open.length + list.done.length);
 /** True only when BOTH caps have room. Gates the add form. */
 const canAdd = roomLeft > 0 && totalLeft > 0;
 
+/* THESE TWO ARE NAMED HERE TO KEEP `<=` OUT OF THE TEMPLATE, and that is a
+   tooling reason rather than a style one.
+
+   Astro's tag scanner reads the `<` of a `<=` in an expression position as the
+   start of a tag and then the `= 8 &&` after it as an attribute on a tag with no
+   name, which it reports as "Unable to assign attributes when using <> Fragment
+   shorthand syntax!" — a message that names nothing to do with the actual code.
+   astro build compiles it correctly, so the only symptom was a permanent error in
+   `npm run typecheck`, which is the gate that decides whether this wing is
+   type-clean. A standing error there is worse than the inconvenience: it trains
+   whoever reads the output next to skip a line, and the whole value of the count
+   being exactly right is that a new one stands out.
+
+   Rejected: `!(roomLeft > 8)`, which dodges the scanner but inverts the sense of
+   a threshold for the parser's benefit and reads like a puzzle. A named boolean
+   costs one line and says what it means. */
+const listNearlyFull = roomLeft <= 8;
+const listCompletelyFull = totalLeft <= 0;
+
 /* ============================================================================
    OUTCOMES FROM THE NO-JAVASCRIPT FORM PATHS
 
@@ -1252,13 +1271,13 @@ const vapidKey = pushReady ? pushConfig().publicKey ?? '' : '';
             TOTAL first, because it is the one with no way out: ticking something
             off makes room under OPEN_CAP and makes none at all under TOTAL_CAP, so
             "tick something off" would be advice that does not work. */}
-        {totalLeft <= 0 ? (
+        {listCompletelyFull ? (
             <p class="tg-list-meta">
                 {TOTAL_CAP} lines is everything this list can hold, and it is holding
                 them. Nothing on it is going anywhere &mdash; there just isn&rsquo;t
                 space for a new one.
             </p>
-        ) : roomLeft <= 8 && (
+        ) : listNearlyFull && (
             <p class="tg-list-meta">
                 {roomLeft > 0
                     ? `${roomLeft} more will fit before you have to tick something off.`
