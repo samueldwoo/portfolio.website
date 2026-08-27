@@ -23,6 +23,7 @@
     "test:recent": "node --experimental-strip-types scripts/test-recent.mts",
     "test:fresh": "node --experimental-strip-types scripts/test-fresh.mts",
     "test:frames-key": "node --experimental-strip-types scripts/test-frames-key.mts",
+    "test:who-words": "node --experimental-strip-types scripts/test-who-words.mts",
     "test:ratelimit": "node --experimental-strip-types scripts/test-ratelimit.mts",
     "test:inline": "node scripts/test-inline-scope.mjs",
     "test:us-land": "node scripts/test-us-land.mjs",

@@ -84,9 +84,15 @@
  * public/css/us-song.css.
  * ---------------------------------------------------------------------------
  */
-import { HER_NAME, SESSION_SECRET } from '../../../lib/us/config';
+/* BOTH NAME READERS, and they are not interchangeable. HER_NAME() falls back to
+   'you' and is right where the copy addresses her directly — the empty-state line
+   at the bottom of this page. HER_NAME_OPT() returns the raw value and is what
+   who-words.ts needs, because a third-person label that degrades to "you" hands
+   her half of the page to whoever is reading it. */
+import { HER_NAME, HER_NAME_OPT, SESSION_SECRET } from '../../../lib/us/config';
 import { readCookie, verify } from '../../../lib/us/session';
 import { touch } from '../../../lib/us/presence';
+import { whoWords } from '../../../lib/us/who-words';
 /* HER_TZ / HIS_TZ are the two LOCATIONS, and they are imported here for the same
    reason the clock strip on the hub imports them: a song's posted-at time is a fact
    about the poster's evening, and WING_TZ is not a place either of them has ever
@@ -145,6 +151,7 @@ const _seenBy = viewer;
 await touch(_seenBy);
 
 const her = HER_NAME();
+const words = whoWords(viewer, HER_NAME_OPT());
 const today = wingDate();
 
 /* ONE clock reading for the whole render, so the two sides cannot be judged against
@@ -635,7 +642,11 @@ interface Slot {
    So: your own side says "you", the other side says their name. The same scheme
    day.astro already uses for the photo frames, and for the same reason — "me" is
    only meaningful if you know whose voice the page is in, and now there are two. */
-const theirWord = viewer === 'her' ? 'Sam' : (her || 'her');
+/* who-words.ts owns this rule for the whole wing now. The line here used to read
+   `(her || 'her')`, where `her` is HER_NAME() — whose fallback is 'you' — so an
+   unset variable labelled HER card "you" on HIS screen and called the other
+   person's slot his own. The name is read raw for exactly that reason. */
+const theirWord = words.them;
 const mineIsHis = viewer === 'him';
 
 /* The word for each side, from the reader's side. Was computed inline twice in the
@@ -643,8 +654,13 @@ const mineIsHis = viewer === 'him';
    time (whose reaction is on this card), which is one repetition too many for a
    label that must never disagree with itself. */
 const whoWord: Record<Side, string> = {
-  his: mineIsHis ? 'you' : theirWord,
-  hers: mineIsHis ? theirWord : 'you',
+  /* The two vocabularies meet here and nowhere else. This page thinks in `Side`
+     ('his' / 'hers', which half of a day) and who-words.ts thinks in `Who`
+     ('him' / 'her', which person) — so the mapping is written once, as data,
+     rather than as a `mineIsHis` ternary per row. That ternary is what let the
+     two rows drift apart in the first place. */
+  his: words.of('him'),
+  hers: words.of('her'),
 };
 
 /** A slot's empty-state sentences, told from the reader's side. */
@@ -661,7 +677,10 @@ function emptyFor(isMine: boolean): { open: string; openSub: string } {
           openSub: 'If you already posted one, it’s still there. The shelf just isn’t answering.',
         }
       : {
-          open: `I can’t see ${theirWord}’s side from here.`,
+          /* ATTRIBUTIVE, not `${theirWord}’s` by hand: with the name unset that
+             built "I can't see she's side from here." who-words.ts keeps the
+             three possessive forms apart precisely so this reads "her side". */
+          open: `I can’t see ${words.themAttributive} side from here.`,
           openSub: 'There may well be one. The shelf just isn’t answering.',
         };
   }

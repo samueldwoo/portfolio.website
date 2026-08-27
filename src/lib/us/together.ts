@@ -754,8 +754,6 @@ function weekdayName(tz: string, atMs: number): string {
  * caller's guess about which side of the page it is on.
  */
 export function thinkingLine(input: {
-  /** Whose record this is. */
-  who: Who;
   record: Thinking;
   /** Now, in epoch millis. Passed, never read from the clock. */
   nowMs: number;
@@ -763,14 +761,22 @@ export function thinkingLine(input: {
   readerTz: string;
   /** Today in WING_TZ, to scope the count. */
   today: string;
+  /**
+   * What to call `who`, already resolved by who-words.ts.
+   *
+   * This function used to derive 'she' or 'he' from `who` itself, which made it
+   * one of four places in the wing that each decided independently what the two
+   * of them are called. The name belongs to the reader's render, not to a line
+   * formatter that cannot see the environment.
+   */
+  theirName: string;
 }): string {
   const { record, nowMs } = input;
   if (!(record.last > 0)) return '';
   if (nowMs - record.last > THINKING_STALE_MS) return '';
 
-  const pronoun = input.who === 'her' ? 'she' : 'he';
   const when = warmAgo(record.last, nowMs, input.readerTz);
-  const head = `${pronoun} was thinking of you — ${when}`;
+  const head = `${input.theirName} was thinking of you — ${when}`;
 
   /* The count only ever appears above one, and only for the day it belongs to. A
      stale `today` from a previous day is silently ignored rather than relabelled:

@@ -59,7 +59,8 @@
  * a state this page renders correctly on purpose.
  * ---------------------------------------------------------------------------
  */
-import { HER_NAME, HER_NAME_OR, SESSION_SECRET, hasKV, hasPush, pushConfig } from '../../../lib/us/config';
+import { HER_NAME, HER_NAME_OPT, SESSION_SECRET, hasKV, hasPush, pushConfig } from '../../../lib/us/config';
+import { sentenceCase, whoWords } from '../../../lib/us/who-words';
 import { readCookie, verify } from '../../../lib/us/session';
 import { getSongs, wingDate, wingDateLabel, type SongRecord } from '../../../lib/us/kv';
 import { countVisitSafe, getMarksSafe } from '../../../lib/us/marks';
@@ -127,6 +128,15 @@ const viewer: Who = identify(Astro.cookies, Astro.url) ?? 'her';
 const them = otherOne(viewer);
 
 const her = HER_NAME();
+
+/* WHAT TO CALL THE TWO OF THEM — see who-words.ts for the rule and for why
+   there is now one module instead of a copy on each page.
+
+   Declared HERE, up with `viewer`, and not down in the copy helpers where it
+   started: presenceLine() a few lines below needs it, and `const` does not
+   hoist, so a definition further down is a ReferenceError on the first render
+   rather than a wrong word. */
+const words = whoWords(viewer, HER_NAME_OPT());
 
 /** Today in the wing's timezone. Passed into everything; never re-derived. */
 const today = wingDate();
@@ -224,7 +234,7 @@ const twoClocks = clocks(nowMs);
    whenever Upstash is absent, in which case the line simply does not render —
    see presence.ts on why a durable fallback for this would be a lie. */
 const seen = await touchAndRead(viewer, nowMs);
-const seenLine = presenceLine(seen, viewer);
+const seenLine = presenceLine(seen, words.them);
 const myClock = viewer === 'her' ? twoClocks.her : twoClocks.him;
 const theirClock = viewer === 'her' ? twoClocks.him : twoClocks.her;
 /** '' most of the time. Only worth saying when the gap has crossed a date line. */
@@ -245,11 +255,15 @@ const theirDayNote = twoClocks.differentDay
 const myTz = viewer === 'her' ? HER_TZ : HIS_TZ;
 
 const incoming = thinkingLine({
-  who: them,
   record: together.thinking[them],
   nowMs,
   readerTz: myTz,
   today,
+  /* Sentence-initial: this renders into .tg-think-line, which is the one place a
+     person's word starts a sentence with no CSS uppercase over it. With the name
+     set it is already capital; sentenceCase is for the unset fallback, which is
+     a real state here — an env var that misses a deploy ships silently. */
+  theirName: sentenceCase(words.them),
 });
 const outgoing = sentLine(together.thinking[viewer], nowMs, myTz);
 
@@ -372,9 +386,13 @@ const errText = errCode ? (ERR_TEXT[errCode] ?? "that didn't go through. Try aga
 
 /* ---- copy helpers --------------------------------------------------------- */
 
-/** What to call the other person, in the second person's voice. */
-const themWord = them === 'her' ? 'she' : 'he';
-const themPossessive = them === 'her' ? 'hers' : 'his';
+/* These two used to be bare pronouns computed right here, so the questions
+   block below said "she has answered" about the person every other page calls
+   by name. They are aliases onto `words` now — kept as names rather than
+   inlined because `themWord` also crosses into the inline script through
+   define:vars, and one variable there is one thing to keep in step. */
+const themWord = words.them;
+const themPossessive = words.themPossessive;
 
 /** e.g. `Sat 22 Aug 2026`. '' when the date is unusable. */
 function dayLabel(date: string): string {
@@ -389,20 +407,13 @@ function dayLabel(date: string): string {
  * the wrong register: this list is two people writing to each other, and "she added
  * this" about the person whose name he knows reads like a system talking about a user.
  *
- * So the other person gets their NAME when we have it. Hers lives in US_HER_NAME
- * because the repo is public, and HER_NAME_OR is used rather than HER_NAME because the
- * latter falls back to 'you' — which in a byline would credit the reader with her line.
- * 'she' is the fallback here instead.
- *
- * His side stays a pronoun: there is no US_HIS_NAME, and inventing one would mean a
- * variable that must be set and redeployed before the copy is even correct. "he added
- * this" is already a sentence, so the asymmetry costs nothing she would notice — she is
- * the one reading it.
+ * Now it is `words.of()` and nothing else, so the byline and the questions block
+ * below cannot end up calling the same person two different things — which is what
+ * happened when this function was the only site that had been fixed. His side used
+ * to stay 'he' here on the argument that there is no US_HIS_NAME to read; 'Sam' is
+ * a literal in the source, which the other two pages had already worked out.
  */
-function byWord(by: Who): string {
-  if (by === viewer) return 'you';
-  return by === 'her' ? HER_NAME_OR('she') : 'he';
-}
+const byWord = (by: Who): string => words.of(by);
 
 /**
  * The label above today's answer box, and the ONE place the ceiling is named.
@@ -686,9 +697,19 @@ const vapidKey = pushReady ? pushConfig().publicKey ?? '' : '';
                 impersonal half of its own clock strip. today.astro already
                 titles his card "Sam"; day.astro said "him"; three pages, two
                 words, one person. Labels take the name everywhere now.
-                Sentences still take the pronoun — "Nothing from him today" a
-                few blocks below is right and stays. */}
-            <span class="tg-clock-who">{them === 'her' ? her : 'Sam'}</span>
+
+                AND SO DO SENTENCES, which reverses what this comment used to
+                say. It carved out "Nothing from him today" as correct prose that
+                should stay a pronoun, and read on its own that is defensible —
+                but he asked for the name in both, and he is right that a page
+                where the clock says one thing and the sentence under it says
+                another is the same split this comment was written to close.
+
+                Reading `her` here was also its own quiet bug: that is HER_NAME(),
+                which falls back to 'you', so an unset variable labelled HER
+                clock "you" on HIS screen. words.them cannot, because the raw
+                value is what it is handed. */}
+            <span class="tg-clock-who">{words.them}</span>
             <time
                 class="tg-clock-time"
                 datetime={theirClock.iso}
@@ -827,7 +848,7 @@ const vapidKey = pushReady ? pushConfig().publicKey ?? '' : '';
                     
                         It still has to be a real sentence rather than a blank — she sees this
                         state more than any other. It just does not need to editorialise. */}
-                    Nothing from {them === 'her' ? her : 'him'} today.
+                    Nothing from {words.them} today.
                 </p>
             )}
 
@@ -1003,7 +1024,7 @@ const vapidKey = pushReady ? pushConfig().publicKey ?? '' : '';
                            out while a day is sealed, and it is the entire call to
                            action. It leaks nothing about what they said. */
                         <p class="tg-notice" data-kind="ok">
-                            {themWord} has answered. Yours is the missing half.
+                            {sentenceCase(themWord)} has answered. Yours is the missing half.
                         </p>
                     )}
                     <form
@@ -1115,8 +1136,8 @@ const vapidKey = pushReady ? pushConfig().publicKey ?? '' : '';
                                             ))}
                                         </article>
                                         <p class="tg-past-half">
-                                            {themWord} never answered this one, and it has
-                                            closed. Yours stays here.
+                                            {sentenceCase(themWord)} never answered this one,
+                                            and it has closed. Yours stays here.
                                         </p>
                                     </>
                                 ) : (
@@ -1127,8 +1148,8 @@ const vapidKey = pushReady ? pushConfig().publicKey ?? '' : '';
                                        read it without answering" would make the seal
                                        optional and therefore fake. */
                                     <p class="tg-past-half">
-                                        {themWord} answered this one and it closed before
-                                        you did, so it stays {themPossessive}. Only
+                                        {sentenceCase(themWord)} answered this one and it
+                                        closed before you did, so it stays {themPossessive}. Only
                                         today&rsquo;s and the last {LATE_ANSWER_DAYS} days
                                         can still be opened.
                                     </p>
@@ -1467,8 +1488,15 @@ const vapidKey = pushReady ? pushConfig().publicKey ?? '' : '';
 
 {/* `themWord` is passed in rather than hard-coded in the script below: the hub
     renders for whichever of them holds the cookie, so a literal "he" in a success
-    message is wrong half the time. It is one of `she` / `he` — never user text —
-    so there is nothing here that could carry a payload into the script context. */}
+    message is wrong half the time.
+
+    ITS PROVENANCE CHANGED AND THE OLD NOTE HERE WOULD HAVE LIED ABOUT IT. This
+    used to read "one of `she` / `he` — never user text", which was a closed set
+    of two literals and therefore no injection surface at all. It is now a name
+    out of US_HER_NAME, so it is OPERATOR text: still not attacker-reachable —
+    nobody but Sam can set a Vercel environment variable, and it takes a redeploy
+    — but no longer a two-value enum, and the honest version of the sentence is
+    that Astro's define:vars JSON-serialises it rather than that it cannot vary. */}
 {/* `vapidKey` is the PUBLIC half of the VAPID pair and nothing else from
     config.ts comes near this script. It is public by construction — the push
     service embeds it in the subscription it issues — so there is no secret being

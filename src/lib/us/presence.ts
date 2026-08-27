@@ -246,17 +246,21 @@ export async function forget(who: Who): Promise<void> {
  * `{line && ...}` and there is no empty element and no placeholder. Absence is
  * the common case and it should occupy no space at all.
  *
- * Note what this never says: a time. "he was here at 14:20" would need her to
+ * Note what this never says: a time. "Sam was here at 14:20" would need her to
  * know which 14:20, and the two clocks at the top of the hub are already the
  * place where that question is answered properly. Recency is relative or it is
  * not worth printing.
  */
-export function presenceLine(p: Presence | null, viewer: Who): string {
+export function presenceLine(p: Presence | null, themName: string): string {
   if (!p) return '';
-  const them = viewer === 'her' ? 'he' : 'she';
 
-  if (p.together) return `${them} is in here too, right now`;
-  if (p.agoMin < 2) return `${them} was here a minute ago`;
-  if (p.agoMin < 60) return `${them} was here ${p.agoMin} minutes ago`;
+  /* THE NAME IS PASSED IN, not derived from a viewer here. This used to take
+     `viewer` and turn it into 'he' or 'she' itself, which made it the fourth
+     place in the wing that answered "what do we call the other one" — and it
+     answered differently from the other three. who-words.ts owns the question
+     now, and this function only needs the answer. */
+  if (p.together) return `${themName} is in here too, right now`;
+  if (p.agoMin < 2) return `${themName} was here a minute ago`;
+  if (p.agoMin < 60) return `${themName} was here ${p.agoMin} minutes ago`;
   return '';
 }

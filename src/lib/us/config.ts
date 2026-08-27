@@ -62,6 +62,18 @@ export const HER_NAME = () => env('US_HER_NAME') ?? 'you';
  */
 export const HER_NAME_OR = (fallback: string) => env('US_HER_NAME') ?? fallback;
 
+/**
+ * Her name, or undefined when it is not configured. The third reader of one
+ * variable, and still not a second variable.
+ *
+ * who-words.ts needs to derive BOTH a subject form ('she') and a possessive
+ * ('hers') from the same absence, so a caller-chosen fallback — HER_NAME_OR's
+ * entire reason for existing — can only ever get one of the two right. Handing
+ * it the raw value moves the choice to the one module that knows which sentence
+ * each word is going into.
+ */
+export const HER_NAME_OPT = () => env('US_HER_NAME');
+
 /* ---------------------------------------------------------------------------
    PHASE 2 / 3 BACKING SERVICES
 

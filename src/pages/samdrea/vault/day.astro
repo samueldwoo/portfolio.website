@@ -39,7 +39,8 @@
  * pitch of this feature is that it costs nothing to use.
  */
 
-import { HER_NAME, SESSION_SECRET, hasKV } from '../../../lib/us/config';
+import { HER_NAME_OPT, SESSION_SECRET, hasKV } from '../../../lib/us/config';
+import { whoWords } from '../../../lib/us/who-words';
 import { readCookie, verify } from '../../../lib/us/session';
 import { wingDate, wingDateLabel } from '../../../lib/us/kv';
 import { touch } from '../../../lib/us/presence';
@@ -67,7 +68,7 @@ const viewer: Who = identify(Astro.cookies, Astro.url) ?? 'her';
 const them: Who = viewer === 'her' ? 'him' : 'her';
 await touch(viewer);
 
-const her = HER_NAME();
+const words = whoWords(viewer, HER_NAME_OPT());
 const today = wingDate();
 
 /* ONE clock reading for the whole render, so two frames cannot be judged against
@@ -238,11 +239,13 @@ function dayOf(atMs: number, tz: string): string {
 /**
  * Whose half of the day this is: 'you', her name, or his.
  *
- * 'Sam' rather than 'him', matching the hub's clock strip and today.astro's card
- * title. It was the only page left calling him by a pronoun in a position where
- * her side got a name.
+ * Now who-words.ts, which is where this rule lives for the whole wing. The
+ * inline version it replaces was RIGHT about the words and wrong about the
+ * fallback: it read HER_NAME(), whose default is 'you', so an unset variable
+ * labelled HER half of the day "you" on HIS screen — the one mistake the module
+ * exists to make unexpressible.
  */
-const whoWord = (w: Who): string => (w === viewer ? 'you' : w === 'her' ? (her || 'her') : 'Sam');
+const whoWord = (w: Who): string => words.of(w);
 ---
 
 <!DOCTYPE html>
@@ -404,7 +407,13 @@ const whoWord = (w: Who): string => (w === viewer ? 'you' : w === 'her' ? (her |
                                     The CSS still sizes it — width:100% and height:auto
                                     override these for LAYOUT. The attributes survive
                                     only as the intrinsic ratio, which is exactly the
-                                    division of labour wanted here. */}
+                                    division of labour wanted here.
+
+                                    The alt text below leans on whoWord() ALREADY
+                                    returning 'you' for the reader's own half. It used
+                                    to re-check `w === viewer` first and pick 'you'
+                                    itself, which was dead code either way — and that
+                                    is how one rule quietly becomes two. */}
                                 <img
                                     class="fr-img"
                                     src={f.url}
@@ -412,7 +421,7 @@ const whoWord = (w: Who): string => (w === viewer ? 'you' : w === 'her' ? (her |
                                     height={f.h || undefined}
                                     alt={f.note
                                         ? `${whoWord(w)}: ${f.note}`
-                                        : `a photograph ${w === viewer ? 'you' : whoWord(w)} put up${
+                                        : `a photograph ${whoWord(w)} put up${
                                               (w === viewer ? mineFrom : theirsFrom) ? '' : ' today'}`}
                                     loading="eager"
                                     decoding="async"
