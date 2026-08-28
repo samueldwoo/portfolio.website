@@ -337,6 +337,15 @@ try {
         if (t !== last) window.__seen.push({ text: t, at: Date.now() - window.__t0 });
       }, 60); 1`);
 
+    /* WHERE SHE WAS LOOKING. Set before the submit and read back after the hand-back,
+       because "the view window gets reset on mobile" is a claim about a number and was
+       argued about before it was measured. The mock page is deliberately 1500px tall
+       with #post at the bottom, so this is the real geometry the anchor jump exploits. */
+    const scrollBefore =
+      opts.scrollTo === undefined
+        ? null
+        : await ev(`window.scrollTo(0, ${opts.scrollTo}); Math.round(window.scrollY)`);
+
     await ev(`document.querySelector('[data-fr-form]')
       .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); 1`);
 
@@ -367,6 +376,10 @@ try {
       notFound: log.filter((l) => l.kind === '404'),
       thrown: thrown.slice(),
       netNoise: netNoise.slice(),
+      scrollBefore,
+      scrollAfter: opts.scrollTo === undefined ? null : await ev('Math.round(window.scrollY)'),
+      docHeight: await ev('Math.round(document.documentElement.scrollHeight)'),
+      viewport: await ev('Math.round(window.innerHeight)'),
       hash: await ev('location.hash'),
       search: await ev('location.search'),
       path: await ev('location.pathname'),
@@ -407,6 +420,47 @@ try {
     is('nothing 404ed', r.notFound.length === 0, r.notFound);
     is('no thrown exception', r.thrown.length === 0, r.thrown);
 
+  }
+
+  /* ---- DOES SHE KEEP HER PLACE? -------------------------------------------------
+
+     Reported as "the view window gets reset on mobile", and it was: measured at
+     scrollBefore=400 -> scrollAfter=1086 on a 1555px document, BEFORE the fix. The
+     cause is `#post`, which is the post form and sits a screen and a half down, so
+     every hand-back jumped there.
+
+     Both cases are run because they take different branches of usLand and the bug was
+     in neither branch specifically — the first upload navigates to a new URL
+     (assign), the second reloads the one she is on. A fix that only covered the
+     reload would have looked right in testing and still thrown her on the common
+     path.
+
+     The tolerance is 4px rather than exact equality: `scrollTo` is subpixel on a
+     fractional device ratio and asserting equality would make this fail on a
+     retina viewport for a reason that has nothing to do with keeping her place. */
+  console.log('\n  --- 3a. she keeps her place across the hand-back ---');
+  for (const [label, startSearch] of [
+    ['first upload of the day — usLand takes the assign() branch', ''],
+    ['second upload — usLand takes the reload() branch', '?ok=posted'],
+  ]) {
+    const r = await trial(`POST -> {ok:true}, scrolled to 400 first (${label})`, 'posted', startSearch, {
+      scrollTo: 400,
+    });
+    if (!r) continue;
+    console.log(
+      `      before=${r.scrollBefore} after=${r.scrollAfter} doc=${r.docHeight} viewport=${r.viewport}`,
+    );
+    is('it actually scrolled before submitting', r.scrollBefore === 400, r.scrollBefore);
+    is('THE PAGE STILL RE-FETCHED', r.renders.length >= 1, r.renders);
+    is('SHE IS WITHIN 4px OF WHERE SHE WAS', Math.abs(Number(r.scrollAfter) - 400) <= 4, {
+      before: r.scrollBefore,
+      after: r.scrollAfter,
+    });
+    /* The specific old behaviour, named so a regression is recognisable rather than
+       just numerically wrong: 1086 was the anchor's offset on this document. */
+    is('and NOT dumped at the #post anchor', Number(r.scrollAfter) < 900, r.scrollAfter);
+    is('the fragment is still in the URL for the no-JS path', r.hash === FRAGMENT, r.hash);
+    is('no thrown exception', r.thrown.length === 0, r.thrown);
   }
 
   /* ---- THE SHAPE OF THE WAIT — a separate question from correctness -------------
