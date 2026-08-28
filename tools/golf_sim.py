@@ -100,6 +100,42 @@ LIP_DEFLECT = math.radians(60.0)
 # shaped like the old one.
 LIP_LOSS = 0.35
 
+# HOLE_SEED: THREE ROUNDS WHOSE ORIGINAL GREEN CONTAINED AN UNWINNABLE REGION.
+#
+# MIRROR of HeroCanvas.tsx. Found 2026-08-27 by tools/golf_lies.py and confirmed by
+# a full-grid fixpoint: on rounds 25, 59 and 78 the tilted plane drains into a top
+# or bottom wall, the ball cannot climb back out, and the cup sits uphill beyond
+# reach -- 328px of full-power reach against 447px needed on round 78. Every
+# confirmed dead lie on all three sits exactly on y=144 or y=756, the play-box
+# edges. From one such lie ALL 65520 swept putts came to rest on the wall again.
+#
+# The player model was stuck on 23-46% of attempts on these three, which is the
+# stuck share golf_par.py had been attributing to "the model has no lay-up".
+#
+# WHY A TABLE AND NOT A RULE. An analytic guard was tried first and MEASURED USELESS:
+# the obvious criterion is the one the tee already uses (dist <= reach_toward*0.9),
+# extended to the whole box. It does not discriminate -- top/bottom-wall
+# unreachability is 50% on the three dead holes AND on the two that were flagged and
+# cleared, and round 7, which is verified CLEAN, is the worst in the field at 58%.
+# Any threshold that caught these three would reject good holes. Whether a wall
+# region is a closed basin needs simulation, so the detector cannot be cheap enough
+# to run in a browser at hole-selection time.
+#
+# So the fix has the same shape as PAR_TABLE: measured offline, generator committed
+# (tools/golf_lies.py), and re-runnable. round + 81 was taken as the replacement
+# seed because it is deterministic and needs no invented constant; each replacement
+# was then VERIFIED clean by golf_lies before being written here.
+#
+# LIMIT, STATED: measured at 1440x900. Hole geometry follows canvas size, so a
+# different viewport has different basins -- this fixes the measured size and makes
+# no claim beyond it. Same caveat as PAR_TABLE and the difficulty word.
+HOLE_SEED = {25: 106, 59: 140, 78: 159}
+
+
+def hole_seed(round_no):
+    """Geometry seed for a round. Differs from the round only for HOLE_SEED."""
+    return HOLE_SEED.get(round_no, round_no)
+
 # ---- THE TIMESTEP: ONE STORY, NOT FOUR ----
 # HeroCanvas.tsx tick() computes `Math.min(0.05, (now - last) / 1000)`, seeded at
 # 0.016 on the first frame after the loop starts. So the page integrates at the
@@ -259,6 +295,11 @@ class Green:
 
         self.box = self._play_box()
 
+        # THE HOLE'S GEOMETRY COMES FROM `hseed`, NOT FROM `round`. They differ only
+        # on the re-seeded trap rounds -- see HOLE_SEED. `self.round` stays the
+        # index, because PAR_TABLE and the scorecard are keyed by what the player
+        # is on, not by which green they got.
+        self.hseed = hole_seed(round_no)
         if round_no == 0:
             # initial mount: layout(); placeCup(); resetBall(false)
             self.tilt_ang = 0.0
@@ -267,9 +308,9 @@ class Green:
             self._place_cup()
             self.start_fx, self.start_fy = 0.28, 0.72
         else:
-            r1 = hash2(round_no * 7 + 1, 13)
-            r2 = hash2(round_no * 11 + 5, 29)
-            r3 = hash2(round_no * 17 + 3, 71)
+            r1 = hash2(self.hseed * 7 + 1, 13)
+            r2 = hash2(self.hseed * 11 + 5, 29)
+            r3 = hash2(self.hseed * 17 + 3, 71)
             self.tilt_ang = r1 * TAU
             self.tilt_mag = (0.78 + r2 * 0.975) * tilt_scale
             self.g_seed = 2 + r3 * 9
@@ -311,8 +352,8 @@ class Green:
         bx = by = 0.0
         best_mag = float("inf")
         for i in range(24):
-            rx = hash2(self.round * 23 + 9 + i * 7, 41)
-            ry = hash2(self.round * 31 + 4 + i * 11, 53)
+            rx = hash2(self.hseed * 23 + 9 + i * 7, 41)
+            ry = hash2(self.hseed * 31 + 4 + i * 11, 53)
             x = b["x"] + m + (b["w"] - m * 2) * (0.25 + rx * 0.5)
             y = b["y"] + m + (b["h"] - m * 2) * (0.2 + ry * 0.6)
             gx, gy = self.slope_at(x, y)
@@ -363,12 +404,12 @@ class Green:
         flat_run = self.max_speed / -math.log(self.friction)
         budget = 0.9 if self.reach_safety is None else self.reach_safety
         target_len = max(min_d,
-                         (0.55 + hash2(self.round * 131 + 7, 37) * 0.45) * budget * flat_run)
+                         (0.55 + hash2(self.hseed * 131 + 7, 37) * 0.45) * budget * flat_run)
         best_fx, best_fy, best_err = 0.2, 0.7, float("inf")
         far_fx, far_fy, far_d = 0.2, 0.7, -1.0
         for k in range(24):
-            fx = 0.08 + hash2(self.round * 97 + k, 17) * 0.84
-            fy = 0.08 + hash2(self.round * 89 + k, 23) * 0.84
+            fx = 0.08 + hash2(self.hseed * 97 + k, 17) * 0.84
+            fy = 0.08 + hash2(self.hseed * 89 + k, 23) * 0.84
             px = b["x"] + b["w"] * fx
             py = b["y"] + b["h"] * fy
             dd = math.hypot(px - self.cup_x, py - self.cup_y)

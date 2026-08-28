@@ -449,17 +449,25 @@ function slopeAt(
  * sits within 2 SE of 50%, i.e. a different seed could move the par by one; the
  * tool reports them rather than letting the arithmetic decide silently.
  *
- * ROUNDS 4, 7 AND 78 ARE SET BY HAND: par 3, 4 and 3. The simulator says 10, 15
- * and 4, and those are its own deadlock speaking — all three sit above 23% stuck
- * trials. A person does not wander; par exists to tell a person what a good score
- * is. The alternatives were rejected on purpose: shipping 10 reads as broken on a
- * green this size, and marking them unscored hides holes from the scorecard to
- * flatter a model nobody plays against.
+ * ROUNDS 4 AND 7 ARE SET BY HAND: par 3 and 4. The simulator says 10 and 15, and
+ * that is its own deadlock speaking — both sit above 23% stuck trials. A person does
+ * not wander; par exists to tell a person what a good score is. The alternatives
+ * were rejected on purpose: shipping 10 reads as broken on a green this size, and
+ * marking them unscored hides holes from the scorecard to flatter a model nobody
+ * plays against.
  *
- * These three are scaled to THIS table, not to a human in the abstract. An earlier
- * pass set rounds 7 and 78 to 3 and 2, which was right when mean par was 2.09; on a
- * table averaging 2.49 with 31 holes at par 3, those same values would have marked
- * the two trap holes as the EASY ones, inverting what they are.
+ * These are scaled to THIS table, not to a human in the abstract. An earlier pass
+ * set rounds 7 and 78 to 3 and 2, which was right when mean par was 2.09; on a table
+ * averaging 2.49 with 31 holes at par 3, those same values would have marked the
+ * trap holes as the EASY ones, inverting what they are.
+ *
+ * ROUND 78 IS NO LONGER HAND-SET — it is a MEASURED par 2 (mean 1.97, 49.6% aces,
+ * and crucially ZERO stuck trials). Its green was re-seeded because the original one
+ * contained an unwinnable region; see HOLE_SEED. Rounds 25 and 59 were re-seeded for
+ * the same reason and are measured par 3 and 3, also with zero stuck trials, against
+ * 32.5% and 23.5% before. That those three stuck shares went to zero is the evidence
+ * the dead zones are gone — the deadlock golf_par.py blamed on its own missing lay-up
+ * was substantially the holes being unwinnable.
  *
  * RE-MEASURE IF THE PHYSICS MOVES. Every number is conditional on CAPTURE_SPEED,
  * MAX_SPEED and FRICTION, and it is also conditional on CANVAS SIZE — the cup and
@@ -489,7 +497,31 @@ function slopeAt(
  * measurements with ~0% stuck trials.
  */
 const PAR_TABLE =
-  '242333243243232232322222232323422222322322323222323333232332222232232312223334323';
+  '242333243243232232322222232323422222322322323222323333232333222232232312223334223';
+/* HOLE_SEED: THREE ROUNDS WHOSE ORIGINAL GREEN CONTAINED AN UNWINNABLE REGION.
+   MIRROR of tools/golf_sim.py, which carries the full note.
+
+   Found 2026-08-27 by tools/golf_lies.py and confirmed by a full-grid fixpoint: on
+   rounds 25, 59 and 78 the tilted plane drains into a top or bottom wall, the ball
+   cannot climb back out, and the cup sits uphill beyond reach. Every confirmed dead
+   lie sits exactly on y=144 or y=756 — the play-box edges — and from one such lie
+   ALL 65,520 swept putts came to rest on the wall again. The player model was stuck
+   on 23–46% of attempts on these three, which is the stuck share golf_par.py had
+   been blaming on its own missing lay-up.
+
+   An analytic guard was tried first and measured useless: extending the tee's own
+   `dist <= reachToward * 0.9` rule to the whole box does NOT discriminate — round 7
+   is verified clean and is the worst in the field by that measure. Whether a wall
+   region is a closed basin needs simulation, so it cannot be decided here at
+   hole-selection time. Hence a measured table with a committed generator, exactly
+   like PAR_TABLE, rather than a rule.
+
+   `round + 81` is the replacement seed: deterministic, no invented constant, and
+   each one was verified clean by golf_lies before being written down. Measured at
+   1440x900; geometry follows canvas size, so other viewports are not covered. */
+const HOLE_SEED: Record<number, number> = { 25: 106, 59: 140, 78: 159 };
+/** Geometry seed for a round. Differs from the round only for HOLE_SEED. */
+const holeSeed = (round: number): number => HOLE_SEED[round] ?? round;
 const PAR_DEFAULT = 2;
 /** Par of a hole played before par existed. Counts as played, not as scored. */
 const PAR_UNKNOWN = 0;
@@ -1007,6 +1039,9 @@ export default function HeroCanvas() {
     let tiltMag = 0.85;
     let gSeed = 3.1;
     let round = 0;
+    /* Geometry seed, kept beside `round` and updated with it. `round` still keys
+       PAR_TABLE and the scorecard; only the GREEN is re-seeded. See HOLE_SEED. */
+    let hseed = holeSeed(0);
 
     /**
      * The play box is the region where the contour ink actually lives, so the
@@ -1245,14 +1280,14 @@ export default function HeroCanvas() {
 
        `HOLE_CUTS` are then the z thresholds that reproduce those classes, fitted
        by `tools/golf_calibrate.py` so this is re-runnable rather than frozen.
-       The cuts match the true MIX rather than maximising per-hole hits: 60.5%
-       exact agreement with 15 holes called harsh against 17 called soft, where
-       accuracy-maximising cuts score 67.9% but skew 15 harsh to 11 soft. An
+       The cuts match the true MIX rather than maximising per-hole hits: 58.0%
+       exact agreement with 16 holes called harsh against 18 called soft, where
+       accuracy-maximising cuts score 69.1% but skew 18 harsh to 7 soft. An
        unbiased rule that is wrong slightly more often beats a sharper one that
        leans hard, because leaning hard is the bug being fixed.
 
        Median sinking lines per band, monotonic as they must be:
-       2398 / 592 / 445 / 204.
+       2398 / 592 / 453 / 204.
 
        REFITTED 2026-08-27 AT THE SHIPPED PHYSICS (capture 225 + lip-out + gate),
        from a full 81-hole sweep at 0.5deg x 0.01 power. The previous values were
@@ -1268,19 +1303,19 @@ export default function HeroCanvas() {
        the window, and the "hits 157 -> 174" evidence behind it was capture-only,
        on five rounds, with no lip-out. Two factors moved; only one was counted.
 
-       So this refit makes the card HARSHER, not gentler: Brutal goes 24 -> 32 of
-       81 holes. That is the absolute-band design working as specified — a harder
+       So this refit makes the card HARSHER, not gentler: Brutal goes 24 -> 30 of
+       81 holes (32 before three greens were re-seeded; see HOLE_SEED). That is the absolute-band design working as specified — a harder
        green is supposed to produce more Brutal holes with no re-fit — but it is a
        visible change to what the hero says, so it is called out rather than buried.
 
        This does NOT flatten the difficulty skew — it reports it. The tee sampler
        deliberately draws 0.55-1.00 of the reach budget (mean 0.775, "lean
-       towards brutal usually"), and on 81 holes that yields 32 Brutal and 24
+       towards brutal usually"), and on 81 holes that yields 30 Brutal and 25
        Tricky against 13 Gentle. The card now says so honestly instead of
        manufacturing a flat quartile split or inflating it.
 
        `uW` LIVES IN HOLE_CAL BUT IS FITTED, NOT GEOMETRIC — it moved 1.25 -> 2.05
-       in this refit while dMean/dSd/uMean/uSd came out byte-identical. Those four
+       across the refits while dMean/dSd/uMean/uSd barely moved. Those four
        really are pure distance/up-slope geometry and are unaffected by the cup
        test; `uW` is a weight chosen against the truth classes and is as stale as
        the cuts whenever the physics moves. Do not treat "HOLE_CAL is not stale"
@@ -1288,8 +1323,8 @@ export default function HeroCanvas() {
 
        WHICH SIGNAL DOMINATES ALSO FLIPPED. Distance was the strong term (-0.63 on
        the old field, and the docs said so); on the corrected field it is only
-       -0.259 while mean up-slope is -0.676, which is why `uW` nearly doubled. The
-       composite is -0.772, down from -0.828.
+       -0.271 while mean up-slope is -0.653, which is why `uW` nearly doubled. The
+       composite is -0.755, down from -0.828.
 
        HONEST LIMIT — AND THE EXPLANATION HERE WAS WRONG ONCE, so read the numbers
        rather than the intuition. This comment used to say wide viewports skew
@@ -1323,8 +1358,8 @@ export default function HeroCanvas() {
        picture wins here. Nobody compares hole difficulty across monitors, and the
        scorecard's "best" is per-browser localStorage, so there is no scoreboard
        for the inconsistency to be unfair on. */
-    const HOLE_CAL = { dMean: 292.5, dSd: 43.6, uMean: 3.8, uSd: 89.8, uW: 2.05 };
-    const HOLE_CUTS = [-2.049, -0.912, 0.857];
+    const HOLE_CAL = { dMean: 292.2, dSd: 43.6, uMean: 1.2, uSd: 87.9, uW: 2.00 };
+    const HOLE_CUTS = [-1.976, -0.802, 0.922];
     const HOLE_BANDS = ['Gentle', 'Fair', 'Tricky', 'Brutal'];
 
     /** 0..3. Recomputed per hole and on resize, never per frame. */
@@ -1474,9 +1509,10 @@ export default function HeroCanvas() {
        Called on every re-tee, so sinking a putt genuinely produces a new hole. */
     const rollGreen = () => {
       round += 1;
-      const r1 = hash2(round * 7 + 1, 13);
-      const r2 = hash2(round * 11 + 5, 29);
-      const r3 = hash2(round * 17 + 3, 71);
+      hseed = holeSeed(round);
+      const r1 = hash2(hseed * 7 + 1, 13);
+      const r2 = hash2(hseed * 11 + 5, 29);
+      const r3 = hash2(hseed * 17 + 3, 71);
       tiltAng = r1 * TAU;
       tiltMag = 0.78 + r2 * 0.975;  // shallow to properly severe (1.3x, see heightAt)
       gSeed = 2 + r3 * 9;
@@ -1522,8 +1558,8 @@ export default function HeroCanvas() {
       let by = 0;
       let bestMag = Infinity;
       for (let i = 0; i < 24; i++) {
-        const rx = hash2(round * 23 + 9 + i * 7, 41);
-        const ry = hash2(round * 31 + 4 + i * 11, 53);
+        const rx = hash2(hseed * 23 + 9 + i * 7, 41);
+        const ry = hash2(hseed * 31 + 4 + i * 11, 53);
         const x = b.x + m + (b.w - m * 2) * (0.25 + rx * 0.5);
         const y = b.y + m + (b.h - m * 2) * (0.2 + ry * 0.6);
         const s = slopeAt(x, y, hm.x, hm.y, span, tiltAng, tiltMag, gSeed);
@@ -1656,7 +1692,7 @@ export default function HeroCanvas() {
         const flatRun = MAX_SPEED / -Math.log(FRICTION);
         const targetLen = Math.max(
           minD,
-          (0.55 + hash2(round * 131 + 7, 37) * 0.45) * REACH_BUDGET * flatRun
+          (0.55 + hash2(hseed * 131 + 7, 37) * 0.45) * REACH_BUDGET * flatRun
         );
         let bestFx = 0.2;
         let bestFy = 0.7;
@@ -1666,8 +1702,8 @@ export default function HeroCanvas() {
         let farFy = 0.7;
         let farD = -1;
         for (let k = 0; k < 24; k++) {
-          const fx = 0.08 + hash2(round * 97 + k, 17) * 0.84;
-          const fy = 0.08 + hash2(round * 89 + k, 23) * 0.84;
+          const fx = 0.08 + hash2(hseed * 97 + k, 17) * 0.84;
+          const fy = 0.08 + hash2(hseed * 89 + k, 23) * 0.84;
           const px = b.x + b.w * fx;
           const py = b.y + b.h * fy;
           const dd = Math.hypot(px - cupX, py - cupY);
