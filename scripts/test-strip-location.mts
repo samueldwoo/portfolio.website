@@ -668,19 +668,16 @@ console.log('\n  --- 4. when it cannot parse, it gives up and says so ---');
   is('stripping twice changes nothing the second time', twice.bytes.equals(once));
   is('the EXIF pass correctly finds nothing left to do', !twice.removed.includes('jpeg:exif-gps'), twice.removed);
   is('nor does XMP', !twice.removed.some((x: string) => x.startsWith('jpeg:xmp')), twice.removed);
-  /* THE BYTES ARE IDEMPOTENT; THE REPORT IS NOT, and this asserts the imprecision
-     rather than hiding it. `blankIptcLocation()` overwrites a location dataset's
-     value with SPACES instead of removing the dataset (deliberately — a dataset's
-     length is part of its header, so removing one would move every following
-     byte). A second pass therefore still SEES 2:90 and 2:101, writes spaces over
-     spaces, and reports a change it did not make.
-     Harmless where it is used: the exporter always strips freshly-downloaded R2
-     bytes, so a second pass over an already-stripped file never happens, and
-     `removed` only feeds the manifest and the printed summary — never a decision.
-     Written down because the summary IS read as meaningful ("3 of 12 ... correct
-     rather than a bug"), so anyone who makes this reachable should make it
-     truthful first: skip a dataset whose value is already all 0x20. */
-  is('IPTC re-reports a blank it did not change (known, unreachable)', twice.removed.some((x: string) => x.startsWith('jpeg:iptc-location')), twice.removed);
+  /* IPTC TOO, AND THIS ONE USED TO FAIL. `blankIptcLocation()` blanks a location
+     dataset's value rather than removing the dataset (a dataset's length is part of
+     its header, so removing one would move every following byte), so the dataset
+     survives with a blank value and a second pass still matches it. It wrote spaces
+     over spaces and reported `iptc-location(2)` removed — idempotent bytes, a report
+     claiming work it had not done. It now tests for an already-blank value first, so
+     the whole `removed` list is empty on a second pass and the summary can be
+     trusted to mean what it says. */
+  is('nor does IPTC', !twice.removed.some((x: string) => x.startsWith('jpeg:iptc')), twice.removed);
+  is('a second pass reports nothing at all', twice.removed.length === 0, twice.removed);
 
   /* A file with no location at all is identical in both modes, which the
      exporter's resume logic depends on. */

@@ -137,7 +137,10 @@ var ICON = '/assets/us/icons/icon-192.png';
    swap out underneath a running page. The worst case of claiming a client early
    is that the client is now controlled by a worker that ignores it.
    -------------------------------------------------------------------------- */
-self.addEventListener('install', function (event) {
+/* No `event` parameter: skipWaiting() needs nothing from it, and there is no
+   waitUntil() here on purpose — this worker caches nothing at install, so there is
+   no work to keep the install alive for. */
+self.addEventListener('install', function () {
     self.skipWaiting();
 });
 

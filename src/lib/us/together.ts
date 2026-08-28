@@ -1822,10 +1822,12 @@ function upstashStore(url: string, token: string): Store {
 /** id -> item, dropping anything unparseable. Shared by the Upstash and R2 tiers. */
 function itemsFromHash(h: Record<string, string>): Record<string, Item> {
   const out: Record<string, Item> = {};
-  for (const [id, raw] of Object.entries(h)) {
+  /* Object.values, not entries: the hash FIELD name is deliberately not read. Keying
+     by the item's OWN id means a field renamed by hand cannot produce a record whose
+     key and id disagree — so destructuring the field name here only to ignore it read
+     as though it were consulted. */
+  for (const raw of Object.values(h)) {
     const item = parseItem(raw);
-    // Keyed by the item's OWN id, not by the hash field, so a field renamed by hand
-    // cannot produce a record whose key and id disagree.
     if (item) out[item.id] = item;
   }
   return out;

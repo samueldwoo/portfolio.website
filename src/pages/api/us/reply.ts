@@ -54,7 +54,8 @@
  * fact rather than a caption. Never merge these two endpoints, never let either one
  * choose its key space from a request field.
  *
- * The cookie is verified HERE with verify(), not merely by src/middleware.ts. The
+ * The cookie is verified HERE — by identify(), which is where verify() and
+ * readCookie() are actually called — and not merely by src/middleware.ts. The
  * middleware is default-deny for everything under /api/us that is not explicitly
  * allowlisted — which is why this file needed no middleware change to be protected
  * the moment it existed — but its default check accepts EITHER token, so it cannot
@@ -91,7 +92,6 @@
 
 import type { APIRoute } from 'astro';
 import { SESSION_SECRET } from '../../../lib/us/config';
-import { readCookie, verify } from '../../../lib/us/session';
 import { clientKey, hit } from '../../../lib/us/ratelimit';
 import { notify } from '../../../lib/us/push';
 import { crossSite, identify } from '../../../lib/us/together';

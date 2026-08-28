@@ -84,7 +84,12 @@
  */
 
 import { AwsClient } from 'aws4fetch';
-import { frameKey, frameKeyAt, keyFromHash } from './frame-keys';
+/* `frameKey` is NOT imported: this file only RE-EXPORTS it (below) and never calls
+   it, and an import that exists solely to be forwarded is what the re-export line
+   already does. The two that ARE imported are both called here — which is the other
+   half of the rule in CLAUDE.md: `export { x } from './y'` does not bind x locally,
+   so anything this file CALLS needs the import as well as the re-export. */
+import { frameKeyAt, keyFromHash } from './frame-keys';
 import { validCoords } from './exif';
 import { hasKV, hasR2, kvConfig, r2Config, r2Endpoint } from './config';
 import { presignedUrl } from './photos';

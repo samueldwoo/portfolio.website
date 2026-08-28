@@ -263,8 +263,29 @@ function blankIptcLocation(buf) {
     const vStart = i + 5;
     if (vStart + len > buf.length) break;
     if (record === 2 && IPTC_LOCATION_DATASETS.has(dataset)) {
-      hits.push(`iptc 2:${dataset}`);
-      buf.fill(0x20, vStart, vStart + len);
+      /* ALREADY ALL SPACES IS NOT A CHANGE, and this guard is the difference
+         between a report and a guess.
+
+         The blanking is deliberately not a removal — a dataset's length is part of
+         its header, so deleting one would move every following byte in the resource
+         block. That means the dataset SURVIVES with a blank value, so a second pass
+         still matches it here. Without this test that second pass overwrote spaces
+         with spaces and reported `iptc-location(2)` removed: byte-for-byte
+         idempotent, but claiming work it had not done.
+         Unreachable through the exporter, which always strips freshly-downloaded R2
+         bytes — fixed anyway, because `removed` is what the run PRINTS and the whole
+         point of that summary is that "3 of 12" can be trusted to mean three. */
+      let blank = true;
+      for (let k = vStart; k < vStart + len; k += 1) {
+        if (buf[k] !== 0x20) {
+          blank = false;
+          break;
+        }
+      }
+      if (!blank) {
+        hits.push(`iptc 2:${dataset}`);
+        buf.fill(0x20, vStart, vStart + len);
+      }
     }
     i = vStart + len;
   }

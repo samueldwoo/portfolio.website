@@ -4099,7 +4099,11 @@ export default function StudioRoom({ memories, lines, marks, visitLine }: Props)
       });
     }
 
-    function frame(now: number, dt: number): void {
+    /* `_now` is unread and stays in the signature: it is POSITIONAL, ahead of `dt`,
+       and all three callers pass a timestamp first. Dropping it would silently shift
+       every dt into the wrong slot. The underscore says "deliberately unused" rather
+       than inviting the next person to delete it. */
+    function frame(_now: number, dt: number): void {
       /* Rendering into a lost context is not a crash — three guards it — but it
          is pointless work, and every read of renderer.capabilities during one is
          a chance to touch a null. */

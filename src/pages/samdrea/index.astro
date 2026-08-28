@@ -19,7 +19,7 @@
  * a page whose entire aesthetic is "Times New Roman".
  * ---------------------------------------------------------------------------
  */
-import { publicQuestions, isConfigured, missingConfig, gateNeedsReview } from '../../lib/us/config';
+import { publicQuestions, isConfigured, gateNeedsReview } from '../../lib/us/config';
 import { SESSION_SECRET } from '../../lib/us/config';
 import { readCookie, verify } from '../../lib/us/session';
 
@@ -86,9 +86,14 @@ if (already) return Astro.redirect(safeNext, 302);
 
 const questions = publicQuestions();
 const ready = isConfigured();
-// Only ever rendered by `astro dev`. In production a misconfigured gate is a
-// blank wall, not a checklist of which secret I forgot to paste.
-const missing = import.meta.env.DEV ? missingConfig() : [];
+/* THE DEV "Missing: …" CHECKLIST IS GONE, and this is the leftover of it.
+   `cc9d536` ("the gate is a question on a white screen and nothing else") deleted the
+   `{!ready && …}` block that rendered `missing.join(', ')`, deliberately — the gate is
+   one question on white and nothing else. The binding outlived its only reader, which
+   is the whole of why it is going now rather than being given a new render.
+   Nothing is lost: `missingConfig()` still runs in gate.ts, which console.errors the
+   same list into Vercel's logs, and that is the channel that reaches me in production
+   anyway. `ready` stays — it disables the form and is read by the inline script. */
 
 /**
  * Unreviewed-answers warning, shown in DEV ONLY.
