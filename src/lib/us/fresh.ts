@@ -155,5 +155,26 @@ export function stillFresh(atMs: number, tz: string, nowMs: number = Date.now())
   if (!atMs) return true;
   // A stamp from the future is clock skew, not a fact. Treat it as just-posted.
   if (atMs > nowMs) return true;
-  return nowMs < clearsAt(atMs, tz);
+
+  /* AN UNUSABLE TIMEZONE MUST NOT TAKE THE PAGE DOWN, and it did.
+     `Intl.DateTimeFormat` throws `RangeError: Invalid time zone specified` on '' and on
+     anything it does not recognise, and clearsAt() calls it unguarded — so this function
+     threw, today.astro's frontmatter threw, and the whole song page answered 500 for
+     BOTH of them. Reproduced: post through the no-JavaScript form, which has no way to
+     fill the hidden `tz` field, so the record stores tz: '' exactly as kv.ts says it
+     should. Every song already on the shelf has that value.
+
+     `true` rather than `false` is the honest direction and matches the `atMs` rule
+     above: we cannot work out when this clears, and "cannot compute" is not a reason to
+     make something somebody posted disappear. It will simply linger until a reader with
+     a usable zone loads it, which is a cosmetic wrong answer instead of a blank wing.
+
+     Guarded HERE and not only at the call sites: those pass `record.tz || FALLBACK`
+     now, which fixes today's two, but a future caller forgetting it would bring the
+     page down again. A freshness check has no business being able to do that. */
+  try {
+    return nowMs < clearsAt(atMs, tz);
+  } catch {
+    return true;
+  }
 }

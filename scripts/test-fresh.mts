@@ -81,5 +81,33 @@ console.log('\n  --- stillFresh ---');
   is('atMs 0 is shown, not hidden', stillFresh(0, HER, Date.now()) === true);
   is('a future stamp is shown',  stillFresh(t + 3600e3, HER, t) === true);
 }
+
+console.log('\n  --- AN UNUSABLE TIMEZONE MUST NOT THROW ---');
+{
+  /* This was a live 500. kv.ts stores `tz: ''` for a record whose poster never told us
+     a zone, which is exactly what the no-JavaScript form produces — it has no way to
+     fill the hidden field. Intl.DateTimeFormat throws RangeError on '', clearsAt() called
+     it unguarded, and today.astro's frontmatter took the whole song page down for BOTH
+     of them. The call sites also guarded with `?? HER_TZ`, which does not catch ''.
+
+     `true` is asserted deliberately, not just "does not throw": we cannot work out when
+     an unknown zone clears, and that is no reason to make something somebody posted
+     vanish. Same direction as the atMs-0 rule above. */
+  const t = Date.parse('2026-06-10T00:00:00Z');
+  const later = t + 40 * 3600e3; // well past any 07:00 boundary
+  for (const bad of ['', '   ', 'Not/AZone', 'Europe/Paris ', 'UTC+2', 'null']) {
+    let threw = false;
+    let out: boolean | null = null;
+    try {
+      out = stillFresh(t, bad, later);
+    } catch {
+      threw = true;
+    }
+    is(`tz ${JSON.stringify(bad)} does not throw`, threw === false);
+    is(`tz ${JSON.stringify(bad)} shows rather than hides`, out === true);
+  }
+  // And a real zone still expires, so the guard has not swallowed the whole feature.
+  is('a VALID zone still clears', stillFresh(t, HER, later) === false);
+}
 console.log(`\n  ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
