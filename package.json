@@ -26,6 +26,7 @@
     "test:who-words": "node --experimental-strip-types scripts/test-who-words.mts",
     "test:day-seal": "node --experimental-strip-types scripts/test-day-seal.mts",
     "test:ratelimit": "node --experimental-strip-types scripts/test-ratelimit.mts",
+    "test:strip-location": "node --experimental-strip-types scripts/test-strip-location.mts",
     "test:inline": "node scripts/test-inline-scope.mjs",
     "test:us-land": "node scripts/test-us-land.mjs",
     "audit:upload": "node scripts/audit-upload-ack.mjs"
