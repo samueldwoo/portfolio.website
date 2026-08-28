@@ -465,6 +465,10 @@ try {
 
   /* ---- THE SHAPE OF THE WAIT — a separate question from correctness -------------
      The song post says "it's up. I'll see it." in place and holds it 700ms before it
+     hands over; the photograph now holds 300ms, deliberately and for a recorded reason
+     (day.astro's HANDOVER_MS). What is asserted here is that she is ACKNOWLEDGED before
+     the page goes away, never a duration — a timing assertion would fail on a slow
+     machine and would also have to be edited every time that number is tuned.
      hands over to the server. This path is being compared against that. Run against a
      SLOW response, because over localhost the post finishes before there is any wait to
      have a shape. */

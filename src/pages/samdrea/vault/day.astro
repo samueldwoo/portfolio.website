@@ -729,11 +729,33 @@ const whoWord = (w: Who): string => words.of(w);
            A ticking counter is a promise that something is still happening. Nothing
            below may be able to break that promise by throwing, which is what stop()
            is for. */
-        /* How long a confirmation stays on screen before the server takes over. 700ms,
-           the same as the song post, so the two halves of the wing do not feel like two
-           different products. Named rather than inlined twice, because two literals is
-           how they drift. */
-        var HANDOVER_MS = 700;
+        /* How long a confirmation stays on screen before the server takes over.
+
+           ~~700ms, the same as the song post, so the two halves of the wing do not feel
+           like two different products.~~ 300ms, and the song post is DELIBERATELY STILL
+           700. The divergence is the decision, so it is written down here rather than
+           looking like drift somebody should tidy up.
+
+           The 700 was right when it was written and the reason expired. It existed
+           because the words were the ONLY continuity across the hand-back: the upload
+           used to jump the page to `#post`, roughly a screen and a half down, so the
+           confirmation had to be read and held before a jarring move. `4c32e39` carries
+           her scroll position across instead, so the status line she is reading now
+           STAYS WHERE SHE IS LOOKING and the page arrives around it. Nothing needs
+           surviving, so the hold only has to be long enough to register.
+
+           Reported as "not instantaneous enough", and measured against a 2.5s response:
+           the reply landed at 2521ms and the reload did not start until ~3221ms. 400ms
+           of that was this constant doing a job the scroll fix had already done.
+
+           THE ACCEPTED COST is that the photograph and the song now hold for different
+           lengths of time. That asymmetry was argued against and chosen anyway, with the
+           reasoning above: the song never had the jump (it passes no fragment to
+           usLand — see public/us-land.js), so it never needed the long hold for this
+           reason and changing it would be a change with no cause. If the two ever feel
+           wrong side by side, move the SONG down to match rather than putting this
+           back. */
+        var HANDOVER_MS = 300;
 
         var sent = false;
         var ticker = 0;
