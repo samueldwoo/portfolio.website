@@ -99,7 +99,9 @@ import { isTimeZone, isWingDate, putReply, wingDate, type ReplyRecord } from '..
 // The one parser, the one metadata resolver, the one text cleaner, and the SAME
 // field caps as his side — a shorter note on her card would be an asymmetry
 // nobody chose. See the header.
-import { MAX_ARTIST, MAX_NOTE, cleanText, resolveMetadata, resolveTrackId } from './song';
+// MAX_ARTIST is no longer imported: nothing here reads a typed artist any more, and it
+// still exists over in song.ts to cap what the embed page returns.
+import { MAX_NOTE, cleanText, resolveMetadata, resolveTrackId } from './song';
 import { timer, trace } from '../../../lib/us/trace';
 
 export const prerender = false;
@@ -203,7 +205,6 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
   // ---- parse ------------------------------------------------------------
   let rawUrl = '';
   let note = '';
-  let artist = '';
   let date = wingDate();
   let tz = '';
   try {
@@ -213,7 +214,6 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
 
     rawUrl = typeof fields.url === 'string' ? fields.url : '';
     note = cleanText(fields.note, MAX_NOTE);
-    artist = cleanText(fields.artist, MAX_ARTIST);
 
     /* WHERE SHE WAS WHEN SHE POSTED IT, from a hidden field the page fills in with
        Intl.DateTimeFormat().resolvedOptions().timeZone. Same treatment as the field
@@ -260,14 +260,13 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
   const reply: ReplyRecord = {
     date,
     id,
-    // WHAT SHE TYPED WINS, exactly as it does on my side — the resolver only ever
-    // fills a blank. This field used to be missing from her form entirely, on the
-    // reasoning that a third input is friction at 1am. That was true and it was
-    // still wrong: Spotify's credential-free metadata endpoint returns no artist,
-    // so her cards rendered without the line while mine rendered with it, and the
-    // asymmetry was visible on the page every single day. It is optional on both
-    // forms now, which costs her nothing and makes the two cards the same card.
-    artist: artist || meta.artist,
+    /* RESOLVED, FULL STOP — see song.ts, which lost the same override.
+       Her form used to have no artist field at all, then gained one because the
+       credential-free metadata path returned no artist and her cards rendered a line
+       poorer than mine every day. That asymmetry closed itself when the artist became
+       resolvable from the embed page: both sides now get it from the same place, which
+       is a better fix than a third input at 1am. */
+    artist: meta.artist,
     title: meta.title,
     art: meta.art,
     note,

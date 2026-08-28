@@ -309,11 +309,18 @@ const hersPickRaw = mostRecent<DayPair['hers']>(pairs, 'hers');
 
    Hidden, never deleted: the archive below still lists every day, and the store is
    untouched. See fresh.ts. */
+/* `||` AND NOT `??`, AND THAT ONE CHARACTER PAIR WAS A 500.
+   kv.ts stores `tz: ''` for a record whose poster never told us a zone — a first-class
+   value, not a bug, and what the no-JavaScript form produces every time since it has no
+   way to fill the hidden field. `??` only replaces null and undefined, so '' went
+   straight through to Intl.DateTimeFormat, which threw RangeError, and this page
+   answered 500 for both of them. Line 530 below already had `track.tz || fallbackTz`;
+   these two were the same decision made twice, differently, in one file. */
 const hisFresh = Boolean(
-  hisPickRaw.value && stillFresh(hisPickRaw.value.postedAt, hisPickRaw.value.tz ?? HIS_TZ, nowMs),
+  hisPickRaw.value && stillFresh(hisPickRaw.value.postedAt, hisPickRaw.value.tz || HIS_TZ, nowMs),
 );
 const hersFresh = Boolean(
-  hersPickRaw.value && stillFresh(hersPickRaw.value.postedAt, hersPickRaw.value.tz ?? HER_TZ, nowMs),
+  hersPickRaw.value && stillFresh(hersPickRaw.value.postedAt, hersPickRaw.value.tz || HER_TZ, nowMs),
 );
 /* The whole pick is emptied rather than just the track, so the date and the carried
    flag cannot survive their own song and label an empty slot. */
@@ -1503,24 +1510,28 @@ function minisFor(pair: DayPair): Mini[] {
                                 ></textarea>
                             </div>
 
-                            <div class="dj-field">
-                                <label class="dj-label" for="mine-artist">
-                                    Artist <span class="dj-opt">&mdash; optional</span>
-                                </label>
-                                <input
-                                    class="dj-input"
-                                    id="mine-artist"
-                                    name="artist"
-                                    type="text"
-                                    maxlength="120"
-                                    autocapitalize="words"
-                                    aria-describedby="mine-artist-hint"
-                                >
-                                <p class="dj-hint" id="mine-artist-hint">
-                                    Spotify only gives us the title and the art. Leave it blank and
-                                    we&rsquo;ll skip that line.
-                                </p>
-                            </div>
+                            {/* THE ARTIST FIELD IS GONE, and the reason is that it stopped
+                                being true.
+
+                                It existed because oEmbed returns a title and art but no
+                                artist, so its hint said "Spotify only gives us the title and
+                                the art. Leave it blank and we'll skip that line." Since
+                                9360186 the artist IS resolved, from the embed page, for every
+                                accepted link — so both halves of that sentence were false: we
+                                do get it, and blank no longer skips the line.
+
+                                It could have stayed as an override, because the server read
+                                `artist || meta.artist` and typed input won. Removed instead:
+                                the resolved value is what Spotify itself shows, so an override
+                                is a box asking one of us to retype a fact the page already
+                                knows, and a form field nobody has a reason to fill is worse
+                                than no field.
+
+                                THE COST, stated: artistViaEmbed() has four paths that return
+                                '' — non-200, no artists array, not an array, unreachable
+                                inside 3s. Any of those now means no artist line and no way to
+                                add one. That is where the feature started, and it is a missing
+                                line of type rather than a broken page. */}
 
                             <button class="dj-submit" id="mine-submit" type="submit">
                                 {slot.track ? 'swap it' : 'post it'}
@@ -1595,29 +1606,21 @@ function minisFor(pair: DayPair): Mini[] {
                                 ></textarea>
                             </div>
 
-                            {/* Optional, and new: her card used to have no way to
-                                carry an artist at all, so on the credential-free
-                                metadata path her songs rendered one line poorer
-                                than mine every single day. Same field, same cap,
-                                same optional treatment as the one on my form. */}
-                            <div class="dj-field">
-                                <label class="dj-label" for="reply-artist">
-                                    Artist <span class="dj-opt">&mdash; optional</span>
-                                </label>
-                                <input
-                                    class="dj-input"
-                                    id="reply-artist"
-                                    name="artist"
-                                    type="text"
-                                    maxlength="120"
-                                    autocapitalize="words"
-                                    aria-describedby="reply-artist-hint"
-                                >
-                                <p class="dj-hint" id="reply-artist-hint">
-                                    Spotify only gives us the title and the art. Leave it blank and
-                                    we&rsquo;ll skip that line.
-                                </p>
-                            </div>
+                            {/* HER ARTIST FIELD IS GONE TOO — see the note on my form above.
+
+                                It was added so her card could carry an artist at all, because
+                                on the credential-free metadata path her songs rendered one line
+                                poorer than mine every day. That gap closed itself: the artist
+                                now resolves from the embed page for both sides equally, which
+                                is a better fix than a field she had to fill.
+
+                                REMOVING THIS ONE ALSO TOUCHES THE SCRIPT, and that is the part
+                                worth knowing. reply-form is the only one of the two with a
+                                fetch path, and it read `form.elements.artist.value` — with the
+                                input gone that is `undefined.value`, a TypeError on submit, on
+                                HER form. npm run test:inline does NOT catch it: it resolves
+                                `form`, which exists. The `tz` line right beneath it already
+                                guards with `(form.elements.tz && …)` for the same reason. */}
 
                             <button class="dj-submit" id="reply-submit" type="submit">{herSubmit}</button>
 
@@ -1993,7 +1996,6 @@ function minisFor(pair: DayPair): Mini[] {
             var body = {
                 url: form.elements.url.value.trim(),
                 note: form.elements.note.value,
-                artist: form.elements.artist.value.trim(),
                 date: form.elements.date.value,
                 tz: (form.elements.tz && form.elements.tz.value) || ''
             };

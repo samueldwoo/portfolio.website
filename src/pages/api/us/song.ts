@@ -40,12 +40,23 @@
  * new applications, so anything built on it is dead on arrival.
  *
  * ARTIST: oEmbed does not return one at all — re-measured, not assumed, and its
- * `title` is the track name alone. It now comes from the EMBED page instead, which
- * carries an `"artists":[…]` array in about 10KB against the track page's 290KB. See
+ * `title` is the track name alone. It comes from the EMBED page instead, which carries
+ * an `"artists":[…]` array in about 10KB against the track page's 290KB. See
  * artistViaEmbed(): it runs alongside oEmbed rather than replacing it, because that
- * blob is undocumented and must never be load-bearing for the title or the art. It is
- * still an optional field anyone can type over, and empty is still a supported state
- * rather than a bug; her page just omits the line.
+ * blob is undocumented and must never be load-bearing for the title or the art.
+ *
+ * ~~It is still an optional field anyone can type over.~~ NOT ANY MORE. Both forms had
+ * an optional Artist input whose hint read "Spotify only gives us the title and the
+ * art" — true before the embed-page resolver, false after it, and the field survived
+ * the change as an override nobody had a reason to use. Both are gone, and the resolved
+ * value is now used unconditionally.
+ *
+ * EMPTY IS STILL A SUPPORTED STATE, and now it is the only recovery. artistViaEmbed()
+ * returns '' on four paths — non-200, no artists array, not an array, unreachable
+ * inside 3s — and with no input to fall back on, each of those means a card with no
+ * artist line. That is deliberate and it is where the feature started. If this ever
+ * becomes a real annoyance the answer is to make the resolver more robust, not to put
+ * the box back: a box only helps the person who happens to be posting at the time.
  *
  * ---------------------------------------------------------------------------
  * THE WEB API IS AN OPTIONAL UPGRADE, GATED ON CREDENTIALS THAT MAY NEVER EXIST
@@ -945,7 +956,6 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
   // ---- parse ------------------------------------------------------------
   let rawUrl = '';
   let note = '';
-  let artist = '';
   let date = wingDate();
   let tz = '';
   try {
@@ -955,7 +965,6 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
 
     rawUrl = typeof fields.url === 'string' ? fields.url : '';
     note = cleanText(fields.note, MAX_NOTE);
-    artist = cleanText(fields.artist, MAX_ARTIST);
 
     /* WHERE HE WAS WHEN HE POSTED IT, from a hidden field the page fills in with
        Intl.DateTimeFormat().resolvedOptions().timeZone.
@@ -1002,11 +1011,12 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
     date,
     id,
     title: meta.title,
-    // WHAT I TYPED WINS. The Web API's artist string is a good default and a bad
-    // override: for a feature or a remix I may deliberately want to name it
-    // differently, and having the server quietly replace what I typed would make
-    // the field feel broken. So the resolver only fills a blank.
-    artist: artist || meta.artist,
+    /* RESOLVED, FULL STOP — there is nothing to override any more.
+       This read `artist || meta.artist` while the form had a field, on the reasoning
+       that for a feature or a remix I might want to name it differently. The field is
+       gone (see today.astro): the resolver returns what Spotify itself shows, so the
+       box was asking one of us to retype a fact the page already had. */
+    artist: meta.artist,
     art: meta.art,
     note,
     postedAt: Date.now(),
