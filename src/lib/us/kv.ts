@@ -1835,9 +1835,26 @@ export async function getExchange(
 export interface Rhythm {
   /** Days with at least one song on them, either side. */
   days: number;
-  /** Days he posted. */
+  /**
+   * Days he posted.
+   *
+   * COMPUTED AND DELIBERATELY RENDERED NOWHERE. Both of these had a cell on the
+   * song page — "you sent 5 · of 7" beside "her sent 7 · all 7 days" — and it was
+   * removed on his say-so as reading like a scoreboard: two rows, the same total,
+   * and a low row nobody can retroactively fix. The `of N` hint was the worst of
+   * it, because it made each side a score out of a shared denominator.
+   *
+   * KEPT RATHER THAN DELETED, unlike the three reaction counts below, and the
+   * difference is the reason: those would have been WRONG (a total over whatever
+   * window happened to be read). These are correct and cost nothing to carry, and
+   * an honest use exists — a total on a page only one person reads, where there is
+   * no second row to compare against.
+   *
+   * So: fine to read. Do not put them side by side on a page both of them see.
+   * See the stat-strip header in vault/today.astro for the whole argument.
+   */
   his: number;
-  /** Days she posted. */
+  /** Days she posted. Same rule as `his` above — read that before rendering this. */
   hers: number;
   /**
    * Days BOTH of us posted. THE SHARED NUMBER, and the only one either page is

@@ -783,20 +783,60 @@ const herSubmit = !storeUnreachable && todayPair.hers ? 'replace it' : 'post it'
  * invites a comparison between two people who are not competing, and the smaller
  * mutual number is the one that measures the thing this feature is for. See
  * Rhythm.both in kv.ts.
+ *
+ * ---------------------------------------------------------------------------
+ * NOBODY GETS THEIR OWN NUMBER, AND NO NUMBER IS A FRACTION OF ANOTHER
+ *
+ * ~~Two more cells used to sit here — "you sent 5 · of 7" and "her sent 7 · all 7
+ * days", one per person, each hinting its count as a fraction of the days the two
+ * of them had between them.~~ Removed on his say-so, and the reason he gave is the
+ * reason the paragraph above already gives about streaks, applied one step
+ * further: it read as a scoreboard.
+ *
+ * It was worse than two bare counts, because the `of N` hint turned each side into
+ * a SCORE OUT OF THE SAME TOTAL. "5 of 7" next to "7 of 7" is a league table with
+ * two rows, and the person on the low row is being shown a number they cannot fix
+ * retroactively — on a page whose entire purpose is that something arrived today.
+ * It also made the better week the one where they both happened to post, rather
+ * than the one where the songs were good.
+ *
+ * So the strip now says only things that belong to BOTH of them: how long this has
+ * been going, how much of it they were both in, and the shared run. None of those
+ * three can be moved by one person alone, which is the test a cell has to pass to
+ * be here.
+ *
+ * `rhythm.his` and `rhythm.hers` are still COMPUTED and are deliberately not
+ * rendered anywhere — see the note on them in kv.ts. Leaving them was the choice
+ * over deleting them: they are correct, they cost nothing, and an honest use exists
+ * (a total on a page only one person reads). Putting them back side by side on THIS
+ * page is the thing that was asked for and then removed.
+ *
+ * BOTH TOTALS SHOW NOW, where before they were mutually exclusive — `both` won and
+ * `days` was only the fallback for having no mutual day yet. He asked for the two
+ * numbers, and they answer different questions: `days` is how long there has been a
+ * song at all, `both` is how much of that they were both in.
  */
 const stats: Array<{ label: string; value: string; hint?: string }> = [];
 const since = rhythm.first ? `since ${wingDateLabel(rhythm.first, { withYear: true })}` : undefined;
-if (rhythm.both > 0) {
-  stats.push({
-    label: 'both of us',
-    value: String(rhythm.both),
-    hint: since,
-  });
-} else if (rhythm.days > 0) {
-  // Nothing mutual yet. Still say how long this has been going, because "day one"
-  // and "day nine, and we keep missing each other" are different facts.
+/* The span first, because it is the bigger number and the one that says how long
+   this has been a thing. "day one" and "day nine, and we keep missing each other"
+   are different facts and both deserve saying. */
+if (rhythm.days > 0) {
   stats.push({ label: rhythm.days === 1 ? 'day' : 'days', value: String(rhythm.days), hint: since });
 }
+/* No hint. `since` belongs to the span above, and anything else here would be a
+   fraction of it — which is the thing this strip stopped doing. */
+if (rhythm.both > 0) {
+  stats.push({ label: 'both of us', value: String(rhythm.both) });
+}
+/* KEPT ON PURPOSE, AND ASKED ABOUT DIRECTLY when the per-person cells came out.
+   The case for dropping it too is real and was put: a streak is a chain you can
+   break, and "don't break the chain" is pressure even when it is shared. It stays
+   because it passes the test the other two cells pass — a number neither of them
+   can move alone — and because it is already hedged in the two ways that matter:
+   it is absent below 2, and it counts back from yesterday rather than resetting to
+   zero every midnight. `rhythm.best` was offered as the softer alternative (a
+   longest-ever run can only go up) and not taken. */
 if (rhythm.streak > 1) {
   // `> 1` and not `> 0`: "1 in a row" is not a streak, it is a Tuesday.
   stats.push({
@@ -804,28 +844,6 @@ if (rhythm.streak > 1) {
     value: String(rhythm.streak),
     hint: rhythm.streakLive ? 'both of us' : 'through yesterday',
   });
-}
-/** Both sides get a cell, built by the same expression, or neither would. */
-const sideCell = (label: string, count: number) =>
-  count > 0
-    ? {
-        label,
-        value: String(count),
-        hint:
-          rhythm.days > 1
-            ? count === rhythm.days
-              ? `all ${rhythm.days} days`
-              : `of ${rhythm.days}`
-            : undefined,
-      }
-    : null;
-/* Also from the reader's side. `rhythm.his` is always Sam's count and
-   `rhythm.hers` is always hers — the DATA is fixed; only the label flips. */
-for (const cell of [
-  sideCell(mineIsHis ? 'you sent' : `${theirWord} sent`, rhythm.his),
-  sideCell(mineIsHis ? `${theirWord} sent` : 'you sent', rhythm.hers),
-]) {
-  if (cell) stats.push(cell);
 }
 
 /* ============================================================================
