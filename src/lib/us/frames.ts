@@ -502,8 +502,33 @@ export async function putFrame(input: {
         // The SNIFFED type, never the declared one. This is the value R2 hands
         // back on the presigned GET, so it is what the browser will believe.
         'Content-Type': sniffed.type,
-        // Nothing else may cache a private photograph.
-        'Cache-Control': 'private, max-age=0, no-store',
+        /* `private` KEEPS OTHERS OUT; `no-store` USED TO KEEP HER OUT TOO, and that
+           was the whole of the reload lag on her phone.
+
+           ~~Nothing else may cache a private photograph.~~ The intent was right and
+           the header was too broad. `private` already forbids every SHARED cache —
+           Vercel's CDN, a corporate proxy — from holding these bytes, which is the
+           actual threat. `no-store` additionally forbade HER OWN BROWSER, on bytes
+           that are being painted onto her screen at that moment. There is nothing to
+           protect there and it cost a full re-download of every photograph on the
+           page, over cellular, on every single refresh.
+
+           That is what `photo/[id].ts` calls step (2) in its cache header comment: it
+           went to the trouble of bucketing the presigned URL so it is STABLE and
+           therefore cacheable, and then said in as many words that the win is worth
+           nothing unless the object itself permits caching — "easy to forget because
+           nothing in this repo can check it". It was forgotten right here. It is
+           checked now, by test:frames-key.
+
+           `immutable` is not decoration: the key carries the upload's millisecond, so
+           an object at this key can never have different bytes. A week matches the
+           example in that same comment. Longer buys nothing anyway, because a new
+           900s presign bucket is a new URL and therefore a new cache entry.
+
+           ONLY NEW UPLOADS. R2 stores this at PUT time, so the three existing
+           photographs keep `no-store` until they are reposted — the same "until
+           reposted" caveat as their missing pixel dimensions. */
+        'Cache-Control': 'private, max-age=604800, immutable',
       },
       /* An explicit ArrayBuffer slice rather than the Uint8Array itself. TS's
          BodyInit wants `Uint8Array<ArrayBuffer>` and a view read off a request

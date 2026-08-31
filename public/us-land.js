@@ -63,13 +63,41 @@
        already looking at the thing the anchor points at. The jump cannot take her
        anywhere more relevant than where she already was; it can only move her.
 
-       So the offset is carried across the navigation and put back. The fragment stays
-       in the URL — `frame.ts` puts it in its no-JavaScript 303 as well, and a page
-       with no script must still land somewhere sensible.
+       The fragment stays in the URL — `frame.ts` puts it in its no-JavaScript 303 as
+       well, and a page with no script must still land somewhere sensible.
 
        THE REJECTED ALTERNATIVE was dropping `#post` from the hand-backs. It fixes the
        jump by removing the fallback: with JavaScript off there is then nothing at all
        aiming the browser at the form, on the path this wing guarantees.
+
+       ---------------------------------------------------------------------------
+       AND THE PIXEL OFFSET WAS THE WRONG THING TO KEEP — the second measurement
+
+       The first version of this saved `scrollY` and put it back. It did that
+       perfectly and she was still thrown about on her phone, which is the useful
+       kind of failure: the mechanism worked and the promise was wrong.
+
+       Measured on 2026-08-31 with a harness that finally had IMAGES in it:
+       scrollY 400 -> 400, and `#post` moved from 365px down the viewport to 1098px.
+       733 pixels, with the offset restored exactly.
+
+       Because a successful upload ADDS A PHOTOGRAPH ABOVE THE FORM. Her slot was
+       empty and now it holds a frame, so the form has genuinely moved further down
+       the document — and holding scrollY constant therefore GUARANTEES she is looking
+       at something else. On the real page it is worse than the harness: frames render
+       `<img width={f.w || undefined}>`, her three existing photographs have no stored
+       dimensions, so they reserve no box and grow from zero height when the bytes land,
+       long after load on a phone on cellular.
+
+       So what is preserved is the ELEMENT'S POSITION ON SCREEN, not the scroll offset.
+       The fragment already names the element that matters; instead of slamming it to
+       the top of the viewport we keep it exactly where she had it. Content appearing
+       above it then moves the page under her rather than moving her.
+
+       AND IT IS RE-APPLIED AS THE PAGE SETTLES, because one pass cannot work when the
+       thing that moves the form is an image that has not downloaded yet. It stops at a
+       deadline, and it stops INSTANTLY if she touches the screen — a correction that
+       fights a real finger is worse than the drift it is fixing.
        --------------------------------------------------------------------------- */
 
     var KEY = 'us:land:scroll';
@@ -79,12 +107,27 @@
        later load. 10s is far longer than any of these navigations and far shorter
        than a browsing session. */
     var FRESH_MS = 10000;
+    /* How long to keep correcting after load. Long enough for an unsized photograph to
+       arrive on a phone on cellular; short enough that it is over before she could have
+       read anything and decided to move. */
+    var SETTLE_MS = 2500;
 
-    function save() {
+    function save(hash) {
         try {
+            /* THE ELEMENT FIRST. `hash` is the fragment the caller was going to jump
+               to, which is by definition the thing on the page that matters. */
+            var el = hash ? document.querySelector(hash) : null;
+            if (el && el.getBoundingClientRect) {
+                sessionStorage.setItem(KEY, JSON.stringify({
+                    sel: hash,
+                    top: Math.round(el.getBoundingClientRect().top),
+                    at: Date.now(),
+                }));
+                return;
+            }
+            /* No such element — the caller named a fragment this page does not have.
+               Fall back to the offset, which is still better than an anchor jump. */
             var y = window.scrollY || window.pageYOffset || 0;
-            /* Zero is not worth restoring and writing it would mean a pointless
-               scrollTo on arrival, plus it is the value a fresh page already has. */
             if (y <= 0) return;
             sessionStorage.setItem(KEY, JSON.stringify({ y: Math.round(y), at: Date.now() }));
         } catch (err) {
@@ -105,33 +148,91 @@
         } catch (err) {
             return;
         }
-        if (!saved || typeof saved.y !== 'number' || typeof saved.at !== 'number') return;
+        if (!saved || typeof saved.at !== 'number') return;
         if (Date.now() - saved.at > FRESH_MS) return;
 
-        /* The document can be SHORTER than it was — a frame that expired out of the
-           window, a refusal that removed a card — so the offset is clamped rather
-           than trusted. An unclamped scrollTo past the end is silently ignored by the
-           browser and she would land at the top, which is its own reset. */
+        var hasElement = typeof saved.sel === 'string' && typeof saved.top === 'number';
+        if (!hasElement && typeof saved.y !== 'number') return;
+
         function go() {
-            var max = Math.max(
-                0,
-                document.documentElement.scrollHeight - window.innerHeight
-            );
+            if (hasElement) {
+                var el = document.querySelector(saved.sel);
+                /* The element can be absent on the page we landed on — a refusal that
+                   removed the section, a different route. Nothing sensible to do, and
+                   scrolling somewhere arbitrary is worse than leaving her at the top. */
+                if (!el) return;
+                var delta = el.getBoundingClientRect().top - saved.top;
+                /* Sub-pixel deltas are layout noise and scrolling by them causes a
+                   visible twitch on iOS without moving anything. */
+                if (Math.abs(delta) < 1) return;
+                window.scrollBy(0, delta);
+                return;
+            }
+            /* The document can be SHORTER than it was, so the offset is clamped rather
+               than trusted. An unclamped scrollTo past the end is silently ignored and
+               she would land at the top, which is its own reset. */
+            var max = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
             window.scrollTo(0, Math.min(saved.y, max));
         }
 
-        /* AFTER the browser has done its own fragment jump, or it simply wins. Two
-           passes on purpose: the first lands her immediately so there is no visible
-           travel, and the second corrects for layout that settled a frame later —
-           reserved image boxes are why that is usually a no-op now, but a web font
-           or a late stylesheet can still move things. rAF rather than a timeout so
-           it happens before paint. */
         go();
-        if (window.requestAnimationFrame) {
-            requestAnimationFrame(function () {
-                requestAnimationFrame(go);
-            });
+
+        /* ---- keep correcting until the page stops moving ----------------------
+
+           ONE PASS IS NOT ENOUGH and that is the whole lesson of the second
+           measurement: the thing that displaces the form is an image still in flight.
+           So this re-applies on anything that changes layout, and gives up on a
+           deadline.
+
+           SHE INTERRUPTS IT INSTANTLY. `touchstart` rather than `scroll`, deliberately:
+           our own scrollBy fires `scroll`, so listening for that would make the fix
+           cancel itself on its first correction. A finger, a wheel or a key is
+           unambiguous intent; a scroll event is not. */
+        var done = false;
+        function stop() {
+            if (done) return;
+            done = true;
+            if (window.removeEventListener) {
+                window.removeEventListener('load', tick, true);
+                window.removeEventListener('touchstart', stop, true);
+                window.removeEventListener('wheel', stop, true);
+                window.removeEventListener('keydown', stop, true);
+                window.removeEventListener('pointerdown', stop, true);
+            }
+            if (observer && observer.disconnect) observer.disconnect();
+            if (timer) clearInterval(timer);
         }
+        function tick() {
+            if (done) return;
+            go();
+        }
+
+        var observer = null;
+        try {
+            if (window.ResizeObserver) {
+                /* Watching the DOCUMENT's height rather than each image: it catches a
+                   late stylesheet and a web font too, and it needs no knowledge of what
+                   is on the page. Supported on iOS 13.4+, which is well below anything
+                   either phone runs. */
+                observer = new ResizeObserver(tick);
+                observer.observe(document.documentElement);
+            }
+        } catch (err) {
+            observer = null;
+        }
+        /* A backstop for browsers without ResizeObserver, and for a growth it somehow
+           does not report. 120ms is imperceptible and the whole thing is over in
+           SETTLE_MS. */
+        var timer = setInterval(tick, 120);
+
+        if (window.addEventListener) {
+            window.addEventListener('load', tick, true);
+            window.addEventListener('touchstart', stop, true);
+            window.addEventListener('wheel', stop, true);
+            window.addEventListener('keydown', stop, true);
+            window.addEventListener('pointerdown', stop, true);
+        }
+        setTimeout(stop, SETTLE_MS);
     }
 
     /* Is there an offset waiting for us? Read here, at parse time, because the two
@@ -167,13 +268,28 @@
         } catch (err) { /* the browser may also have a go; restore() still runs */ }
     }
 
-    /* This file is loaded WITHOUT defer, so the document is usually still parsing
-       here and there is nothing to scroll yet. `pageshow` rather than `load` because
-       it also fires for a back-forward-cache restore, which is the other way she
-       arrives at a page she has already scrolled. */
+    /* AS SOON AS THE ELEMENT EXISTS, WHICH IS NOT THE SAME AS WHEN THE PAGE IS DONE.
+
+       This used to wait for `pageshow`, and a mutation test is what showed the cost:
+       removing the whole settle-correction loop below changed nothing, because
+       `pageshow` fires AFTER `load`, and `load` already waits for every image. So the
+       first correction was always happening on a fully settled page — the loop was
+       untested, and worse, the restore itself was LATE. On a phone on cellular that
+       means she watches the page sit at the top or at the anchor for a second or two
+       and then get yanked into place, which is the same disorientation wearing a
+       different hat.
+
+       So the first pass runs at DOMContentLoaded, when the form exists and the
+       photographs almost certainly do not, and the loop above corrects it as they
+       land. That makes the loop load-bearing, which makes it testable.
+
+       This file is loaded WITHOUT defer, so `loading` is the normal state here. */
     if (incoming) {
-        if (document.readyState === 'complete') restore();
-        else window.addEventListener('pageshow', restore);
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', restore, { once: true });
+        } else {
+            restore();
+        }
     }
 
     /**
@@ -193,7 +309,7 @@
            behaviours with this code — a strictly larger blast radius for no gain, on
            pages nobody reported a problem with.
            So: no hash, no interference. */
-        if (hash) save();
+        if (hash) save(hash);
         var sameDocument = location.pathname === path && location.search === (search || '');
         if (sameDocument) {
             /* The fragment is set first so a browser that ignores the restore above

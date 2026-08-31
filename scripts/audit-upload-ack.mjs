@@ -170,15 +170,55 @@ const server = createServer(async (req, res) => {
     return res.end(r.raw ? r.body : JSON.stringify(r.body));
   }
 
+  /* A SLOW, UNSIZED IMAGE — the thing the first version of this harness did not have.
+
+     The real page renders each frame as `<img width={f.w || undefined} …>`, so a
+     photograph with no STORED dimensions reserves no box: it is zero-height until the
+     bytes arrive and then suddenly is not. Her three existing photographs have no
+     stored dimensions. The frames also sit ABOVE the post form, so that growth pushes
+     the form down after load.
+     The old mock had no images at all, which is exactly why it scored 400 -> 400 while
+     her phone still threw her about. A harness that cannot express the failure reports
+     the absence of it. */
+  if (url.pathname === '/mock-frame.png') {
+    const delay = Number(url.searchParams.get('ms') || 400);
+    await new Promise((rs) => setTimeout(rs, delay));
+    /* A 1x1 PNG, stretched by CSS to a real height. The BYTES do not need to be big;
+       what matters is that the element has no intrinsic size until it loads. */
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==',
+      'base64',
+    );
+    res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-store' });
+    return res.end(png);
+  }
+
   if (url.pathname === PAGE) {
     log.push({ kind: 'render', search: url.search });
     res.writeHead(200, { 'Content-Type': 'text/html', 'Cache-Control': 'no-store' });
+    /* AFTER A SUCCESSFUL POST THE PAGE IS TALLER BY ONE WHOLE FRAME, and that is the
+       part no pixel-offset restore can survive. Her slot was empty; now it holds a
+       photograph, ABOVE the form. So the form has genuinely moved down the document
+       and "put her back at the same scrollY" must show her different content.
+       This is the case the fix has to handle, so the mock has to produce it. */
+    const posted = url.search.includes('ok=posted');
+    const frames = (posted ? 2 : 1);
+    const imgs = Array.from(
+      { length: frames },
+      (_, i) =>
+        `<figure class="fr-frame" style="margin:0 0 24px"><img class="fr-img" src="/mock-frame.png?ms=${
+          400 + i * 150
+        }&n=${i}" style="display:block;width:100%;height:auto" alt=""></figure>`,
+    ).join('');
     /* us-land.js is served from the real file, not stubbed. day.astro's land() now
        delegates to window.usLand, so a harness that omitted it would exercise the
        console.error fallback and quietly pass on the OLD assign() behaviour — the very
        bug case 2 exists to catch. Read from disk so it cannot drift from what ships. */
     return res.end(`<!doctype html><meta charset=utf-8><title>day</title>
-<body>${FORM}<div id="post" style="margin-top:1500px">anchor</div>
+<body style="margin:0">
+<section class="fr-today" style="padding:16px">${imgs}</section>
+<section class="fr-post" id="post" style="padding:16px">${FORM}</section>
+<div style="height:900px">below</div>
 <script>${US_LAND}</script>
 <script>var maxBytes=${MAX_BYTES};</script>
 <script>${CLIENT}</script>
@@ -337,14 +377,35 @@ try {
         if (t !== last) window.__seen.push({ text: t, at: Date.now() - window.__t0 });
       }, 60); 1`);
 
-    /* WHERE SHE WAS LOOKING. Set before the submit and read back after the hand-back,
-       because "the view window gets reset on mobile" is a claim about a number and was
-       argued about before it was measured. The mock page is deliberately 1500px tall
-       with #post at the bottom, so this is the real geometry the anchor jump exploits. */
+    /* WHERE SHE WAS LOOKING, MEASURED AS THE FORM'S POSITION ON SCREEN.
+
+       NOT raw scrollY, and that correction is the whole point of this pass. A
+       successful upload adds a photograph ABOVE the form, so the form genuinely moves
+       further down the document and its scrollY legitimately changes. Asserting scrollY
+       therefore either fails on correct behaviour or — as the first version of this
+       harness did, against a mock with no images — passes while measuring a page that
+       could not move.
+
+       What she experiences is "the thing I was looking at is where I left it". That is
+       the form's offset from the top of the VIEWPORT, and it is the only number here
+       that means what the complaint means. */
+    const anchorTop = () =>
+      ev(`(function(){var e=document.querySelector('#post');
+           return e ? Math.round(e.getBoundingClientRect().top) : null;})()`);
+
+    /* BOTH READINGS MUST DESCRIBE A SETTLED PAGE. The first version scrolled and
+       measured immediately, while the mock's own slow images were still loading, so it
+       compared an unsettled BEFORE against a settled AFTER and part of the drift it
+       reported was the first page finishing rather than the hand-back moving anything.
+       Wait for the images, then scroll, then read. */
+    if (opts.scrollTo !== undefined) {
+      await poll('Array.prototype.every.call(document.images, function(i){return i.complete;}) ? "loaded" : null', 4000);
+    }
     const scrollBefore =
       opts.scrollTo === undefined
         ? null
         : await ev(`window.scrollTo(0, ${opts.scrollTo}); Math.round(window.scrollY)`);
+    const anchorBefore = opts.scrollTo === undefined ? null : await anchorTop();
 
     await ev(`document.querySelector('[data-fr-form]')
       .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); 1`);
@@ -378,6 +439,11 @@ try {
       netNoise: netNoise.slice(),
       scrollBefore,
       scrollAfter: opts.scrollTo === undefined ? null : await ev('Math.round(window.scrollY)'),
+      anchorBefore,
+      /* Read LAST, after the sleeps above, so the slow unsized images have landed and
+         the document has finished growing. Reading it early would measure the page
+         mid-settle and score the bug as fixed. */
+      anchorAfter: opts.scrollTo === undefined ? null : await anchorTop(),
       docHeight: await ev('Math.round(document.documentElement.scrollHeight)'),
       viewport: await ev('Math.round(window.innerHeight)'),
       hash: await ev('location.hash'),
@@ -448,17 +514,20 @@ try {
     });
     if (!r) continue;
     console.log(
-      `      before=${r.scrollBefore} after=${r.scrollAfter} doc=${r.docHeight} viewport=${r.viewport}`,
+      `      scrollY ${r.scrollBefore} -> ${r.scrollAfter}   #post on screen ${r.anchorBefore} -> ${r.anchorAfter}` +
+        `   drift ${Number(r.anchorAfter) - Number(r.anchorBefore)}px   doc=${r.docHeight} viewport=${r.viewport}`,
     );
     is('it actually scrolled before submitting', r.scrollBefore === 400, r.scrollBefore);
     is('THE PAGE STILL RE-FETCHED', r.renders.length >= 1, r.renders);
-    is('SHE IS WITHIN 4px OF WHERE SHE WAS', Math.abs(Number(r.scrollAfter) - 400) <= 4, {
-      before: r.scrollBefore,
-      after: r.scrollAfter,
-    });
-    /* The specific old behaviour, named so a regression is recognisable rather than
-       just numerically wrong: 1086 was the anchor's offset on this document. */
-    is('and NOT dumped at the #post anchor', Number(r.scrollAfter) < 900, r.scrollAfter);
+    /* THE ASSERTION THAT MATTERS. The form must be where she left it ON SCREEN, after
+       the slow unsized images have finished growing the page above it. 24px of slack:
+       the images land at slightly different times and one re-layout can leave a
+       sub-line-height difference nobody would call disorienting. */
+    is(
+      'THE FORM IS WHERE SHE LEFT IT ON SCREEN',
+      Math.abs(Number(r.anchorAfter) - Number(r.anchorBefore)) <= 24,
+      { before: r.anchorBefore, after: r.anchorAfter, drift: Number(r.anchorAfter) - Number(r.anchorBefore) },
+    );
     is('the fragment is still in the URL for the no-JS path', r.hash === FRAGMENT, r.hash);
     is('no thrown exception', r.thrown.length === 0, r.thrown);
   }

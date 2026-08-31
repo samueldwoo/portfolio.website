@@ -21,6 +21,7 @@
 /* frame-keys.ts, NOT frames.ts — and that is the point of the split. frames.ts
    pulls in the R2 client and the Upstash config, so importing it here would mean a
    key test that loads a credential path. This module's only import is a type. */
+import { readFileSync } from 'node:fs';
 import { frameKey, frameKeyAt, keyFromHash } from '../src/lib/us/frame-keys.ts';
 
 let pass = 0, fail = 0;
@@ -146,6 +147,46 @@ console.log('\n  --- 6. the builders refuse to make a key they cannot vouch for 
   throws('a third person', () => frameKeyAt(DAY, 'them' as never, 'jpg', 1));
   throws('an extension we do not sniff', () => frameKeyAt(DAY, 'her', 'svg', 1));
   throws('the legacy builder still guards its date', () => frameKey('nope', 'her', 'jpg'));
+}
+
+/* ===========================================================================
+   7. THE STORED OBJECT MUST BE CACHEABLE BY HER OWN BROWSER
+
+   `photo/[id].ts` bucketed the presigned URL so it is STABLE and therefore
+   cacheable, and then wrote down that the win is worth nothing unless the object
+   itself allows caching — "easy to forget because nothing in this repo can check
+   it". It was forgotten: putFrame() stored `no-store`, so every refresh
+   re-downloaded every photograph over her cellular connection.
+
+   THIS IS A SOURCE ASSERTION AND THAT NEEDS JUSTIFYING, because a grep that
+   quietly matches nothing is exactly the failure `CLAUDE.md` warns about. The
+   invariant genuinely IS textual: it is a header literal in one PUT, and proving
+   it any other way means a real R2 write, which is the thing that destroyed a
+   photograph. So the extraction asserts it found the right block FIRST, and only
+   then makes the claim.
+   ========================================================================= */
+console.log('\n  --- 7. the frame object lets HER browser cache it ---');
+{
+  const src = readFileSync(new URL('../src/lib/us/frames.ts', import.meta.url), 'utf8');
+  /* The PUT in putFrame(), located by the two things that must be next to each
+     other: the method and the Content-Type comment about sniffing. */
+  const put = /method: 'PUT',[\s\S]{0,3000}?signal: AbortSignal/.exec(src);
+  is('the putFrame PUT block was found at all', put !== null, put === null ? 'no match' : put[0].length);
+  const block = put ? put[0] : '';
+  /* The sentinel: if this is not the frame PUT, every assertion below is vacuous. */
+  is('and it is the frame upload, not some other PUT', block.includes('sniffed.type'), block.slice(0, 60));
+
+  const cc = /'Cache-Control':\s*'([^']+)'/.exec(block);
+  is('it sets a Cache-Control', cc !== null, cc === null ? 'absent' : cc[1]);
+  const value = cc ? cc[1] : '';
+  /* THE ONE THAT MATTERS. no-store forbids her own browser, which is the reload
+     lag; `private` is what forbids everyone else and must stay. */
+  is('it is NOT no-store', !/no-store/.test(value), value);
+  is('it is still private, so no shared cache may hold it', /\bprivate\b/.test(value), value);
+  is('it has a non-zero max-age', /max-age=([1-9]\d*)/.test(value), value);
+  /* The key carries the upload millisecond, so the bytes at a key can never
+     change and immutable is honest rather than optimistic. */
+  is('it is immutable, which the millisecond key earns', /\bimmutable\b/.test(value), value);
 }
 
 console.log(`\n  ${fail ? 'FAILED' : 'all good'} — ${pass} passed, ${fail} failed\n`);
