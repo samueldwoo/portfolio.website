@@ -784,9 +784,9 @@
 .cm-own-panel {
     display: grid;
     grid-template-columns: 1fr auto;
-    gap: 8px;
+    gap: 6px;
     align-items: center;
-    margin-top: 8px;
+    margin-top: 6px;
 }
 
 .cm-own-panel .cm-form {
@@ -798,29 +798,70 @@
     grid-column: 1 / -1;
 }
 
-/* SMALLER, and the height floor is the part that does not move. 44px is the iOS touch
-   minimum, and a smaller label does not make a thumb smaller — so the padding and the
-   tracking come in and the box does not. */
+/* ---- 36px, AND THAT IS A DELIBERATE STEP DOWN FROM 44 -------------------------
+   ~~44px is the iOS touch minimum and does not move~~ was the previous line here, and it
+   was quoting the wrong standard for this control. 44x44 is WCAG 2.5.5 Target Size, which
+   is level AAA, and it is Apple's guideline for PRIMARY controls. The AA requirement is
+   2.5.8 Target Size (Minimum): 24x24 CSS px. 36px clears that by half again.
+
+   Spending 44px here was ranking the wrong thing. Editing a comment you already wrote is
+   the rarest action on this page and it sits inside a disclosure that is shut by default —
+   it does not get to be as prominent as `post`, which stays at 44 along with every other
+   primary control in the wing. Fixing a typo should feel like a footnote. */
+.cm-own-panel .cm-go,
+.cm-own-panel .cm-drop {
+    min-height: 36px;
+    margin: 0;
+    font-size: 0.6rem;
+    letter-spacing: 0.09em;
+}
+
 .cm-own-panel .cm-go {
     grid-column: 1;
     justify-self: start;
-    margin: 0;
-    padding: 0 12px;
-    font-size: 0.64rem;
-    letter-spacing: 0.1em;
+    padding: 0 10px;
 }
 
 .cm-own-panel .cm-drop {
     grid-column: 2;
     justify-self: end;
-    margin: 0;
 }
 
-/* Two rows at most before it scrolls. The edit box was `rows="3"` at 16px, which is a
-   90px panel to change a sentence; the markup is `rows="2"` now and this caps a drag. */
-.cm-input--edit {
-    max-height: 8.5rem;
+
+/* ---- ONE ROW, AND THE FONT SIZE IS THE ONE THING THAT CANNOT SHRINK -------------
+   `rows="3"` -> `"2"` -> `"1"`: about 90px, then 64, now nearer 40. It holds one sentence
+   and grows by drag when it needs to, which is the honest size for a box whose job is
+   fixing a typo.
+
+   16px STAYS, and that is not a style choice. iOS Safari zooms the whole page when a
+   focused input's text is under 16px and does NOT zoom back out, so a 14px box here would
+   cost her the layout for the rest of the visit. Everything else in this panel got
+   smaller; the thing she types into cannot. The padding and the min-height are where the
+   height came from instead. */
+.cm-own-panel .cm-input--edit {
+    /* `min-height: 0` SO `rows="1"` GOVERNS EXACTLY, and this is the fix for something
+       that looked like a rendering bug. The shared .cm-input carries min-height: 44px;
+       overriding it to 40 left the box sitting BETWEEN one line and two, so a wrapped
+       comment showed its first line and then the top half of the second, sliced through
+       the glyphs at the bottom edge. A partially visible line of text does not read as
+       "there is more, scroll" — it reads as broken.
+
+       Letting the browser size it from `rows` is exact by construction: one line plus the
+       padding and border, no arithmetic to drift. `resize: vertical` is inherited, so she
+       can still pull it open, and max-height stops a drag burying the photograph.
+
+       SCOPED TO `.cm-own-panel` FOR SPECIFICITY, not for tidiness. As a bare
+       `.cm-input--edit` this rule was (0,1,0) and so is `.cm-input` — which is declared
+       LATER in this file, so it won every property the two share. min-height stayed 44px,
+       line-height stayed 1.45, and the box measured 1.12 lines: the exact sliced-glyph
+       symptom this rule exists to remove, still there after the first attempt at it. Two
+       classes at the same weight is a coin toss decided by source order. */
+    min-height: 0;
+    padding: 6px 8px;
+    line-height: 1.4;
+    max-height: 6rem;
 }
+
 
 /* NARROW PHONES GET THE SAME IDEA WITH THE TRACKS THEY HAVE. There are only two columns
    here and the clock is already alone in the second one, so `edit` cannot sit beside it —
