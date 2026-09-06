@@ -202,7 +202,10 @@ export const SONG_WEEK_PROMPT = 'the song you played most this week, honestly';
  * counts: a named artist is dead on a day neither of them feels like that artist, and
  * a list written by somebody who has never seen their library is guessing. The second
  * objection is the one that mattered, and it was answerable — these names were read
- * out of their OWN song shelves, so none of them is a guess.
+ * out of their OWN song shelves, so none of them is a guess. The one exception is
+ * marked below as an exception rather than quietly folded in: it was asked for by name,
+ * which is a better provenance than a shelf read and a worse one than nothing, and the
+ * distinction is only useful if it stays visible.
  *
  * THE FILTER IS "DEEP ENOUGH TO HAVE A FAVOURITE", and it is doing two jobs. The
  * shelves hold 26 distinct artists and most were posted exactly once, including
@@ -236,6 +239,12 @@ export const NAMED_ARTISTS: readonly string[] = [
   'BigXthaPlug',
   /* Sings rather than raps, so it gets the song and feature shapes and no verse. */
   'PARTYNEXTDOOR',
+  /* THE ONE NAME HERE THAT IS NOT FROM THEIR SHELVES — asked for directly, and asked
+     for as ONE PROMPT rather than the four a rapper usually gets. Worth keeping that
+     restraint: his catalogue is the deepest of anybody on this list, so "your favourite
+     Kanye song" is already an argument, and the verse and beat prompts would each open
+     a second one on a day that only needs the first. */
+  'Kanye',
   /* Not rappers at all — the song shape only. See cluster four below. */
   'Daniel Caesar',
   'Joji',
@@ -376,6 +385,8 @@ export const SONG_PROMPTS: readonly string[] = [
   'your favourite BigXthaPlug song',
   'your favourite PARTYNEXTDOOR song',
   'the best guest verse PARTYNEXTDOOR ever did',
+  /* Song shape only, on purpose — see NAMED_ARTISTS. */
+  'your favourite Kanye song',
 
   /* ---- named artists, cluster four: the ones who are not rappers, so only the
      song shape. A "best verse" prompt about a producer or a singer is a category
