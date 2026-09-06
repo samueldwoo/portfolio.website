@@ -759,6 +759,31 @@
 
 }
 
+/* ---- EDIT IN PLACE: THE PARAGRAPH BECOMES THE FIELD ---------------------------
+   Open, the message was shown TWICE — once as the paragraph and again inside the box
+   below it. That duplication is most of what made the panel feel bulky: half its height
+   was a second copy of a sentence already on screen two lines up.
+
+   So the paragraph is hidden while the panel is open and the box stands in its place.
+   Nothing is duplicated, the item barely grows, and the edit reads as happening TO the
+   comment rather than in a form about it.
+
+   `:has()` IS THE ONLY WAY ROUND HERE, because the relationship runs backwards. The
+   thing that changes state is `.cm-own`, and the thing that must react is `.cm-text`,
+   which comes BEFORE it in the DOM — there is no previous-sibling combinator. Safari
+   15.4+ and Chrome 105+, so her phone is covered.
+
+   AND THE FALLBACK IS TODAY'S BEHAVIOUR. Where `:has()` is unsupported the whole rule is
+   dropped, the paragraph stays visible above the box, and that is exactly what shipped
+   yesterday. Nothing breaks; it is only less tidy.
+
+   DISCARD IS THE DEFAULT, WHICH IS WHAT MAKES THIS SAFE. Closing the disclosure submits
+   nothing, so the stored comment is untouched and the paragraph returns as it was. Only
+   `save` writes. */
+.cm-item:has(.cm-own[open]) .cm-text {
+    display: none;
+}
+
 /* ---- THE OPEN PANEL ----------------------------------------------------------
    THE GRID IS ON THIS WRAPPER AND NOT ON THE `details`, and that is a browser fact
    rather than a preference: `display: grid` on a <details> does NOT make its children

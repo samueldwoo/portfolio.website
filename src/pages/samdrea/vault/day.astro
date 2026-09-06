@@ -696,7 +696,7 @@ const whoWord = (w: Who): string => words.of(w);
                                                                     class="cm-input cm-input--edit"
                                                                     id={`cm-edit-${cm.id}`}
                                                                     name="text"
-                                                                    rows="1"
+                                                                    rows={Math.min(4, Math.max(1, Math.ceil(cm.text.length / 32)))}
                                                                     maxlength={TEXT_MAX}
                                                                 >{cm.text}</textarea>
                                                                 <button class="cm-go" type="submit">save</button>
@@ -1402,6 +1402,41 @@ const whoWord = (w: Who): string => words.of(w);
         });
     });
 })();
+</script>
+
+<!-- ============================================================
+     UNSAVED EDITS ARE THROWN AWAY WHEN THE BOX CLOSES
+
+     The CSS already gives the important half of "discard by default": closing the
+     disclosure submits nothing, so the STORED comment is untouched and the paragraph
+     comes back as it was. This closes the small gap left inside one page visit — the
+     textarea keeps whatever was typed in it, so reopening the box would show a stale
+     draft rather than the comment as it stands.
+
+     `defaultValue` IS THE SERVER-RENDERED TEXT, which is precisely "the previous". No
+     data attribute, no copy kept in a variable that could drift from what was rendered.
+
+     AN IIFE PER DISCLOSURE, not a shared `var` across the loop. That is the `killer`
+     lesson in CLAUDE.md: `var` is function-scoped, so one binding reused across
+     iterations has every handler pointing at the last element. A `let` would also do it
+     and this file is ES5 by choice (see the ts(80006) note in HANDOFF.md).
+
+     PROGRESSIVE, NOT REQUIRED. With no script the reset does not happen and a reload
+     still discards the draft, which is the same guarantee one step coarser.
+     ============================================================ -->
+<script is:inline>
+    (function () {
+        var owns = document.querySelectorAll('.cm-own');
+        for (var i = 0; i < owns.length; i += 1) {
+            (function (own) {
+                var box = own.querySelector('textarea');
+                if (!box) return;
+                own.addEventListener('toggle', function () {
+                    if (!own.open) box.value = box.defaultValue;
+                });
+            })(owns[i]);
+        }
+    })();
 </script>
 </body>
 </html>
