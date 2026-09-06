@@ -158,7 +158,13 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
      iOS Safari omits Origin on same-origin form posts. See together.ts. */
   if (crossSite(request, url)) return answer(false, 403, 'cross-site');
 
-  const gate = await hit(clientKey(request, clientAddress), RATE_LIMIT, RATE_WINDOW_SEC);
+  /* NAMESPACED, like every other endpoint in the wing. This one read
+     `clientKey(...)` bare, so its bucket was `us:rl:<ip>` while all thirteen others
+     are `us:rl:<name>:<ip>` — no collision today precisely because everyone else is
+     prefixed, which makes it one careless omission away from two endpoints sharing a
+     40-per-10-minutes budget. Only visible on the Upstash tier: the in-process
+     limiter locally never comes near the limit. */
+  const gate = await hit(`comment:${clientKey(request, clientAddress)}`, RATE_LIMIT, RATE_WINDOW_SEC);
   if (!gate.ok) return answer(false, 429, 'rate', { retryAfter: gate.retryAfter });
 
   /* ---- the body, and only now ---- */

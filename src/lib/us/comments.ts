@@ -95,7 +95,11 @@ async function redis(cmds: (string | number)[][]): Promise<unknown[]> {
     res = await fetch(`${url.replace(/\/+$/, '')}/pipeline`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(cmds),
+      /* EVERY ARGUMENT AS A STRING, which is what frames.ts and together.ts both do.
+         Nothing this file sends is numeric today, so the body is byte-identical either
+         way — the mapping is here so the first numeric argument anyone adds does not
+         quietly go over the wire in a different shape from the other two helpers. */
+      body: JSON.stringify(cmds.map((c) => c.map(String))),
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
   } catch (err) {
@@ -107,7 +111,29 @@ async function redis(cmds: (string | number)[][]): Promise<unknown[]> {
   if (!res.ok) throw new CommentsError(`upstash answered ${res.status}`);
   const body = (await res.json()) as unknown;
   if (!Array.isArray(body)) throw new CommentsError('upstash returned a malformed pipeline response');
-  return body.map((r) => (r && typeof r === 'object' && 'result' in r ? (r as { result: unknown }).result : null));
+  /* ONE COMMAND, ONE REPLY. A pipeline that answers a different number of replies than
+     it was asked has already lost the mapping from command to result, and indexing into
+     it would silently attribute one command's answer to another. frames.ts checks this;
+     this file did not. */
+  if (body.length !== cmds.length) {
+    throw new CommentsError(`upstash answered ${body.length} replies for ${cmds.length} commands`);
+  }
+  return body.map((r, i) => {
+    const entry = r && typeof r === 'object' ? (r as { result?: unknown; error?: string }) : null;
+    /* A PER-COMMAND ERROR IS A FAILURE AND USED TO READ AS AN EMPTY ANSWER.
+       Upstash reports a command that failed as `{error: "..."}` beside the ones that
+       succeeded — HTTP is still 200, because the REQUEST was fine. This mapped that to
+       `null`, and null is indistinguishable from "the key holds nothing", so:
+         - a failed HDEL made deleteComment answer "gone." with the comment still there,
+           which is the bug this was found by;
+         - a failed HGETALL made the page say "nobody has said anything" about a
+           conversation it could not read, which is the one sentence this file's own
+           header says must never be shown in place of "I could not ask".
+       Throwing is what the header means by WRITES FAIL LOUD: the endpoint turns it into
+       502 `store`, and reads still fail soft because getThreadsSafe catches. */
+    if (entry?.error) throw new CommentsError(`upstash ${String(cmds[i][0])} failed: ${entry.error}`);
+    return entry && 'result' in entry ? entry.result : null;
+  });
 }
 
 /**
@@ -276,8 +302,16 @@ export async function deleteComment(ref: ThreadRef, id: string, by: Who): Promis
     }
     return true;
   }
-  await redis([['HDEL', THREAD_KEY(ref.date, ref.whose), id]]);
-  return true;
+  /* WHAT HDEL ACTUALLY REMOVED, AND NOT AN ASSUMPTION THAT IT DID.
+     This returned `true` the moment the command came back, so a reply of 0 — the field
+     was not there — became "gone." on the page with the comment still under the
+     photograph. Nothing anywhere said otherwise, which is what made it hard to see.
+     0 is reachable for real: the same comment deleted twice from two tabs, or a retry
+     after a response she never saw. Answering false sends it to the endpoint's
+     `no-such-comment`, whose sentence — "it may already be gone" — is true in every
+     one of those cases. */
+  const [removed] = await redis([['HDEL', THREAD_KEY(ref.date, ref.whose), id]]);
+  return Math.floor(Number(removed)) > 0;
 }
 
 /**
@@ -296,9 +330,16 @@ async function countComments(ref: ThreadRef): Promise<number> {
     return Object.keys(memory.get(THREAD_KEY(ref.date, ref.whose)) ?? {}).length;
   }
   const [raw] = await redis([['HLEN', THREAD_KEY(ref.date, ref.whose)]]);
+  /* A MALFORMED ANSWER MUST NOT READ AS "EMPTY" and let the cap through: an unreadable
+     count is treated as full, which refuses rather than over-fills.
+
+     `raw == null` FIRST, because that is the case the old test let past. It checked
+     `Number.isFinite(n) && n >= 0`, and `Number(null)` is 0 — finite and non-negative —
+     so a nil reply returned "empty thread" and the cap failed OPEN, the exact opposite
+     of what the sentence above promises. Same species as the `??` trap in CLAUDE.md: a
+     guard aimed at absence, defeated by a falsy value that coerces cleanly. */
+  if (raw == null) return Number.MAX_SAFE_INTEGER;
   const n = Math.floor(Number(raw));
-  // A malformed answer must not read as "empty" and let the cap through: treat an
-  // unreadable count as full, which refuses rather than over-fills.
   return Number.isFinite(n) && n >= 0 ? n : Number.MAX_SAFE_INTEGER;
 }
 

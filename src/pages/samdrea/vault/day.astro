@@ -640,7 +640,15 @@ const whoWord = (w: Who): string => words.of(w);
                                                 {cm.by === viewer && (
                                                     <details class="cm-own">
                                                         <summary class="cm-own-summary">change this</summary>
-                                                        <form class="cm-form" method="post" action="/api/us/comment">
+                                                        {/* `?whose=` FOR THE SAME REASON THE ADD FORM CARRIES IT.
+                                                            comment.ts reads it before it parses a body, so a
+                                                            refusal that fires early — a rate limit, an expired
+                                                            cookie — still lands back at this frame. Without it
+                                                            those answers arrive at the TOP of a long page with
+                                                            the comment still visible far below, which reads as
+                                                            "I pressed it and nothing happened". Only the add
+                                                            form had it. */}
+                                                        <form class="cm-form" method="post" action={`/api/us/comment?whose=${w}`}>
                                                             <input type="hidden" name="action" value="edit">
                                                             <input type="hidden" name="date" value={frameDate(w)}>
                                                             <input type="hidden" name="whose" value={w}>
@@ -659,7 +667,7 @@ const whoWord = (w: Who): string => words.of(w);
                                                         </form>
                                                         {/* ITS OWN FORM, so a delete is one deliberate press
                                                             and can never be what a mistyped edit does. */}
-                                                        <form class="cm-form" method="post" action="/api/us/comment">
+                                                        <form class="cm-form" method="post" action={`/api/us/comment?whose=${w}`}>
                                                             <input type="hidden" name="action" value="delete">
                                                             <input type="hidden" name="date" value={frameDate(w)}>
                                                             <input type="hidden" name="whose" value={w}>
@@ -673,29 +681,54 @@ const whoWord = (w: Who): string => words.of(w);
                                     </ol>
                                 )}
 
-                                <form
-                                    class="cm-form cm-form--add"
-                                    method="post"
-                                    action={`/api/us/comment?whose=${w}`}
-                                    data-cm-add
-                                >
-                                    <input type="hidden" name="action" value="add">
-                                    <input type="hidden" name="date" value={frameDate(w)}>
-                                    <input type="hidden" name="whose" value={w}>
-                                    <label class="cm-label" for={`cm-new-${w}`}>
+                                {/* BEHIND A DISCLOSURE, THE SAME ONE `change this` USES.
+                                    Open, this was a label, a two-row box and a button stacked
+                                    into roughly 140px — twice per page, directly under a
+                                    photograph, and at the same weight as the upload plate
+                                    below it. The room's one rule is that the photographs are
+                                    the only thing with any warmth in it, and a permanently
+                                    open write box competes with the picture it is about.
+
+                                    Collapsed it is one line of small type. That is also the
+                                    honest default: most visits are to LOOK, and the thread
+                                    above already reads without any of this on screen.
+
+                                    STILL NO JAVASCRIPT ANYWHERE IN IT. `details` is native, so
+                                    the disclosure works on a phone with scripts blocked, which
+                                    is the path this wing guarantees. */}
+                                <details class="cm-add">
+                                    <summary class="cm-add-summary">
                                         {threadOf(w).length > 0 ? 'say something back' : 'say something'}
-                                    </label>
-                                    <textarea
-                                        class="cm-input"
-                                        id={`cm-new-${w}`}
-                                        name="text"
-                                        rows="2"
-                                        maxlength={TEXT_MAX}
-                                        placeholder={w === viewer ? 'about your own picture' : ''}
-                                    ></textarea>
-                                    <button class="cm-go" type="submit" data-cm-go>leave it</button>
-                                    <p class="cm-status" data-cm-status role="status" aria-live="polite"></p>
-                                </form>
+                                    </summary>
+                                    <form
+                                        class="cm-form cm-form--add"
+                                        method="post"
+                                        action={`/api/us/comment?whose=${w}`}
+                                        data-cm-add
+                                    >
+                                        <input type="hidden" name="action" value="add">
+                                        <input type="hidden" name="date" value={frameDate(w)}>
+                                        <input type="hidden" name="whose" value={w}>
+                                        {/* SR-ONLY, because the summary above is now carrying
+                                            the visible words. The label still exists: a
+                                            textarea with no accessible name is a box a screen
+                                            reader announces as nothing at all, and `summary`
+                                            does not name the field inside it. */}
+                                        <label class="cm-label sr-only" for={`cm-new-${w}`}>
+                                            {threadOf(w).length > 0 ? 'say something back' : 'say something'}
+                                        </label>
+                                        <textarea
+                                            class="cm-input cm-input--add"
+                                            id={`cm-new-${w}`}
+                                            name="text"
+                                            rows="1"
+                                            maxlength={TEXT_MAX}
+                                            placeholder={w === viewer ? 'about your own picture' : ''}
+                                        ></textarea>
+                                        <button class="cm-go" type="submit" data-cm-go>leave it</button>
+                                        <p class="cm-status" data-cm-status role="status" aria-live="polite"></p>
+                                    </form>
+                                </details>
                             </div>
                         )}
                     </figure>

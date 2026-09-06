@@ -702,9 +702,20 @@
 .cm-drop {
     /* NOT RED. A delete here removes one sentence one of them wrote, on a page that
        is a present — colouring it as a hazard would make the room feel like an admin
-       panel. It is quieter than `save it`, which is the honest weighting. */
+       panel. It is quieter than `save it`, which is the honest weighting.
+
+       THE QUIETNESS IS IN THE LABEL, NOT THE BOUNDARY, and that correction came from
+       the first time anyone LOOKED at this thread. The border was --concrete-1, which
+       us.css names as decoration that must never be a control border because it
+       measures 1.50:1 on the page — under the 3:1 WCAG 1.4.11 asks of a UI component,
+       and invisible next to `save it`. Worse than the ratio: --concrete-1 on a
+       bordered control already MEANS something here, and it means disabled
+       (.tg-btn[disabled] in us-together.css is the same token for that reason). So
+       the one control that erases something read as the one control that does
+       nothing. --concrete-2 is the same frame `save it` wears; the dimmer label is
+       what keeps it the quieter of the two. */
     color: var(--concrete-3);
-    border-color: var(--concrete-1);
+    border-color: var(--concrete-2);
 }
 
 .cm-status {
@@ -713,4 +724,69 @@
     font-size: 0.68rem;
     color: var(--concrete-3);
     min-height: 1em;
+}
+
+/* ---- leaving one, behind a disclosure ------------------------------------
+   A LINE OF TYPE UNTIL SHE WANTS IT. Open, this was a label, a two-row box and a
+   button stacked under every photograph — about 140px each, twice a page, sitting
+   at the same visual weight as the upload plate further down. PLAN.md §4 says the
+   photographs are the only warm thing in the room, and a write box that is always
+   open argues with the picture it belongs to.
+
+   The same `details` the thread's own `change this` uses, so the page has one
+   disclosure idiom rather than two, and it is native — no script, which is the path
+   this wing guarantees. */
+.cm-add {
+    margin-top: 10px;
+}
+
+.cm-add-summary {
+    cursor: pointer;
+    font-family: var(--us-mono);
+    font-size: 0.62rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--concrete-4);
+    /* 44px of TOUCH without a 44px BOX. The line itself is ~15px, so the padding
+       carries the rest of the target — a min-height here would put a tall empty
+       plate under every photograph, which is the thing being removed. */
+    padding: 7px 0;
+}
+
+.cm-add[open] .cm-add-summary {
+    color: var(--chalk);
+}
+
+/* ONE ROW RATHER THAN A STACK, so open costs 44px and not 140.
+   `wrap`, because at 320px the button and a usable box do not both fit on a line
+   and the honest degradation is the old stack — not a 90px-wide textarea. */
+.cm-form--add {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.cm-form--add .cm-input {
+    /* 14ch is the basis, not the floor: below that the row wraps instead of
+       squeezing. */
+    flex: 1 1 14ch;
+}
+
+.cm-form--add .cm-go {
+    flex: 0 0 auto;
+}
+
+/* Its own line always, so a status message never shortens the box it is about. */
+.cm-form--add .cm-status {
+    flex: 1 0 100%;
+}
+
+.cm-input--add {
+    /* SINGLE ROW, and `resize: vertical` from .cm-input still lets her pull it
+       open. The cap stops a drag from filling the screen and burying the
+       photograph. */
+    min-height: 44px;
+    max-height: 40vh;
 }
