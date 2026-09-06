@@ -185,6 +185,21 @@
     z-index: 1;
     display: block;
     width: 100%;
+    /* `height: auto` IS LOAD-BEARING AND ITS ABSENCE ATE TWO THIRDS OF EVERY COVER.
+       The tag carries width="320" height="320". Those attributes are presentational
+       hints, and a hint still WINS over nothing — this rule set `width` and never
+       `height`, so the used height stayed 320px while the width became 106px on a
+       phone. `aspect-ratio` cannot save it: it only applies when one axis is auto, and
+       here both were specified, so it was ignored outright. The box measured 106x322
+       against art whose real ratio is 1:1, and `object-fit: cover` did what it is for
+       and cropped away everything outside the middle third.
+
+       The attributes stay — they are what reserves the right box before the bytes
+       arrive, the same CLS fix .fr-img documents. `height: auto` is what hands the
+       second axis back to `aspect-ratio`. Note .fr-img in us-frames.css has carried
+       this line all along, which is why the photographs were never wrong and this was:
+       one image in the wing had the attributes without the release valve. */
+    height: auto;
     aspect-ratio: 1 / 1;
     object-fit: cover;
     background: var(--void);
