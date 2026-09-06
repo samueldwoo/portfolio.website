@@ -70,16 +70,22 @@
    those are years a person already has in mind rather than years they have to work
    out.
 
-   ONLY GENRES BOTH OF THEM ACTUALLY LISTEN TO. ~~amapiano · bossa nova · salsa or
-   bachata · garage or jungle · drum and bass · techno · trip hop · k-pop · metal~~
-   all went, and the phrasing trick that was propping them up went with them: the
-   first pass hedged the far-out ones as "the best X you KNOW" rather than "your
-   favourite X", so a shallow answer counted. That hedge was the tell. A prompt that
-   has to lower its own bar to be answerable is a prompt neither of them wanted, and
-   naming a genre nobody has a shelf of narrows the field to nothing — which is the
-   opposite of the comparison this list exists for. Broad is better here: rap, R&B,
-   pop, rock, soul. "your favourite rap song" gets two real answers; "the best
-   amapiano song you know" gets two shrugs.
+   ONLY GENRES BOTH OF THEM ACTUALLY LISTEN TO. Two rounds of cuts:
+   ~~amapiano · bossa nova · salsa or bachata · garage or jungle · drum and bass ·
+   techno · trip hop · k-pop · metal~~ went first, then
+   ~~gospel · reggae · disco · funk~~ — the second four not for being obscure but for
+   being hard to answer QUICKLY. Everybody has heard funk and disco; far fewer people
+   can name a favourite one on the spot, which is the only thing that matters here.
+
+   The phrasing trick propping the first batch up went with them: that pass hedged the
+   far-out ones as "the best X you KNOW" rather than "your favourite X", so a shallow
+   answer counted. That hedge was the tell. A prompt that has to lower its own bar to
+   be answerable is a prompt neither of them wanted.
+
+   THE TEST IS NOT "IS THIS GENRE BIG", IT IS "CAN YOU NAME ONE WITHOUT THINKING", and
+   EDM and dubstep coming IN while funk went OUT is what that distinction looks like.
+   Funk is the more canonical music by any measure; a dubstep song is the one a person
+   can actually produce on demand. Broad and immediate beats broad and respected.
 
    RIGHT NOW BEATS ALL TIME, and that shape was missing entirely. Every other prompt
    asks somebody to search their memory and rank things, which is work. "your hype
@@ -266,14 +272,12 @@ export const SONG_PROMPTS: readonly string[] = [
   'your favourite rock song',
   'your favourite soul song',
   'your favourite country song, and yes you have one',
-  'your favourite gospel song',
   'your favourite jazz song',
-  'your favourite reggae song',
   'your favourite dancehall song',
   'your favourite afrobeats song',
   'your favourite house song',
-  'your favourite disco song',
-  'your favourite funk song',
+  'your favourite EDM song',
+  'your favourite dubstep song',
   'your favourite love song',
   'your favourite sad song',
   'your favourite slow song',

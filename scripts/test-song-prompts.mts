@@ -190,9 +190,14 @@ console.log('\n  --- 6. the list is fit for a PUBLIC repository, and for a bad d
      sailed past it, so the "no proper nouns" assertion had a hole exactly where a
      stage name is most likely to sit. This tests every token containing ANY capital,
      so all-caps, mixed-caps and `A$AP`-style names are all caught. */
+  /* GENRES ARE LISTED HERE TOO, not waved through by a looser pattern. `R&B` and `EDM`
+     are the only capitalised words in the list that are not artists, and naming them
+     explicitly is what keeps the check honest: a rule like "allow any all-caps word"
+     would hand a free pass to exactly the stage names this is meant to catch. */
   const APPROVED = new Set<string>([
     'Sunday',
-    'R&B', // a genre, and the only capitalised common noun in the list
+    'R&B',
+    'EDM',
     ...NAMED_ARTISTS.flatMap((a) => a.split(/\s+/)),
   ]);
   const namesIn = (p: string): string[] =>
