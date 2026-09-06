@@ -112,8 +112,31 @@
        read anything and decided to move. */
     var SETTLE_MS = 2500;
 
-    function save(hash) {
+    function save(hash, show) {
         try {
+            /* TWO OPPOSITE INTENTS, AND THE CALLER SAYS WHICH.
+
+               KEEP (`show` falsy) — the element must not move on screen. For a write
+               whose result she is already looking at.
+
+               SHOW (`show` truthy) — bring the element INTO view, near the top. For a
+               write that PRODUCES something she has not seen yet, which is the
+               photograph upload: keeping the form still was correct while the form was
+               the interesting thing, and it stopped being correct the moment there was
+               a new picture on the page. He asked for the picture.
+
+               Same machinery either way, because the hard part is shared and is not the
+               scrolling: it is re-applying the decision while unsized images land. A
+               `scrollIntoView` that fires once is displaced by exactly the thing the
+               upload just added. */
+            if (show) {
+                sessionStorage.setItem(KEY, JSON.stringify({
+                    sel: hash,
+                    show: 1,
+                    at: Date.now(),
+                }));
+                return;
+            }
             /* THE ELEMENT FIRST. `hash` is the fragment the caller was going to jump
                to, which is by definition the thing on the page that matters. */
             var el = hash ? document.querySelector(hash) : null;
@@ -151,10 +174,28 @@
         if (!saved || typeof saved.at !== 'number') return;
         if (Date.now() - saved.at > FRESH_MS) return;
 
+        var wantsShow = saved.show === 1 && typeof saved.sel === 'string';
         var hasElement = typeof saved.sel === 'string' && typeof saved.top === 'number';
-        if (!hasElement && typeof saved.y !== 'number') return;
+        if (!wantsShow && !hasElement && typeof saved.y !== 'number') return;
+
+        /* How far below the top of the screen the shown element sits. Not zero: an
+           element flush against the very top edge reads as clipped rather than framed,
+           and on iOS the collapsing URL bar can eat the first few pixels outright. */
+        var SHOW_MARGIN = 16;
 
         function go() {
+            if (wantsShow) {
+                var target = document.querySelector(saved.sel);
+                /* Absent is the ordinary case on a REFUSAL: no photograph was stored,
+                   so there is no frame to show. Leaving her where the page put her — at
+                   the form, with the reason on screen — is exactly right, so this
+                   returns rather than inventing somewhere to go. */
+                if (!target) return;
+                var want = target.getBoundingClientRect().top - SHOW_MARGIN;
+                if (Math.abs(want) < 1) return;
+                window.scrollBy(0, want);
+                return;
+            }
             if (hasElement) {
                 var el = document.querySelector(saved.sel);
                 /* The element can be absent on the page we landed on — a refusal that
@@ -296,8 +337,10 @@
      * @param {string} path    e.g. '/samdrea/vault/day'
      * @param {string} search  e.g. '?ok=posted', or '' for none
      * @param {string} hash    e.g. '#post', or '' for none
+     * @param {boolean} [show]  true = bring `hash` INTO view; falsy = keep it where
+     *                          it already is. See save() for why both exist.
      */
-    window.usLand = function (path, search, hash) {
+    window.usLand = function (path, search, hash, show) {
         /* ONLY WHEN THERE IS A FRAGMENT TO DEFEAT US, which keeps this change to the
            one page that has the problem.
 
@@ -309,7 +352,7 @@
            behaviours with this code — a strictly larger blast radius for no gain, on
            pages nobody reported a problem with.
            So: no hash, no interference. */
-        if (hash) save(hash);
+        if (hash) save(hash, show);
         var sameDocument = location.pathname === path && location.search === (search || '');
         if (sameDocument) {
             /* The fragment is set first so a browser that ignores the restore above

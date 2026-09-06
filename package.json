@@ -19,6 +19,7 @@
     "carriage:numbers": "node scripts/carriage-numbers.mjs",
     "export:frames": "node scripts/frames-export.mjs",
     "test:slots": "node --experimental-strip-types scripts/test-slots.mts",
+    "test:song-prompts": "node --experimental-strip-types scripts/test-song-prompts.mts",
     "test:trace": "node --experimental-strip-types scripts/test-trace.mts",
     "test:recent": "node --experimental-strip-types scripts/test-recent.mts",
     "test:fresh": "node --experimental-strip-types scripts/test-fresh.mts",

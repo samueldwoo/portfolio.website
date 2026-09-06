@@ -44,7 +44,9 @@ import { wingDate } from '../../../lib/us/kv';
 import { timer, trace } from '../../../lib/us/trace';
 import { readCoords } from '../../../lib/us/exif';
 import { notify } from '../../../lib/us/push';
-import { crossSite, identify } from '../../../lib/us/together';
+/* `Who` is a TYPE-ONLY import, so it is erased at compile time and costs nothing at
+   runtime — the same reason frames.ts imports it that way. */
+import { crossSite, identify, type Who } from '../../../lib/us/together';
 import {
   FramesError,
   MAX_BYTES,
@@ -69,7 +71,27 @@ const RATE_LIMIT = 6;
 const RATE_WINDOW_SEC = 600;
 
 const PAGE = '/samdrea/vault/day';
+/**
+ * Where a REFUSAL lands: the form, because the next thing she needs is the input and
+ * the reason next to it.
+ */
 const FRAGMENT = '#post';
+/**
+ * Where a SUCCESS lands: the photograph she just posted.
+ *
+ * Two fragments rather than one, because the two outcomes want opposite things and a
+ * single constant had been quietly serving the wrong one. A refusal belongs at the
+ * form. A success does not: she pressed a button and was left looking at the button,
+ * with the new picture off screen above it.
+ *
+ * `day.astro` renders `id="frame-her"` / `id="frame-him"`, and `who` is resolved from
+ * the cookie long before this is called, so the NO-JAVASCRIPT path names the same
+ * target the fetch path does rather than getting a lesser version of the behaviour.
+ * That matters here more than usual: the no-script path has no client to scroll
+ * anything afterwards, so the fragment is the ONLY thing aiming the browser.
+ */
+const successFragment = (who: Who | null | undefined): string =>
+  who === 'her' || who === 'him' ? `#frame-${who}` : FRAGMENT;
 
 /**
  * The largest `exifhead` part that will be read.
@@ -150,7 +172,9 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
     const query = ok
       ? `?ok=${encodeURIComponent(code ?? 'posted')}`
       : `?e=${encodeURIComponent(code ?? 'no')}`;
-    const res = redirect(`${PAGE}${query}${FRAGMENT}`, 303);
+    /* The frame on success, the form on a refusal. See successFragment(). */
+    const fragment = ok ? successFragment(who) : FRAGMENT;
+    const res = redirect(`${PAGE}${query}${fragment}`, 303);
     const headers = new Headers(res.headers);
     for (const [k, v] of Object.entries(PRIVACY)) headers.set(k, v);
     return new Response(res.body, { status: res.status, statusText: res.statusText, headers });

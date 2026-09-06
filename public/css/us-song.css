@@ -1129,6 +1129,51 @@ a.mini:focus-visible {
    number is the only bright thing in the cell.
    ============================================================ */
 
+/* ===========================================================================
+   TODAY'S PROMPT
+
+   ONE LINE ABOVE BOTH SIDES, because it is one question both of them answer —
+   see the markup comment in today.astro for why it is not inside the two forms.
+
+   Styled as a QUIET LABEL PLUS A LOUD SENTENCE rather than as a heading: it is
+   not a section title, it is the thing being asked, and it has to read as an
+   invitation rather than as an instruction. The label borrows .rhythm-label's
+   type exactly, so the two strips above and below it look like one system
+   instead of two components that happen to be adjacent.
+
+   NOT tinted, not boxed, no accent colour. The photographs are the only warm
+   thing in this wing (PLAN.md §4) and a coloured callout here would be the
+   first thing on the page competing with them.
+   =========================================================================== */
+.sg-prompt {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0 0 clamp(18px, 3.5vw, 26px);
+}
+
+.sg-prompt-label {
+    font-family: var(--us-mono);
+    font-size: 0.62rem;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--concrete-4);
+}
+
+.sg-prompt-text {
+    font-family: var(--us-display);
+    /* Smaller than .rhythm-value: a question that shouts is a question that
+       feels like homework. Big enough to be the first thing read. */
+    font-size: clamp(1.05rem, 3.6vw, 1.3rem);
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    line-height: 1.25;
+    color: var(--chalk);
+    /* A prompt can run to a dozen words; the measure keeps it to two lines on a
+       phone instead of a paragraph. */
+    max-width: 34ch;
+}
+
 .rhythm {
     display: grid;
     /* auto-fit so two cells centre themselves and four wrap to

@@ -102,6 +102,7 @@ import { whoWords } from '../../../lib/us/who-words';
    different jobs. */
 import { HER_TZ, HIS_TZ, identify, type Who } from '../../../lib/us/together';
 import { mostRecent } from '../../../lib/us/slots';
+import { songPromptFor } from '../../../lib/us/song-prompts';
 import { stillFresh } from '../../../lib/us/fresh';
 import {
   MAX_REACTIONS_PER_DAY,
@@ -816,6 +817,10 @@ const herSubmit = !storeUnreachable && todayPair.hers ? 'replace it' : 'post it'
  * numbers, and they answer different questions: `days` is how long there has been a
  * song at all, `both` is how much of that they were both in.
  */
+/* TODAY'S SHARED PROMPT. Pure and deterministic from the date, so the archive can
+   recompute any past day's prompt and nothing is stored — see song-prompts.ts. */
+const songPrompt = songPromptFor(today);
+
 const stats: Array<{ label: string; value: string; hint?: string }> = [];
 const since = rhythm.first ? `since ${wingDateLabel(rhythm.first, { withYear: true })}` : undefined;
 /* The span first, because it is the bigger number and the one that says how long
@@ -1045,6 +1050,32 @@ function minisFor(pair: DayPair): Mini[] {
                 </div>
             ))}
         </dl>
+    )}
+
+    {/* ==================================================================
+        TODAY'S PROMPT, ONCE, ABOVE BOTH SIDES
+
+        ONCE AND NOT PER FORM, which is the only real decision here. Each side
+        has its own posting form further down, so the prompt could have gone in
+        both — and that would have made it look like two questions that happen
+        to match. It is ONE question both of them are answering, so it is one
+        line, above the pair, before either slot.
+
+        Above the PAIR rather than inside the forms for a second reason: the
+        prompt is worth reading even on a day neither of them posts, and each
+        form is gated on the viewer, so putting it there would hide it from
+        whoever had already posted.
+
+        No fallback text. songPromptFor() is total and always returns a real
+        string, so the guard is belt-and-braces against an empty list rather
+        than a state anything can produce — and an empty box saying nothing
+        would be worse than no box.
+        ================================================================== */}
+    {songPrompt && (
+        <p class="sg-prompt">
+            <span class="sg-prompt-label">today</span>
+            <span class="sg-prompt-text">{songPrompt}</span>
+        </p>
     )}
 
     {/* ==================================================================

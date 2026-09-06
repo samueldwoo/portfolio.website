@@ -376,8 +376,24 @@ const whoWord = (w: Who): string => words.of(w);
                 /* The shared constants, not string literals — this line and the freshness
                    check above must never disagree about where somebody lives. */
                 const tz = w === 'her' ? HER_TZ : HIS_TZ;
+                /* `id` MAKES THE FRAME ADDRESSABLE, so the hand-back after an upload can
+                   point at the PHOTOGRAPH rather than at the button that was just
+                   pressed. Keyed by whose frame it is and not by the day: there is
+                   exactly one of each on this page, and frame.ts resolves `who` from the
+                   cookie before it redirects, so the no-JavaScript 303 names the same
+                   target the fetch path does.
+
+                   A PLAIN JS COMMENT ABOVE THE `return`, not a JSX comment below it.
+                   That is a third instance of the trap in CLAUDE.md: a JSX comment as the
+                   first thing inside `return (` is a SECOND root child, which needs a
+                   fragment — and astro check reports it as "Expected corresponding JSX
+                   closing tag for 'html'" seven hundred lines later. */
                 return (
-                    <figure class="fr-frame" data-whose={w === viewer ? 'mine' : 'theirs'}>
+                    <figure
+                        class="fr-frame"
+                        id={`frame-${w}`}
+                        data-whose={w === viewer ? 'mine' : 'theirs'}
+                    >
                         <p class="fr-who">{whoWord(w)}</p>
 
                         {f && f.url ? (
@@ -789,8 +805,8 @@ const whoWord = (w: Who): string => words.of(w);
            the exact failure being fixed, and it must not come back as "the helper did
            not load" — so a missing usLand degrades to the old behaviour, which is right
            for every case except the repeat. */
-        function land(path, search, hash) {
-            if (window.usLand) return window.usLand(path, search, hash);
+        function land(path, search, hash, show) {
+            if (window.usLand) return window.usLand(path, search, hash, show);
             console.error('[us] us-land.js did not load; a repeat post may not refresh.');
             location.assign(path + search + hash);
         }
@@ -948,7 +964,25 @@ const whoWord = (w: Who): string => words.of(w);
                        freshly signed URL and the server is the only thing that can mint
                        one. land() rather than assign() because posting a second time in
                        a day targets the URL she is already on — see land(). */
-                    land('/samdrea/vault/day', '?ok=posted', '#post');
+                    /* ---- SHOW HER THE PICTURE, NOT THE BUTTON --------------------
+
+                       This used to hand back to `#post`, the form, with the fourth
+                       argument absent — so us-land.js held the FORM still. That was
+                       right while the form was the only thing that had changed, and it
+                       stopped being right the moment the upload put a new photograph on
+                       the page: she pressed a button and was left looking at the button.
+
+                       So the target is HER OWN FRAME and the mode is `show`. Which
+                       frame comes from `data.who`, the server's own answer, and not from
+                       anything this script decides — the page renders `id="frame-her"`
+                       and `id="frame-him"`, and the endpoint has already resolved
+                       identity from the cookie. Guarded, because a response that somehow
+                       carried no `who` must degrade to the old behaviour rather than
+                       building the string `#frame-undefined` and scrolling nowhere. */
+                    var shot = (data.who === 'her' || data.who === 'him')
+                        ? '#frame-' + data.who
+                        : '#post';
+                    land('/samdrea/vault/day', '?ok=posted', shot, shot !== '#post');
                 }, HANDOVER_MS);
                 return;
             }

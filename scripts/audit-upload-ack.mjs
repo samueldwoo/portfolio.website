@@ -87,7 +87,16 @@ const pgM = /const PAGE = '([^']+)';/.exec(frameSrc);
 const frM = /const FRAGMENT = '([^']+)';/.exec(frameSrc);
 if (!pgM || !frM) fatal('PAGE / FRAGMENT not found in frame.ts');
 const PAGE = pgM[1];
+/* The REFUSAL fragment — the form. */
 const FRAGMENT = frM[1];
+/* THE SUCCESS FRAGMENT IS A DIFFERENT ONE NOW, and it is derived from the source
+   rather than written here, for the same reason PAGE and MAX_BYTES are: a literal
+   would let this harness keep asserting the old behaviour after frame.ts changed.
+   successFragment() builds `#frame-<who>`; the template is read so that a rename
+   breaks the extraction loudly instead of the assertion silently. */
+const sfM = /#frame-\$\{who\}/.exec(frameSrc);
+if (!sfM) fatal('successFragment no longer builds #frame-${who} in frame.ts');
+const successFragment = (who) => `#frame-${who}`;
 
 /* Mirrors day.astro's form: same action, enctype, data- hooks and input names, because
    those are the contract the script reads. */
@@ -160,7 +169,11 @@ const server = createServer(async (req, res) => {
        the real endpoint answers with a 303 back to the page carrying ?e=<code>. */
     if (!wantsJson && !r.raw) {
       const q = r.body.ok ? `?ok=${r.body.code}` : `?e=${r.body.code}`;
-      res.writeHead(303, { Location: `${PAGE}${q}${FRAGMENT}`, 'Cache-Control': 'no-store' });
+      /* Mirrors answer() in frame.ts: the FRAME on success, the FORM on a refusal.
+         A mock that sent `#post` for both would let the no-JavaScript half of this
+         change pass untested. */
+      const frag = r.body.ok ? successFragment(r.body.who) : FRAGMENT;
+      res.writeHead(303, { Location: `${PAGE}${q}${frag}`, 'Cache-Control': 'no-store' });
       return res.end();
     }
     res.writeHead(r.status, {
@@ -202,14 +215,14 @@ const server = createServer(async (req, res) => {
        and "put her back at the same scrollY" must show her different content.
        This is the case the fix has to handle, so the mock has to produce it. */
     const posted = url.search.includes('ok=posted');
-    const frames = (posted ? 2 : 1);
-    const imgs = Array.from(
-      { length: frames },
-      (_, i) =>
-        `<figure class="fr-frame" style="margin:0 0 24px"><img class="fr-img" src="/mock-frame.png?ms=${
-          400 + i * 150
-        }&n=${i}" style="display:block;width:100%;height:auto" alt=""></figure>`,
-    ).join('');
+    /* HIS frame is always there; HERS appears only after a successful post — which is
+       the real sequence and the reason the form moves. Both carry the ids day.astro
+       renders, so the hand-back has something to aim at. */
+    const frame = (who, ms) =>
+      `<figure class="fr-frame" id="frame-${who}" style="margin:0 0 24px">` +
+      `<img class="fr-img" src="/mock-frame.png?ms=${ms}&n=${who}" ` +
+      `style="display:block;width:100%;height:auto" alt=""></figure>`;
+    const imgs = frame('him', 400) + (posted ? frame('her', 550) : '');
     /* us-land.js is served from the real file, not stubbed. day.astro's land() now
        delegates to window.usLand, so a harness that omitted it would exercise the
        console.error fallback and quietly pass on the OLD assign() behaviour — the very
@@ -389,8 +402,11 @@ try {
        What she experiences is "the thing I was looking at is where I left it". That is
        the form's offset from the top of the VIEWPORT, and it is the only number here
        that means what the complaint means. */
+    /* `opts.anchor` names what this trial is watching. #post for the old
+       keep-it-still behaviour, #frame-her for the new show-me-the-picture one. */
+    const watch = opts.anchor || '#post';
     const anchorTop = () =>
-      ev(`(function(){var e=document.querySelector('#post');
+      ev(`(function(){var e=document.querySelector(${JSON.stringify(watch)});
            return e ? Math.round(e.getBoundingClientRect().top) : null;})()`);
 
     /* BOTH READINGS MUST DESCRIBE A SETTLED PAGE. The first version scrolled and
@@ -458,7 +474,7 @@ try {
 
   console.log('\n  ============ UPLOAD ACK + REFRESH AUDIT ============');
   console.log(`  client:    ${CLIENT.split('\n').length} lines, verbatim from day.astro`);
-  console.log(`  page:      ${PAGE}${FRAGMENT}   (from frame.ts)`);
+  console.log(`  page:      ${PAGE}   refusal ${FRAGMENT}   success ${successFragment('her')}   (from frame.ts)`);
   console.log(`  MAX_BYTES: ${MAX_BYTES}   (from frames.ts)`);
 
   const SUCCESS = [
@@ -476,7 +492,10 @@ try {
     is('THE PAGE RE-FETCHED FROM THE SERVER', r.renders.length >= 1, r.renders);
     is('landed on the day page', r.path === PAGE, r.path);
     is('with ?ok=posted', r.search === '?ok=posted', r.search);
-    is(`on ${FRAGMENT}`, r.hash === FRAGMENT, r.hash);
+    /* THE PHOTOGRAPH, NOT THE BUTTON. `posted` answers who='her', so the hand-back
+       names her frame. Landing on #post here would be the old behaviour: she pressed
+       a button and was left looking at the button. */
+    is(`on ${successFragment('her')}, the new photograph`, r.hash === successFragment('her'), r.hash);
     is('the server was asked for ?ok=posted', r.renders.some((x) => x.search === '?ok=posted'), r.renders);
     /* The 40x40 source is under the resizer's early-return threshold, so shrink()
        resolves the ORIGINAL and must still report its own pixel size. */
@@ -488,48 +507,65 @@ try {
 
   }
 
-  /* ---- DOES SHE KEEP HER PLACE? -------------------------------------------------
+  /* ---- DOES THE REFRESH SHOW HER THE PHOTOGRAPH? --------------------------------
 
-     Reported as "the view window gets reset on mobile", and it was: measured at
-     scrollBefore=400 -> scrollAfter=1086 on a 1555px document, BEFORE the fix. The
-     cause is `#post`, which is the post form and sits a screen and a half down, so
-     every hand-back jumped there.
+     THE GOAL CHANGED, AND THIS SECTION IS THE RECORD OF THAT. It used to assert that
+     `#post` stayed exactly where it was on screen, which fixed the reported
+     disorientation (the page had been throwing her 733px). He then asked for the
+     thing that was actually wanted: after uploading, SHOW THE PICTURE rather than
+     hold focus on the button that was just pressed.
 
-     Both cases are run because they take different branches of usLand and the bug was
-     in neither branch specifically — the first upload navigates to a new URL
-     (assign), the second reloads the one she is on. A fix that only covered the
-     reload would have looked right in testing and still thrown her on the common
-     path.
+     So the assertion is now about her new frame being in view, near the top. Both
+     usLand branches are still exercised, because the first upload of a day navigates
+     to a new URL (assign) and the second reloads the one she is on, and a fix landing
+     on only one of them would look right in testing.
 
-     The tolerance is 4px rather than exact equality: `scrollTo` is subpixel on a
-     fractional device ratio and asserting equality would make this fail on a
-     retina viewport for a reason that has nothing to do with keeping her place. */
-  console.log('\n  --- 3a. she keeps her place across the hand-back ---');
+     The slack is generous on purpose: SHOW_MARGIN in us-land.js is 16px and the
+     correction re-applies as unsized images land, so anywhere in the first few dozen
+     pixels is "she is looking at her photograph". Asserting 16 exactly would make this
+     fail on a rounding difference and teach nobody anything. */
+  console.log('\n  --- 3a. the refresh shows her the photograph she just posted ---');
   for (const [label, startSearch] of [
     ['first upload of the day — usLand takes the assign() branch', ''],
     ['second upload — usLand takes the reload() branch', '?ok=posted'],
   ]) {
     const r = await trial(`POST -> {ok:true}, scrolled to 400 first (${label})`, 'posted', startSearch, {
       scrollTo: 400,
+      anchor: '#frame-her',
     });
     if (!r) continue;
     console.log(
-      `      scrollY ${r.scrollBefore} -> ${r.scrollAfter}   #post on screen ${r.anchorBefore} -> ${r.anchorAfter}` +
-        `   drift ${Number(r.anchorAfter) - Number(r.anchorBefore)}px   doc=${r.docHeight} viewport=${r.viewport}`,
+      `      scrollY ${r.scrollBefore} -> ${r.scrollAfter}   #frame-her on screen ${r.anchorBefore} -> ${r.anchorAfter}` +
+        `   doc=${r.docHeight} viewport=${r.viewport}`,
     );
     is('it actually scrolled before submitting', r.scrollBefore === 400, r.scrollBefore);
     is('THE PAGE STILL RE-FETCHED', r.renders.length >= 1, r.renders);
-    /* THE ASSERTION THAT MATTERS. The form must be where she left it ON SCREEN, after
-       the slow unsized images have finished growing the page above it. 24px of slack:
-       the images land at slightly different times and one re-layout can leave a
-       sub-line-height difference nobody would call disorienting. */
+    /* THE ASSERTION THIS SECTION IS FOR. Her frame must be visible and near the top
+       after the hand-back, measured once the slow unsized images have settled. */
     is(
-      'THE FORM IS WHERE SHE LEFT IT ON SCREEN',
-      Math.abs(Number(r.anchorAfter) - Number(r.anchorBefore)) <= 24,
-      { before: r.anchorBefore, after: r.anchorAfter, drift: Number(r.anchorAfter) - Number(r.anchorBefore) },
+      'HER NEW PHOTOGRAPH IS IN VIEW, NEAR THE TOP',
+      Number(r.anchorAfter) >= -4 && Number(r.anchorAfter) <= 48,
+      { onScreen: r.anchorAfter, viewport: r.viewport },
     );
-    is('the fragment is still in the URL for the no-JS path', r.hash === FRAGMENT, r.hash);
+    is('and it is genuinely on screen, not just above the fold by accident',
+      Number(r.anchorAfter) < Number(r.viewport), { onScreen: r.anchorAfter, viewport: r.viewport });
+    is('the URL names the photograph, not the form',
+      r.hash === successFragment('her'), r.hash);
     is('no thrown exception', r.thrown.length === 0, r.thrown);
+  }
+
+  /* A REFUSAL MUST STILL LAND AT THE FORM, which is the other half of the two-fragment
+     change and the easier one to get wrong: there is no photograph to show, so the
+     next thing she needs is the input with the reason beside it. */
+  console.log('\n  --- 3a-bis. a refusal still lands at the form ---');
+  {
+    const r = await trial('POST -> {ok:false, code:rate}', 'rate', '', { scrollTo: 400, anchor: '#post' });
+    if (r) {
+      is('the URL names the form', r.hash === FRAGMENT, r.hash);
+      is('and #post is on screen', Number(r.anchorAfter) < Number(r.viewport), {
+        onScreen: r.anchorAfter, viewport: r.viewport,
+      });
+    }
   }
 
   /* ---- THE SHAPE OF THE WAIT — a separate question from correctness -------------
