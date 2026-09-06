@@ -46,6 +46,32 @@
    scheduling fact, not a safety rule.
 
    ---------------------------------------------------------------------------
+   NO TACKED-ON CLAUSE, WHICH IS WHAT MADE THESE READ AS WRITTEN BY A MACHINE
+
+   ~~your favourite country song, AND YES YOU HAVE ONE~~ · ~~the best song of the 2000s,
+   AND YOU HAVE TO COMMIT~~ · ~~the best song of the 2010s, ONE PICK ONLY~~ · ~~the best
+   Drake verse, NOT THE BEST DRAKE SONG~~ · ~~the best intro on any track, FIRST THIRTY
+   SECONDS ONLY~~. Every one of those trailing clauses is the same reflex: anticipating
+   an objection nobody made, then answering it inside the question. It reads as nervous,
+   it doubles the length of a line that has to be scanned in two seconds, and it is the
+   single clearest tell that a person did not write it. The question either stands on its
+   own or it is the wrong question.
+
+   Cut with them, as too specific or too pleased with themselves: ~~your favourite
+   throwback from before either of us could drive~~ · ~~your favourite song from the year
+   you finished school~~ · ~~the best song from a decade you were not born in~~ · ~~the
+   first song on a playlist you would make for a stranger~~ · ~~the song you would use to
+   convert somebody to your favourite artist~~ · ~~your favourite song to sing badly~~ ·
+   ~~the song you would put on right now if nobody else was home~~. A prompt built out of
+   a specific imagined scene is doing the answering for them.
+
+   And four near-identical "right now" prompts went down to one apiece: ~~the song you
+   cannot stop playing right now~~, ~~the song you have been playing a lot this week~~ and
+   ~~your walking-around song this week~~ were all the same question as "your hype song
+   right now" wearing different hats. Redundancy inside a rotation is worse than
+   elsewhere: it is the same day twice, three weeks apart.
+
+   ---------------------------------------------------------------------------
    A PROMPT NAMES A CATEGORY, NOT A FEELING
 
    The rule the rewrite came out of, and the one to hold any new entry against.
@@ -104,18 +130,20 @@
    four questions rather than padding. The best beat on a Drake song is usually not on
    his best song, which is exactly the argument the prompt is fishing for.
 
-   But the shapes are only worth spending on somebody whose catalogue BOTH of them
-   could argue about, and that is a much shorter list than "artists we have posted".
-   ~~Seven artists carried three or four prompts each~~ and it tipped the whole list too
-   far toward trivia about specific rappers: at its widest 37 of 102 prompts named an
-   artist. Now it is Drake, Future and Travis Scott at four, everybody else at one, and
-   25 of 90.
+   But the shapes are only worth spending on somebody whose catalogue BOTH of them could
+   argue about, and that is a much shorter list than "artists we have posted". Four
+   artists carry four prompts — Drake, Future, Travis Scott and Gunna — and the other
+   twenty-five carry one each.
 
-   THE TEST IS "COULD THE OTHER ONE ARGUE BACK", not "is this artist good". Gunna and
-   Kodak Black are both properly popular and both were posted — they just do not have
-   the kind of catalogue where two people each hold a confident favourite VERSE, so
-   asking three ways got three versions of the same shrug. One prompt each is the honest
-   amount.
+   THE TEST IS "COULD THE OTHER ONE ARGUE BACK", not "is this artist good", and I got
+   that test wrong once already in a way worth recording. ~~Gunna does not have the kind
+   of catalogue where two people each hold a confident favourite VERSE~~ — he is HER
+   FAVOURITE ARTIST, which I did not know and could not have read off the store. The
+   shelf data said he had been posted once; a favourite artist is a fact about years and
+   the shelf holds a fortnight. The measurement was real and the inference from it was
+   invented, so the trim went to the one artist on the list who most deserved the space.
+   When the evidence is a small sample of recent behaviour, ASK before ranking anybody
+   by it.
 
    THE SHAPES ALSO ONLY FIT RAPPERS at all. A "best verse" prompt about a producer is a
    category error rather than a harder question, so the singers and the dance acts were
@@ -238,29 +266,51 @@ export const SONG_WEEK_PROMPT = 'the song you played most this week, honestly';
  * safe if the allowlist is enforced.
  */
 export const NAMED_ARTISTS: readonly string[] = [
-  /* THE THREE THAT CARRY FOUR SHAPES EACH — song, verse, guest verse, beat. See the
-     header: four prompts is earned by a catalogue both of them could argue about, not
-     by having been posted. */
+  /* FOUR SHAPES EACH — song, verse, guest verse, beat. See the header: four prompts is
+     earned by a catalogue both of them could argue about, not by having been posted.
+
+     GUNNA IS HERE ON HER SAY-SO AND THAT OUTRANKS THE SHELF COUNT. He was trimmed to
+     one prompt on the reasoning that his catalogue would not support two people each
+     holding a confident favourite VERSE — a guess, and a wrong one: he is her favourite
+     artist. Worth leaving the reversal visible, because the shelf read that drove the
+     trim measured 24 records over a fortnight and a favourite artist is a fact about
+     years. The data was real and the inference from it was not. */
   'Drake',
   'Travis Scott',
   'Future',
+  'Gunna',
   /* Everybody below gets the SONG SHAPE ONLY, whether or not they rap. */
   '21 Savage',
   'Lil Wayne',
-  'Gunna',
   'Kodak Black',
   'Yeat',
   'A$AP Ferg',
   'BigXthaPlug',
   'PARTYNEXTDOOR',
-  /* THE ONE NAME HERE THAT IS NOT FROM THEIR SHELVES — asked for directly, and asked
-     for as ONE PROMPT rather than the four a rapper usually gets. Worth keeping that
-     restraint: his catalogue is the deepest of anybody on this list, so "your favourite
-     Kanye song" is already an argument, and the verse and beat prompts would each open
-     a second one on a day that only needs the first. */
+  /* ---- NOT FROM THEIR SHELVES. Everything above was read out of what they have
+     actually posted; everything from here down was either asked for by name or
+     proposed as adjacent to what they post and then approved. Keeping the two groups
+     apart is the whole reason the "no artist is named" rule could be reversed at all —
+     the names were evidence, and a name that is instead a suggestion should not be
+     able to pass itself off as one later. ---- */
   'Kanye',
+  /* Proposed as adjacent to the names above: melodic rap and trap first, then the R&B
+     side of what they post. One prompt each, so a wrong guess here costs one day. */
+  'Polo G',
+  'Bryson Tiller',
+  'Lil Baby',
+  'Young Thug',
+  'Rod Wave',
+  'Roddy Ricch',
+  'Don Toliver',
+  'Playboi Carti',
+  'Lil Uzi Vert',
+  'Kendrick Lamar',
+  'Brent Faiyaz',
+  'SZA',
+  'The Weeknd',
   /* Not rappers at all, so they were never candidates for the verse and beat shapes
-     even before the trim. Grouped in cluster four below. */
+     even before the trim. Grouped in the last cluster below. */
   'Daniel Caesar',
   'Joji',
   'Calvin Harris',
@@ -286,12 +336,9 @@ export const SONG_PROMPTS: readonly string[] = [
   'your favourite song from the 2020s so far',
   'your favourite song from the 90s',
   'your favourite song from the 80s',
-  'the best song of the 2000s, and you have to commit',
-  'the best song of the 2010s, one pick only',
-  'your favourite throwback from before either of us could drive',
-  'the best song from a decade you were not born in',
+  'the best song of the 2000s',
+  'the best song of the 2010s',
   'the song that owned last summer',
-  'your favourite song from the year you finished school',
   'the best song of this year so far',
 
   /* ---- RIGHT NOW AND LATELY, which is the easiest shape in the list and the most
@@ -299,23 +346,19 @@ export const SONG_PROMPTS: readonly string[] = [
      what is actually playing, so the answer is already in hand and both halves are
      reporting the same kind of thing on the same day. ---- */
   'your hype song right now',
-  'the song you have been playing a lot this week',
   'the rap song you have been playing a lot lately',
   'the R&B song you have been playing a lot lately',
-  'the song you have had on repeat this month',
+  'the song you have had on repeat lately',
   'the last song you added to a playlist',
   'the last song you sent somebody',
-  'the song you cannot stop playing right now',
-  'your shower song at the moment',
-  'the song you would put on right now if nobody else was home',
+  'your shower song',
   'the song you woke up with in your head',
-  'your walking-around song this week',
 
   /* ---- NAMED ARTISTS, cluster one. Only from NAMED_ARTISTS above, and FOUR SHAPES
      per artist rather than one — see the header on why the shape carries more of the
      weight than the name does. ---- */
   'your favourite Drake song',
-  'the best Drake verse, not the best Drake song',
+  'the best Drake verse',
   'the best guest verse Drake ever did',
   'the best beat on any Drake song',
   'your favourite Travis Scott song',
@@ -329,7 +372,7 @@ export const SONG_PROMPTS: readonly string[] = [
   'your favourite R&B song',
   'your favourite pop song',
   'your favourite rock song',
-  'your favourite country song, and yes you have one',
+  'your favourite country song',
   'your favourite jazz song',
   'your favourite afrobeats or dancehall song',
   'your favourite house song',
@@ -339,13 +382,13 @@ export const SONG_PROMPTS: readonly string[] = [
   'your favourite sad song',
   'your favourite slow song',
   'your favourite party song',
-  'your favourite song to sing badly',
   'your favourite song to drive to',
 
-  /* ---- named artists, cluster two ---- */
+  /* ---- named artists, cluster two: the other two who carry four shapes ---- */
   'your favourite Gunna song',
-  'your favourite Kodak Black song',
-  'your favourite 21 Savage song',
+  'the best Gunna verse',
+  'the best guest verse Gunna ever did',
+  'the best beat on any Gunna song',
   'your favourite Future song',
   'the best Future verse',
   'the best guest verse Future ever did',
@@ -353,42 +396,55 @@ export const SONG_PROMPTS: readonly string[] = [
 
   /* ---- they pick the artist, for the reason in the header ---- */
   'your favourite song by an artist you have never mentioned to me',
-  'the artist you have played most this year, and their best song',
-  'your favourite song by a band rather than one person',
+  'the best song by the artist you have played most this year',
+  'your favourite song by a band',
   'a song where the feature is better than the main artist',
-  'your favourite song you found through a soundtrack',
-  'the song you would use to convert somebody to your favourite artist',
+  'your favourite song from a movie',
 
   /* ---- ONE PART of a song, so both answers are about the same thing ---- */
-  'the best beat you know',
-  'the best hook you know',
-  'the best intro you know, first thirty seconds only',
+  'the best beat in any song',
+  'the best hook in any song',
+  'the best intro on any song',
   'your favourite song with a sample you can name',
   'your favourite cover that beats the original',
-  'the best duet you know',
+  'the best duet',
   'your favourite song under two minutes',
-  'your favourite live version of a song you know by heart',
+  'your favourite live version of a song',
 
   /* ---- a moment, but anchored to a superlative so the two picks still compare.
      "a song for walking home at 2am" is a mood; "the BEST song for walking home
      at 2am" is a question with one answer each. ---- */
-  'the best song for a long drive with nowhere to be',
+  'the best song for a long drive',
   'the best song for the start of a night out',
   'the best song for walking home at 2am',
-  'the best song for a rainy afternoon and no plans',
+  'the best song for a rainy afternoon',
   'the best song to cook to',
   'the best song to fall asleep to',
-  'the first song on a playlist you would make for a stranger',
-  'the best song you would be a bit embarrassed to play out loud',
+  'the song you would be embarrassed to play out loud',
   'the song you would defend in an argument',
 
   /* ---- named artists, cluster three ---- */
   'your favourite Lil Wayne song',
   'your favourite Yeat song',
+  'your favourite 21 Savage song',
+  'your favourite Kodak Black song',
   'your favourite A$AP Ferg song',
   'your favourite BigXthaPlug song',
   'your favourite PARTYNEXTDOOR song',
   'your favourite Kanye song',
+  'your favourite Young Thug song',
+  'your favourite Lil Baby song',
+  'your favourite Polo G song',
+  'your favourite Rod Wave song',
+  'your favourite Roddy Ricch song',
+  'your favourite Don Toliver song',
+  'your favourite Playboi Carti song',
+  'your favourite Lil Uzi Vert song',
+  'your favourite Kendrick Lamar song',
+  'your favourite Bryson Tiller song',
+  'your favourite Brent Faiyaz song',
+  'your favourite SZA song',
+  'the best song The Weeknd ever made',
 
   /* ---- named artists, cluster four: the ones who are not rappers. They were never
      candidates for the verse and beat shapes even before the trim, because a "best
