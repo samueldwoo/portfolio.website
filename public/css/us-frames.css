@@ -611,10 +611,14 @@
    Bubbles and opposite-side alignment were offered and turned down again, for the
    original reason — they imply a chat app and put the two of them on facing sides,
    which is a ranking the frame pair refuses. */
+/* FOUR TRACKS: name, message, clock, edit. The fourth exists so `edit` sits ON the
+   clock's line instead of under it — which also deletes row two entirely for the
+   common case, so the item is shorter as well as tidier. The gutter and the gap both
+   came down a notch to pay for the new track. */
 .cm-item {
     display: grid;
-    grid-template-columns: 3.5rem minmax(0, 1fr) auto;
-    column-gap: 10px;
+    grid-template-columns: 3rem minmax(0, 1fr) auto auto;
+    column-gap: 8px;
     row-gap: 2px;
     align-items: start;
 }
@@ -624,6 +628,7 @@
    "Sam" beside "you" in the same column reads as a mistake. */
 .cm-who {
     grid-column: 1;
+    grid-row: 1;
     margin: 0;
     font-size: 0.82rem;
     line-height: 1.55;
@@ -643,6 +648,7 @@
 
 .cm-text {
     grid-column: 2;
+    grid-row: 1;
     margin: 0;
     font-size: 0.9rem;
     line-height: 1.5;
@@ -661,6 +667,7 @@
    "this is when that finished" rather than as a column of loose timestamps. */
 .cm-when {
     grid-column: 3;
+    grid-row: 1;
     align-self: end;
     margin: 0;
     font-family: var(--us-mono);
@@ -686,7 +693,7 @@
    gutter is the luxury — the name is still first and still full strength. */
 @media (max-width: 380px) {
     .cm-item {
-        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-columns: minmax(0, 1fr) auto auto;
     }
 
     /* EVERY ROW PINNED, and that is not belt-and-braces. Auto-placement fills forward
@@ -730,17 +737,89 @@
    and two buttons cannot render in a 48px column, so `[open]` moves the grid-column —
    collapsed it is a word in the margin, expanded it is a form across the item. Pure
    CSS on a native `details`, so it still works with no script. */
+/* CLOSED: the fourth track, on the clock's own line, bottom-aligned to the last line
+   of the message exactly as the clock is. ~~One line below the clock~~ was the
+   previous placement and it still spent a row on one word.
+
+   OPEN: row two, across the message and everything right of it. The form cannot live
+   in a 48px track, and moving the grid area on `[open]` is what lets the same element
+   be a word in the margin and then a panel. */
 .cm-own {
-    grid-column: 3;
-    grid-row: 2;
+    grid-column: 4;
+    grid-row: 1;
+    align-self: end;
     justify-self: end;
-    margin-top: 2px;
 }
 
 .cm-own[open] {
     grid-column: 2 / -1;
+    grid-row: 2;
     justify-self: stretch;
-    margin-top: 6px;
+    margin-top: 8px;
+
+}
+
+/* ---- THE OPEN PANEL ----------------------------------------------------------
+   THE GRID IS ON THIS WRAPPER AND NOT ON THE `details`, and that is a browser fact
+   rather than a preference: `display: grid` on a <details> does NOT make its children
+   grid items. The engine slots them into a UA-generated block, so the grid holds one
+   item and everything inside reverts to normal flow. Proved rather than guessed —
+   forcing the second track to 60px moved the TRACK and left both buttons exactly
+   where they were, side by side, computing as `inline-block`. That is normal inline
+   flow, which is what a `display: contents` form collapses into when its parent is
+   not really a grid.
+
+   Two columns: the box spans both, then `save` takes the left and `delete` the right.
+   OPPOSITE ENDS ON PURPOSE — they were stacked 6px apart, which put the destructive
+   control directly under the thumb that had just pressed save. Distance is the
+   cheapest misclick guard there is and the row was half empty anyway.
+
+   `display: contents` on the two FORMS is what makes one row out of two forms. They
+   STAY two forms: that is the guarantee that a delete can never be what a mistyped
+   edit does, and it is not being traded for a layout. Merging them into a single form
+   with two submit buttons would also have worked and was rejected — it moves `action`
+   from a hidden field to whichever button was pressed, on the write path that was
+   reported broken two days ago. `display: contents` changes where children DRAW and
+   nothing at all about what submits. */
+.cm-own-panel {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+    align-items: center;
+    margin-top: 8px;
+}
+
+.cm-own-panel .cm-form {
+    display: contents;
+}
+
+.cm-own-panel .cm-label,
+.cm-own-panel .cm-input {
+    grid-column: 1 / -1;
+}
+
+/* SMALLER, and the height floor is the part that does not move. 44px is the iOS touch
+   minimum, and a smaller label does not make a thumb smaller — so the padding and the
+   tracking come in and the box does not. */
+.cm-own-panel .cm-go {
+    grid-column: 1;
+    justify-self: start;
+    margin: 0;
+    padding: 0 12px;
+    font-size: 0.64rem;
+    letter-spacing: 0.1em;
+}
+
+.cm-own-panel .cm-drop {
+    grid-column: 2;
+    justify-self: end;
+    margin: 0;
+}
+
+/* Two rows at most before it scrolls. The edit box was `rows="3"` at 16px, which is a
+   90px panel to change a sentence; the markup is `rows="2"` now and this caps a drag. */
+.cm-input--edit {
+    max-height: 8.5rem;
 }
 
 /* NARROW PHONES GET THE SAME IDEA WITH THE TRACKS THEY HAVE. There are only two columns
@@ -750,22 +829,24 @@
    line (390 on a 15, 375 on an SE), so leaving this branch alone would have meant the
    change never appeared on half the phones in the house. */
 @media (max-width: 380px) {
+    /* Three tracks here too, so `edit` still lands on the clock's line — it is just
+       that the message drops to its own row beneath instead of sharing one. */
     .cm-own {
-        grid-row: 3;
-        grid-column: 1 / -1;
+        grid-row: 1;
+        grid-column: 3;
+        align-self: start;
         justify-self: end;
-        margin-top: 2px;
     }
 
     /* `grid-column` RESTATED, and leaving it out was a real bug rather than a tidy-up.
        A media query adds no specificity, so `.cm-own[open]` outside this block (0,2,0)
-       beats `.cm-own` inside it (0,1,0) and its `2 / -1` won — which on a two-column
-       grid means column two ALONE. The open form rendered 216px wide starting 122px in,
+       beats `.cm-own` inside it (0,1,0) and its column won — which on the narrow grid
+       is the wrong track. The open form once rendered 216px wide starting 122px in,
        with the whole left side of the item empty. Measured, not spotted by reading. */
     .cm-own[open] {
+        grid-row: 3;
         grid-column: 1 / -1;
         justify-self: stretch;
-        margin-top: 6px;
     }
 }
 
