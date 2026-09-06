@@ -699,23 +699,42 @@
     cursor: default;
 }
 
-.cm-drop {
-    /* NOT RED. A delete here removes one sentence one of them wrote, on a page that
-       is a present — colouring it as a hazard would make the room feel like an admin
-       panel. It is quieter than `save it`, which is the honest weighting.
+/* A WORD, NOT A PLATE.
 
-       THE QUIETNESS IS IN THE LABEL, NOT THE BOUNDARY, and that correction came from
-       the first time anyone LOOKED at this thread. The border was --concrete-1, which
-       us.css names as decoration that must never be a control border because it
-       measures 1.50:1 on the page — under the 3:1 WCAG 1.4.11 asks of a UI component,
-       and invisible next to `save it`. Worse than the ratio: --concrete-1 on a
-       bordered control already MEANS something here, and it means disabled
-       (.tg-btn[disabled] in us-together.css is the same token for that reason). So
-       the one control that erases something read as the one control that does
-       nothing. --concrete-2 is the same frame `save it` wears; the dimmer label is
-       what keeps it the quieter of the two. */
-    color: var(--concrete-3);
-    border-color: var(--concrete-2);
+   NOT RED, still — a delete here removes one sentence one of them wrote, on a page that
+   is a present, and colouring it as a hazard would make the room feel like an admin
+   panel. Quieter than `save it` remains the honest weighting. What changed is HOW quiet
+   is expressed, and it took two goes and a real phone to get there.
+
+   "IT SHOWS AS GRAYED OUT ALWAYS" WAS A CORRECT READING BOTH TIMES.
+   ~~The border was the problem~~ was the first fix and it only got half. --concrete-1 on
+   the boundary did have to go (us.css names it decoration, 1.50:1, under the 3:1 WCAG
+   1.4.11 wants of a component edge, and .tg-btn[disabled] in us-together.css uses that
+   very token to MEAN inactive). But the LABEL stayed --concrete-3 against `save it`'s
+   --chalk, and a dim label inside a bordered box is the platform convention for
+   disabled just as much as a dim border is. I expressed "quieter" as LESS CONTRAST
+   twice, and less contrast is the one thing that cannot mean "secondary" here, because
+   it already means "you cannot press this".
+
+   So the quiet is LESS STRUCTURE now. No box at all: an underlined word beside a
+   bordered button is unmistakably a secondary action, and it can carry a full-strength
+   label precisely because nothing about it resembles a greyed-out plate. That answers
+   the other half of the same report — "the button is too big" — without a second
+   change, since the visible ink is now the word instead of a 44px plate.
+
+   THE TOUCH TARGET DOES NOT SHRINK WITH IT. min-height stays at 44px from the shared
+   rule above, so the tappable area is untouched while the ink shrinks. Separating those
+   two is the entire trick, and shrinking the box to look smaller would have traded a
+   phone-sized target for it. */
+.cm-drop {
+    color: var(--chalk-dim);
+    background: none;
+    border: 0;
+    border-radius: 0;
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 3px;
+    padding: 0;
 }
 
 .cm-status {
