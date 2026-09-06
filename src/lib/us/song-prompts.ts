@@ -16,18 +16,71 @@
    was for and the one part of it that was missing.
 
    ---------------------------------------------------------------------------
-   DETERMINISTIC, SO NOTHING HAS TO BE STORED
+   DETERMINISTIC FOR TODAY, AND WRITTEN DOWN FOR HISTORY
 
    The prompt is a pure function of the date, identical for both of them and stable
-   all day — exactly like promptFor(). That has a consequence worth stating because
-   it removes a whole feature: THE ARCHIVE CAN RECOMPUTE ANY PAST DAY'S PROMPT, so
-   no prompt is written to the store, there is no field to migrate, and no record
-   written before today is missing anything.
+   all day — exactly like promptFor(). Everything on THIS page comes from that.
 
-   The cost is the same one promptFor() carries: ORDER IS LOAD-BEARING. Appending to
-   the end of the list is free. INSERTING IN THE MIDDLE re-labels every past day from
-   that point on, so an archive day would quietly start claiming it was asked
-   something it was not. Append.
+   ~~THE ARCHIVE CAN RECOMPUTE ANY PAST DAY'S PROMPT, so no prompt is written to the
+   store.~~ It can, and it must not. That was true of the code and wrong about the
+   world: recomputing is only honest while the list never changes, and the list is a
+   list of questions somebody wrote. The first rewrite arrived ONE DAY after this
+   shipped, because the prompts were too open-ended to compare — and every entry that
+   moved would have silently re-labelled every past day, so the archive would state a
+   question with total confidence that the song was never answering.
+
+   So `prompt` is now copied onto the song record at post time (TrackRecord in kv.ts,
+   written by song.ts and reply.ts) and the archive READS it. The rotation below is
+   still the only thing that decides what today asks.
+
+   WHAT THAT BUYS: the list is now editable. Reordering, replacing and deleting are
+   all safe, because nothing in history depends on this array any more. The cost is
+   eleven words per song, and a day posted before the field existed shows no prompt
+   line at all rather than an invented one — which is also the right answer for every
+   day before the feature existed.
+
+   ~~ORDER IS LOAD-BEARING. Append.~~ Not any more, and this is the whole point of
+   storing it. One thing does still follow from the rotation: a prompt APPENDED to the
+   end is asked once the walk reaches it, which at 51 entries can be two months away,
+   while one that REPLACES an existing entry is in circulation immediately. That is a
+   scheduling fact, not a safety rule.
+
+   ---------------------------------------------------------------------------
+   A PROMPT NAMES A CATEGORY, NOT A FEELING
+
+   The rule the rewrite came out of, and the one to hold any new entry against.
+
+   "the song that got you through the day" gets two answers with nothing in common:
+   each of them needed something different that day, both answers are private and
+   correct, and there is nothing to say back. "the best disco song ever made" gets two
+   answers you can put side by side and argue about. The feature exists so a day reads
+   as one exchange, and that only happens when both people are answering the same
+   question in the same terms.
+
+   So every entry is anchored to an era, a genre, a named part of a song, or a role.
+   Where a mood survived, it carries a SUPERLATIVE — "the best song for walking home
+   at 2am" has one answer each, where "a song for walking home at 2am" has twenty.
+
+   AN ERA, NEVER A SINGLE YEAR. ~~your favourite song from 2005~~ was the first pass
+   and it is too tight: almost nobody can name a favourite from one specific year
+   without stopping to look it up, so a prompt that should take ten seconds becomes
+   homework and the day gets skipped. "the early 2000s" is still narrow enough that
+   two picks sit in the same world, and it is answerable from memory. The two personal
+   year anchors that remain — the year you finished school, last summer — stay because
+   those are years a person already has in mind rather than years they have to work
+   out.
+
+   "YOUR FAVOURITE X" VS "THE BEST X YOU KNOW", and the difference is deliberate on
+   every genre line. "Your favourite" presumes a shelf. For a genre one of them may
+   barely own, that is a dead day — and the screening rules below require every prompt
+   to be answerable by EITHER of them on a bad day. "The best you know" accepts a
+   shallow answer honestly, so the far-out genres use it and the mainstream ones do
+   not.
+
+   The genre prompts are the closest this list gets to naming an artist, which is the
+   thing the screening rules below forbid. Naming the genre does the same work — it
+   narrows the field enough that two picks are comparable — without betting on either
+   of their libraries.
 
    ---------------------------------------------------------------------------
    A SEQUENTIAL ROTATION, NOT A HASH
@@ -87,8 +140,18 @@ export function isSongWeekPrompt(date: string): boolean {
   return (((n + 4) % 7) + 7) % 7 === 0;
 }
 
-/** Sunday's prompt. One a week, and it is about the week rather than about a era. */
-export const SONG_WEEK_PROMPT = 'the song that got you through this week';
+/**
+ * Sunday's prompt. One a week, and it looks back at the week rather than at an era.
+ *
+ * ~~the song that got you through this week~~ — replaced, and it is the line that
+ * started the rewrite below. "Got you through" asks for a private answer: whatever
+ * each of them needed that week, which the other cannot agree or disagree with and
+ * cannot really answer back. Most-played is the same backward look at the week and it
+ * is a FACT both of them can produce, so the two halves sit next to each other and
+ * mean something together. "Honestly" is doing real work — it licenses the
+ * embarrassing true answer over the flattering one.
+ */
+export const SONG_WEEK_PROMPT = 'the song you played most this week, honestly';
 
 /**
  * The rotation. Append only — see the header.
@@ -97,66 +160,105 @@ export const SONG_WEEK_PROMPT = 'the song that got you through this week';
  * decades. Order within the list is the order they will be asked.
  */
 export const SONG_PROMPTS: readonly string[] = [
-  /* ---- eras, which is what he asked for first ---- */
-  'your favourite song from 2005',
-  'a song from the 2000s you still know every word to',
-  'your favourite song from 2012',
-  'a 2010s song you think aged really well',
-  'the song that was everywhere the summer you turned sixteen',
-  'a song from before either of us was allowed to listen to it',
+  /* ---- AN ERA, NEVER A SINGLE YEAR. See the header: "your favourite song from
+     2005" is a trivia question, and the honest answer to it is usually "hold on".
+     A stretch of years is still narrow enough that two picks compare. ---- */
+  'your favourite song from the early 2000s',
+  'your favourite song from the late 2000s',
+  'your favourite song from the early 2010s',
+  'your favourite song from the late 2010s',
+  'your favourite song from the 2020s so far',
+  'your favourite song from the 90s',
+  'your favourite song from the 80s',
+  'the best song of the 2000s, and you have to commit',
+  'the best song of the 2010s, one pick only',
+  'your favourite throwback from before either of us could drive',
+  'the best song from a decade you were not born in',
+  'the song that owned last summer',
   'your favourite song from the year you finished school',
-  'a 2000s R&B song that deserves more credit',
-  'the best rap song of 2009, and you have to commit',
-  'a song from the 2010s you were late to and now love',
+  'the best song of this year so far',
 
-  /* ---- genre and sound ---- */
-  'your favourite slow jam',
-  'the best beat you have ever heard, whatever is on top of it',
-  'a neo-soul song for a slow morning',
-  'your favourite song with a sample you can name',
-  'the hardest verse you know by heart',
-  'a song that is all bass and no apology',
-  'your favourite song that is barely two minutes long',
-  'a song with a beat switch that still gets you',
-  'the best hook, not the best song',
-  'a song you would use to explain rap to somebody who has never listened to it',
-  'your favourite R&B song sung by a man',
+  /* ---- THE GENRE, NAMED, which is the closest this list gets to naming an
+     artist. "your favourite" for the ones anybody has a shelf of; "the best you
+     know" for the further-out ones, because that phrasing accepts a shallow
+     answer and a genre nobody can answer is a dead day. ---- */
   'your favourite R&B song sung by a woman',
-  'a song where the feature outshines the main artist',
-  'the best intro on any track, first thirty seconds only',
-  'a song that is better on headphones than out loud',
+  'your favourite R&B song sung by a man',
+  'the best rap verse you know, and say whose it is',
+  'your favourite rap song with no chorus at all',
+  'the best neo-soul song you know',
+  'your favourite house track',
+  'the best techno track you know',
+  'the best garage or jungle track you know',
+  'the best drum and bass track you know',
+  'your favourite afrobeats song',
+  'the best amapiano song you know',
+  'your favourite reggaeton song',
+  'the best dancehall song for a hot afternoon',
+  'your favourite reggae song',
+  'the best salsa or bachata song you know',
+  'the best bossa nova record you know',
+  'your favourite country song, and yes you have one',
+  'the best gospel song you know',
+  'your favourite jazz record to put on and not talk over',
+  'the best disco song ever made, one answer only',
+  'your favourite funk bassline',
+  'the best punk song under three minutes',
+  'the best metal song you know, even if it is the only one',
+  'the best trip hop song you know, for a grey day',
+  'your favourite song to work to with nobody singing on it',
+  'your favourite k-pop song',
+  'the best song with a saxophone in it',
+  'the best song in a language neither of us speaks',
+  'a song that is all bass and no apology',
 
-  /* ---- let them pick the artist, which is better than us picking ---- */
+  /* ---- they pick the artist, for the reason in the header ---- */
   'your favourite song by an artist you have never mentioned to me',
-  'the song you would pick to convert somebody to your favourite artist',
-  'your favourite song by an artist who only made one you like',
-  'the best song by the artist you have played most this year',
-  'a song by somebody you discovered through a soundtrack',
-  'your favourite song by an artist neither of us can pronounce properly',
+  'the song you would use to convert somebody to your favourite artist',
+  'the best song by an artist who only ever made one you like',
+  'the artist you have played most this year, and their best song',
+  'your favourite song by a band rather than one person',
+  'a song where the feature is better than the main artist',
+  'the best first song any artist ever put out',
+  'your favourite song you found through a soundtrack',
+  'the best song by an artist from somewhere neither of us has been',
+  'your favourite song by somebody who died before you heard them',
+  'the best song by two artists who should never have worked together',
+  'your favourite song by an artist younger than us',
 
-  /* ---- occasions, and none of them a workout ---- */
-  'the song for a long drive with nowhere to be',
-  'a song for cooking on a weeknight',
-  'the song you would put first on a playlist for a stranger',
-  'a song for the exact moment a night starts',
-  'the song for walking home at 2am',
-  'a song for a rainy Sunday and no plans',
-  'the song you would want playing when you arrive somewhere new',
-  'a song for doing nothing at all',
+  /* ---- ONE PART of a song, so both answers are about the same thing ---- */
+  'the best beat you have ever heard, whatever is on top of it',
+  'the best hook, not the best song',
+  'the best intro on any track, first thirty seconds only',
+  'the best outro, the part after it should have ended',
+  'the best bridge in any song',
+  'your favourite song with a sample you can name',
+  'the best beat switch you know',
+  'your favourite cover that beats the original',
+  'your favourite song under two minutes',
+  'the best song over six minutes, and worth every one',
+  'your favourite live version of a song you know by heart',
+  'the best duet, two people who should always sing together',
+  'your favourite song that is one voice and one instrument',
+  'the best song with no words at all',
+  'your favourite song that changes key and you can hear it coming',
+  'the best last track on any album',
 
-  /* ---- feeling, kept light ---- */
-  'a song that makes you feel like you are getting away with something',
-  'the song you play when you need to snap out of a mood',
-  'a song you love that you would be a little embarrassed to put on aloud',
+  /* ---- a moment, but anchored to a superlative so the two picks still compare.
+     "a song for walking home at 2am" is a mood; "the BEST song for walking home
+     at 2am" is a question with one answer each. ---- */
+  'the best song for a long drive with nowhere to be',
+  'the best song for the exact moment a night starts',
+  'the best song for walking home at 2am',
+  'the best song for a rainy afternoon and no plans',
+  'the best song for a kitchen at midnight',
+  'the best song for the last hour of a flight',
+  'the best song for the first warm day of the year',
+  'the best song to cook to',
+  'the best song to fall asleep to',
+  'the first song on a playlist you would make for a stranger',
+  'the best song you would be a bit embarrassed to play out loud',
   'the song you would defend in an argument',
-  'a song that sounds like the city you live in',
-  'a song that sounds like the city you want to live in',
-  'the song you have listened to most times in your life, honestly',
-  'a song that reminds you of somebody you have not seen in years',
-  'a song you cannot listen to just once',
-  'the last song that genuinely surprised you',
-  'a song you would want to hear live more than any other',
-  'the song you would pick if you only got one more',
 ];
 
 /**
@@ -192,9 +294,11 @@ export function songPromptFor(date: string, list: readonly string[] = SONG_PROMP
    THERE IS A WORSE VERSION OF IT hiding behind that. The skipped index is
    `dayNumber % 7`-dependent, and Sunday is always the same residue, so if the list
    length is a MULTIPLE OF SEVEN the same indices are skipped forever: those prompts
-   are unaskable, permanently, and nothing anywhere would say so. This list is 50
-   long and 50 is coprime with 7, so it never bit — a latent trap that would have
-   sprung on whoever tidied the list to 49 entries.
+   are unaskable, permanently, and nothing anywhere would say so. The list was 50 long
+   at the time and 50 is coprime with 7, so it never bit — a latent trap that would
+   have sprung on whoever tidied the list to 49 entries. It is 83 now, and the length
+   is free precisely because this was fixed rather than documented: 84 would have been
+   a live bug under the old index and is fine under this one.
 
    Counting non-Sunday days instead makes the walk genuinely contiguous and removes
    the trap rather than documenting it, so appending is safe at any length.

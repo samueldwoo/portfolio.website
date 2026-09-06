@@ -109,6 +109,7 @@ import { clientKey, hit } from '../../../lib/us/ratelimit';
 import { notify } from '../../../lib/us/push';
 import { crossSite, identify } from '../../../lib/us/together';
 import { timer, trace } from '../../../lib/us/trace';
+import { songPromptFor } from '../../../lib/us/song-prompts';
 import {
   StoreError,
   emptyPair,
@@ -1029,6 +1030,13 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
     album: meta.album,
     year: meta.year,
     durationMs: meta.durationMs,
+    /* THE QUESTION HE WAS ANSWERING, WRITTEN DOWN AT THE MOMENT HE ANSWERED IT.
+       Derived from `date` and not from a form field, so there is nothing for a client
+       to choose and nothing for the no-JavaScript path to fail to fill — and both
+       sides call the same function on the same date, so a day cannot end up with two
+       different questions on its two halves. See TrackRecord.prompt in kv.ts for why
+       this is stored rather than recomputed by the archive. */
+    prompt: songPromptFor(date),
   };
 
   try {

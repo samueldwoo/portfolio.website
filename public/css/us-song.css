@@ -826,6 +826,24 @@
     margin: 0 0 8px;
 }
 
+/* WHAT THAT DAY ASKED. Sentence case and the body face, deliberately unlike the
+   date above it: the date is a label and this is a question somebody wrote, so
+   making it a second row of tracking-heavy mono would file it as metadata. It is
+   the one line that explains why two particular songs share a row.
+
+   Quieter than the titles below it and louder than the date, which is the actual
+   ranking — you read the question, then the answers, and the date is only how you
+   find the row again. */
+.archive-prompt {
+    font-size: 0.78rem;
+    line-height: 1.4;
+    color: var(--concrete-4);
+    margin: -2px 0 8px;
+    /* Same measure the live prompt uses on today's card, so the two read as one
+       voice rather than two components. */
+    max-width: 40ch;
+}
+
 /* Two slots, equal, exactly like .pair above and for the same
    reason.
 

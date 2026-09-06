@@ -103,6 +103,7 @@ import { isTimeZone, isWingDate, putReply, wingDate, type ReplyRecord } from '..
 // still exists over in song.ts to cap what the embed page returns.
 import { MAX_NOTE, cleanText, resolveMetadata, resolveTrackId } from './song';
 import { timer, trace } from '../../../lib/us/trace';
+import { songPromptFor } from '../../../lib/us/song-prompts';
 
 export const prerender = false;
 
@@ -278,6 +279,10 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress, redirect
     album: meta.album,
     year: meta.year,
     durationMs: meta.durationMs,
+    /* The same prompt his side stores, from the same function on the same date — see
+       song.ts and TrackRecord.prompt. Both halves carry it so a day whose other half
+       never arrived still knows what it was asked. */
+    prompt: songPromptFor(date),
   };
 
   try {

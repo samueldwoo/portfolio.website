@@ -925,6 +925,26 @@ function minisFor(pair: DayPair): Mini[] {
 
   return out;
 }
+
+/**
+ * What that day asked, or '' when nothing was asked or nothing was recorded.
+ *
+ * READ OFF THE RECORD, NEVER RECOMPUTED FROM THE DATE. songPromptFor() would answer
+ * for any day in history and the answer would be a lie the moment the list is edited —
+ * which it just was. Whatever the poster was actually looking at is in the record, and
+ * a day with no stored prompt gets NO LINE rather than an invented one. Every song
+ * written before today is in that state, so for the first week this is mostly empty on
+ * purpose: an archive that silently back-fills questions nobody was asked is worse
+ * than one that says nothing.
+ *
+ * `||` AND NOT `??`, which is the trap CLAUDE.md names: parseTrack stores an absent
+ * prompt as '', so `??` would hand '' straight through and render an empty line.
+ *
+ * ONE PROMPT PER DAY, taking whichever half has it — both endpoints write the same
+ * string from the same function on the same date, so they cannot disagree, and a
+ * one-sided day still knows its own question.
+ */
+const dayPrompt = (pair: DayPair): string => pair.his?.prompt || pair.hers?.prompt || '';
 ---
 
 <!DOCTYPE html>
@@ -1761,6 +1781,16 @@ function minisFor(pair: DayPair): Mini[] {
                         track — it is the same day, and saying it twice is how
                         a ledger stops being readable. */}
                     <p class="archive-date">{wingDateLabel(pair.date, { withYear: true })}</p>
+                    {/* WHAT THAT DAY ASKED, under the date and above the songs, because
+                        that is the order it happened in: the question, then the two
+                        answers to it. Without it the archive is a list of songs whose
+                        pairing looks arbitrary a week later — the prompt is the only
+                        thing that explains why those two are on the same row.
+
+                        Not folded into the mini's aria-label: a two-song day would
+                        then speak it twice, and the prompt belongs to the day rather
+                        than to either track. */}
+                    {dayPrompt(pair) && <p class="archive-prompt">{dayPrompt(pair)}</p>}
                     <div class="archive-tracks">
                         {minisFor(pair).map((m) => (
                             <a

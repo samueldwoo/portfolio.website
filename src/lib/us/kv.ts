@@ -723,6 +723,29 @@ export interface TrackRecord {
   year?: string;
   /** Track length in milliseconds. 0 or undefined when unknown. */
   durationMs?: number;
+
+  /**
+   * THE PROMPT THIS SONG WAS ANSWERING, copied in at post time.
+   *
+   * STORED RATHER THAN RECOMPUTED, and that reverses what song-prompts.ts originally
+   * argued. Its rotation is a pure function of the date, so the archive *can* derive
+   * any past day's prompt — but only while the list never changes. The list is a list
+   * of questions somebody wrote, and questions get rewritten: the first rewrite lands
+   * a day after the feature shipped, and every entry that moved would silently
+   * re-label every past day, so the archive would state, with total confidence, a
+   * question that song was never answering. That failure is already documented one
+   * feature over — `promptFor()`'s Sunday defect is unfixable for exactly this reason.
+   *
+   * Copying eleven words per song buys the freedom to keep editing the list. That is
+   * a trade in the right direction: the prompt is CONTENT, and content that history
+   * depends on has to be written down where history can read it.
+   *
+   * OPTIONAL AND PERMANENTLY SO, exactly like `tz` above. Every song already on the
+   * shelf has none, so the archive shows no prompt line for those days rather than
+   * inventing one — which is also the correct answer for every day before the prompt
+   * feature existed. Read it with `||`, never `??`: parseTrack stores absent as ''.
+   */
+  prompt?: string;
 }
 
 /**
@@ -848,6 +871,11 @@ function parseTrack(raw: unknown): TrackRecord | null {
       Number(obj.durationMs) < 3 * 60 * 60 * 1000
         ? Math.floor(Number(obj.durationMs))
         : 0,
+    /* CAPPED AT THE SAME 90 the prompt list is asserted against, because this read
+       also runs over records a human could have edited in the Upstash console, and a
+       paragraph pasted here would render as a paragraph above an archive row. '' for
+       every song written before the field existed, which is all of them. */
+    prompt: str(obj.prompt).slice(0, 90),
   };
 }
 
