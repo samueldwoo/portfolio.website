@@ -98,19 +98,31 @@
    Funk is the more canonical music by any measure; a dubstep song is the one a person
    can actually produce on demand. Broad and immediate beats broad and respected.
 
-   THE NAMED ARTIST IS NOW THE BACKBONE, AND FOUR SHAPES BEAT FOUR MORE NAMES. Each
-   rapper gets asked up to four different ways — the song, the best verse, the best
-   GUEST verse on somebody else record, and the best beat on one of their songs. That
-   is deliberate and it is not padding:
+   FOUR SHAPES ARE EARNED, AND ONLY THREE ARTISTS EARN THEM. An artist can be asked
+   four different ways — the song, the best verse, the best GUEST verse on somebody
+   else record, and the best beat on one of their songs — and those four are genuinely
+   four questions rather than padding. The best beat on a Drake song is usually not on
+   his best song, which is exactly the argument the prompt is fishing for.
 
-     - It is where the comparison is sharpest. Two people naming their favourite Drake
-       song are answering as precisely the same question as this list can construct.
-     - A verse, a feature and a beat are three DIFFERENT questions about one artist,
-       and the answers rarely coincide. The best beat on a Drake song is usually not on
-       his best song, which is the argument the prompt is fishing for.
-     - The shapes only fit rappers. A "best verse" prompt about a producer is a
-       category error rather than a harder question, so the singers and the dance acts
-       get the song shape only, and NAMED_ARTISTS says which is which.
+   But the shapes are only worth spending on somebody whose catalogue BOTH of them
+   could argue about, and that is a much shorter list than "artists we have posted".
+   ~~Seven artists carried three or four prompts each~~ and it tipped the whole list too
+   far toward trivia about specific rappers: at its widest 37 of 102 prompts named an
+   artist. Now it is Drake, Future and Travis Scott at four, everybody else at one, and
+   25 of 90.
+
+   THE TEST IS "COULD THE OTHER ONE ARGUE BACK", not "is this artist good". Gunna and
+   Kodak Black are both properly popular and both were posted — they just do not have
+   the kind of catalogue where two people each hold a confident favourite VERSE, so
+   asking three ways got three versions of the same shrug. One prompt each is the honest
+   amount.
+
+   THE SHAPES ALSO ONLY FIT RAPPERS at all. A "best verse" prompt about a producer is a
+   category error rather than a harder question, so the singers and the dance acts were
+   never candidates, and NAMED_ARTISTS records which is which. Travis Scott is the one
+   exception in the other direction: his fourth is the best feature ON one of his songs
+   rather than his best guest verse elsewhere, because that is the way his features
+   actually run.
 
    RIGHT NOW BEATS ALL TIME, and that shape was missing entirely. Every other prompt
    asks somebody to search their memory and rank things, which is work. "your hype
@@ -226,10 +238,13 @@ export const SONG_WEEK_PROMPT = 'the song you played most this week, honestly';
  * safe if the allowlist is enforced.
  */
 export const NAMED_ARTISTS: readonly string[] = [
-  /* The rappers, who carry the song / verse / feature / beat shapes. */
+  /* THE THREE THAT CARRY FOUR SHAPES EACH — song, verse, guest verse, beat. See the
+     header: four prompts is earned by a catalogue both of them could argue about, not
+     by having been posted. */
   'Drake',
   'Travis Scott',
   'Future',
+  /* Everybody below gets the SONG SHAPE ONLY, whether or not they rap. */
   '21 Savage',
   'Lil Wayne',
   'Gunna',
@@ -237,7 +252,6 @@ export const NAMED_ARTISTS: readonly string[] = [
   'Yeat',
   'A$AP Ferg',
   'BigXthaPlug',
-  /* Sings rather than raps, so it gets the song and feature shapes and no verse. */
   'PARTYNEXTDOOR',
   /* THE ONE NAME HERE THAT IS NOT FROM THEIR SHELVES — asked for directly, and asked
      for as ONE PROMPT rather than the four a rapper usually gets. Worth keeping that
@@ -245,7 +259,8 @@ export const NAMED_ARTISTS: readonly string[] = [
      Kanye song" is already an argument, and the verse and beat prompts would each open
      a second one on a day that only needs the first. */
   'Kanye',
-  /* Not rappers at all — the song shape only. See cluster four below. */
+  /* Not rappers at all, so they were never candidates for the verse and beat shapes
+     even before the trim. Grouped in cluster four below. */
   'Daniel Caesar',
   'Joji',
   'Calvin Harris',
@@ -303,7 +318,6 @@ export const SONG_PROMPTS: readonly string[] = [
   'the best Drake verse, not the best Drake song',
   'the best guest verse Drake ever did',
   'the best beat on any Drake song',
-  'the Drake song you would play for somebody who says they hate Drake',
   'your favourite Travis Scott song',
   'the best Travis Scott verse',
   'the best beat on any Travis Scott song',
@@ -330,14 +344,8 @@ export const SONG_PROMPTS: readonly string[] = [
 
   /* ---- named artists, cluster two ---- */
   'your favourite Gunna song',
-  'the best Gunna verse',
-  'the best beat on any Gunna song',
   'your favourite Kodak Black song',
-  'the best Kodak Black verse',
-  'the best beat on any Kodak Black song',
   'your favourite 21 Savage song',
-  'the best 21 Savage verse',
-  'the best guest verse 21 Savage ever did',
   'your favourite Future song',
   'the best Future verse',
   'the best guest verse Future ever did',
@@ -376,21 +384,16 @@ export const SONG_PROMPTS: readonly string[] = [
 
   /* ---- named artists, cluster three ---- */
   'your favourite Lil Wayne song',
-  'the best Lil Wayne verse',
-  'the best guest verse Lil Wayne ever did',
   'your favourite Yeat song',
-  'the best beat on any Yeat song',
   'your favourite A$AP Ferg song',
-  'the best A$AP Ferg verse',
   'your favourite BigXthaPlug song',
   'your favourite PARTYNEXTDOOR song',
-  'the best guest verse PARTYNEXTDOOR ever did',
-  /* Song shape only, on purpose — see NAMED_ARTISTS. */
   'your favourite Kanye song',
 
-  /* ---- named artists, cluster four: the ones who are not rappers, so only the
-     song shape. A "best verse" prompt about a producer or a singer is a category
-     error, not a harder question. ---- */
+  /* ---- named artists, cluster four: the ones who are not rappers. They were never
+     candidates for the verse and beat shapes even before the trim, because a "best
+     verse" prompt about a producer is a category error rather than a harder
+     question. ---- */
   'your favourite Daniel Caesar song',
   'your favourite Joji song',
   'your favourite Calvin Harris song',
