@@ -27,6 +27,7 @@
  */
 import { readFileSync } from 'node:fs';
 import {
+  NAMED_ARTISTS,
   SONG_PROMPTS,
   SONG_WEEK_PROMPT,
   isSongWeekPrompt,
@@ -176,17 +177,40 @@ console.log('\n  --- 6. the list is fit for a PUBLIC repository, and for a bad d
   /* One line each. A prompt that needs a paragraph is a prompt that gets skipped. */
   is('every prompt is one short line', SONG_PROMPTS.every((p) => p.length <= 90 && !p.includes('\n')),
     SONG_PROMPTS.filter((p) => p.length > 90));
-  /* NO ARTIST IS NAMED, which the header commits to. A named artist is dead on a day
-     neither of them feels like that artist, and this list was written without ever
-     seeing their library. Checked with a capitalised-word test: the prompts are
-     deliberately all lower case except where grammar demands otherwise, so a stray
-     proper noun stands out. */
-  const capitalised = SONG_PROMPTS.filter((p) => /(?:^|\s)[A-Z][a-z]{2,}/.test(p.replace(/^\W*/, '')));
-  const allowed = new Set(['Sunday']);
-  const offenders = capitalised.filter(
-    (p) => !(p.match(/(?:^|\s)([A-Z][a-z]{2,})/g) ?? []).every((w) => allowed.has(w.trim())),
+  /* EVERY NAMED ARTIST IS AN APPROVED ONE.
+     ~~NO ARTIST IS NAMED~~ was the rule, on the reasoning that a list written without
+     ever seeing their library would be guessing. That objection was answered — the
+     names in NAMED_ARTISTS were read out of their own shelves — so the ban became an
+     ALLOWLIST. A ban is only safely replaced by an allowlist that is actually
+     enforced, which is what this is: a name that reaches a prompt without reaching
+     NAMED_ARTISTS fails here.
+
+     STRICTER THAN THE BAN IT REPLACES, in one way that matters. The old check was
+     `/[A-Z][a-z]{2,}/`, which cannot see an ALL-CAPS name: `PARTYNEXTDOOR` would have
+     sailed past it, so the "no proper nouns" assertion had a hole exactly where a
+     stage name is most likely to sit. This tests every token containing ANY capital,
+     so all-caps, mixed-caps and `A$AP`-style names are all caught. */
+  const APPROVED = new Set<string>([
+    'Sunday',
+    'R&B', // a genre, and the only capitalised common noun in the list
+    ...NAMED_ARTISTS.flatMap((a) => a.split(/\s+/)),
+  ]);
+  const namesIn = (p: string): string[] =>
+    p
+      .split(/[\s,]+/)
+      .map((w) => w.replace(/^[^A-Za-z0-9$&!]+|[^A-Za-z0-9$&!]+$/g, ''))
+      .filter((w) => w.length > 0 && /[A-Z]/.test(w));
+  const offenders = SONG_PROMPTS.flatMap((p) =>
+    namesIn(p)
+      .filter((w) => !APPROVED.has(w))
+      .map((w) => ({ prompt: p, word: w })),
   );
-  is('no artist or proper noun is named', offenders.length === 0, offenders);
+  is('every capitalised word is an approved artist or genre', offenders.length === 0, offenders);
+  /* The allowlist must not rot into permission for names nobody asks about. */
+  const unused = NAMED_ARTISTS.filter((a) => !SONG_PROMPTS.some((p) => p.includes(a)));
+  is('every approved artist is actually asked about', unused.length === 0, unused);
+  is('the week prompt names nobody', namesIn(SONG_WEEK_PROMPT).every((w) => APPROVED.has(w)),
+    namesIn(SONG_WEEK_PROMPT));
   /* No workout vocabulary — the palette is solidcore-derived, the language is not.
      This is in CLAUDE.md as a voice rule and a prompt list is exactly where it would
      slip in ("the song for your warm-up"). */

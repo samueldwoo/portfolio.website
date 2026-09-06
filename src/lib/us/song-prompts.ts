@@ -70,12 +70,23 @@
    those are years a person already has in mind rather than years they have to work
    out.
 
-   "YOUR FAVOURITE X" VS "THE BEST X YOU KNOW", and the difference is deliberate on
-   every genre line. "Your favourite" presumes a shelf. For a genre one of them may
-   barely own, that is a dead day — and the screening rules below require every prompt
-   to be answerable by EITHER of them on a bad day. "The best you know" accepts a
-   shallow answer honestly, so the far-out genres use it and the mainstream ones do
-   not.
+   ONLY GENRES BOTH OF THEM ACTUALLY LISTEN TO. ~~amapiano · bossa nova · salsa or
+   bachata · garage or jungle · drum and bass · techno · trip hop · k-pop · metal~~
+   all went, and the phrasing trick that was propping them up went with them: the
+   first pass hedged the far-out ones as "the best X you KNOW" rather than "your
+   favourite X", so a shallow answer counted. That hedge was the tell. A prompt that
+   has to lower its own bar to be answerable is a prompt neither of them wanted, and
+   naming a genre nobody has a shelf of narrows the field to nothing — which is the
+   opposite of the comparison this list exists for. Broad is better here: rap, R&B,
+   pop, rock, soul. "your favourite rap song" gets two real answers; "the best
+   amapiano song you know" gets two shrugs.
+
+   RIGHT NOW BEATS ALL TIME, and that shape was missing entirely. Every other prompt
+   asks somebody to search their memory and rank things, which is work. "your hype
+   song right now" and "the rap song you have been playing a lot lately" ask what is
+   ALREADY playing — no searching, no ranking, and both halves report the same kind of
+   fact on the same day. It is also the only shape whose answer changes over time, so
+   the same prompt is worth asking again next year.
 
    The genre prompts are the closest this list gets to naming an artist, which is the
    thing the screening rules below forbid. Naming the genre does the same work — it
@@ -154,10 +165,55 @@ export function isSongWeekPrompt(date: string): boolean {
 export const SONG_WEEK_PROMPT = 'the song you played most this week, honestly';
 
 /**
- * The rotation. Append only — see the header.
+ * THE ONLY ARTISTS THIS LIST MAY NAME, and the single source for that permission.
+ *
+ * ~~NO ARTIST IS NAMED~~ was the original rule and its reasoning was sound on both
+ * counts: a named artist is dead on a day neither of them feels like that artist, and
+ * a list written by somebody who has never seen their library is guessing. The second
+ * objection is the one that mattered, and it was answerable — these names were read
+ * out of their OWN song shelves, so none of them is a guess.
+ *
+ * THE FILTER IS "DEEP ENOUGH TO HAVE A FAVOURITE", and it is doing two jobs. The
+ * shelves hold 26 distinct artists and most were posted exactly once, including
+ * several with barely an album out: "your favourite <one-hit artist> song" has one
+ * possible answer and asking it is a formality, not a question. So only artists with a
+ * real catalogue are here.
+ *
+ * That same filter IS THE SYMMETRY RULE, which is the neater half of this. A prompt
+ * has to be answerable by EITHER of them, and these names come from two shelves
+ * combined — some were posted by one of them and never the other. Restricting to
+ * artists this famous makes "who posted them" stop mattering: both of them can name a
+ * favourite from any of these whether or not it was ever their own pick.
+ *
+ * ADDING ONE IS AN EDIT HERE, DELIBERATELY. scripts/test-song-prompts.mts requires
+ * every capitalised word in every prompt to appear in this array, so a name that
+ * arrives in a prompt without arriving here fails the suite. That is the point: the
+ * old test banned proper nouns outright, and replacing a ban with an allowlist is only
+ * safe if the allowlist is enforced.
+ */
+export const NAMED_ARTISTS: readonly string[] = [
+  'Drake',
+  'Travis Scott',
+  'Future',
+  '21 Savage',
+  'Lil Wayne',
+  'Gunna',
+  'Kodak Black',
+  'PARTYNEXTDOOR',
+  'Daniel Caesar',
+  'Joji',
+  'Calvin Harris',
+  'The Chainsmokers',
+  'Yeat',
+];
+
+/**
+ * The rotation.
  *
  * Grouped loosely so that a run of days does not feel like one long quiz about
- * decades. Order within the list is the order they will be asked.
+ * decades. Order within the list is the order they will be asked, which is also why
+ * the named-artist prompts sit in three separate clusters rather than one block —
+ * thirteen consecutive days of "your favourite X song" is a quiz.
  */
 export const SONG_PROMPTS: readonly string[] = [
   /* ---- AN ERA, NEVER A SINGLE YEAR. See the header: "your favourite song from
@@ -178,87 +234,96 @@ export const SONG_PROMPTS: readonly string[] = [
   'your favourite song from the year you finished school',
   'the best song of this year so far',
 
-  /* ---- THE GENRE, NAMED, which is the closest this list gets to naming an
-     artist. "your favourite" for the ones anybody has a shelf of; "the best you
-     know" for the further-out ones, because that phrasing accepts a shallow
-     answer and a genre nobody can answer is a dead day. ---- */
-  'your favourite R&B song sung by a woman',
-  'your favourite R&B song sung by a man',
-  'the best rap verse you know, and say whose it is',
-  'your favourite rap song with no chorus at all',
-  'the best neo-soul song you know',
-  'your favourite house track',
-  'the best techno track you know',
-  'the best garage or jungle track you know',
-  'the best drum and bass track you know',
-  'your favourite afrobeats song',
-  'the best amapiano song you know',
-  'your favourite reggaeton song',
-  'the best dancehall song for a hot afternoon',
-  'your favourite reggae song',
-  'the best salsa or bachata song you know',
-  'the best bossa nova record you know',
+  /* ---- RIGHT NOW AND LATELY, which is the easiest shape in the list and the most
+     comparable. Every other prompt asks somebody to search their memory; these ask
+     what is actually playing, so the answer is already in hand and both halves are
+     reporting the same kind of thing on the same day. ---- */
+  'your hype song right now',
+  'the song you have been playing a lot this week',
+  'the rap song you have been playing a lot lately',
+  'the R&B song you have been playing a lot lately',
+  'the song you have had on repeat this month',
+  'the last song you added to a playlist',
+  'the last song you sent somebody',
+  'the song you cannot stop playing right now',
+  'your shower song at the moment',
+  'the song you would put on right now if nobody else was home',
+  'the song you woke up with in your head',
+  'your walking-around song this week',
+
+  /* ---- NAMED ARTISTS, cluster one. Only from NAMED_ARTISTS above. ---- */
+  'your favourite Drake song',
+  'your favourite Travis Scott song',
+  'the best Future song, one pick only',
+  'your favourite Lil Wayne song',
+  'your favourite PARTYNEXTDOOR song',
+
+  /* ---- A GENRE ANYBODY CAN ANSWER. Kept deliberately broad — see the header on
+     why the niche ones went. ---- */
+  'your favourite rap song',
+  'your favourite R&B song',
+  'your favourite pop song',
+  'your favourite rock song',
+  'your favourite soul song',
   'your favourite country song, and yes you have one',
-  'the best gospel song you know',
-  'your favourite jazz record to put on and not talk over',
-  'the best disco song ever made, one answer only',
-  'your favourite funk bassline',
-  'the best punk song under three minutes',
-  'the best metal song you know, even if it is the only one',
-  'the best trip hop song you know, for a grey day',
-  'your favourite song to work to with nobody singing on it',
-  'your favourite k-pop song',
-  'the best song with a saxophone in it',
-  'the best song in a language neither of us speaks',
-  'a song that is all bass and no apology',
+  'your favourite gospel song',
+  'your favourite jazz song',
+  'your favourite reggae song',
+  'your favourite dancehall song',
+  'your favourite afrobeats song',
+  'your favourite house song',
+  'your favourite disco song',
+  'your favourite funk song',
+  'your favourite love song',
+  'your favourite sad song',
+  'your favourite slow song',
+  'your favourite party song',
+  'your favourite song to sing badly',
+  'your favourite song to drive to',
+
+  /* ---- named artists, cluster two ---- */
+  'your favourite 21 Savage song',
+  'your favourite Gunna song',
+  'your favourite Kodak Black song',
+  'your favourite Daniel Caesar song',
+  'your favourite Joji song',
 
   /* ---- they pick the artist, for the reason in the header ---- */
   'your favourite song by an artist you have never mentioned to me',
-  'the song you would use to convert somebody to your favourite artist',
-  'the best song by an artist who only ever made one you like',
   'the artist you have played most this year, and their best song',
   'your favourite song by a band rather than one person',
   'a song where the feature is better than the main artist',
-  'the best first song any artist ever put out',
   'your favourite song you found through a soundtrack',
-  'the best song by an artist from somewhere neither of us has been',
-  'your favourite song by somebody who died before you heard them',
-  'the best song by two artists who should never have worked together',
-  'your favourite song by an artist younger than us',
+  'the song you would use to convert somebody to your favourite artist',
 
   /* ---- ONE PART of a song, so both answers are about the same thing ---- */
-  'the best beat you have ever heard, whatever is on top of it',
-  'the best hook, not the best song',
-  'the best intro on any track, first thirty seconds only',
-  'the best outro, the part after it should have ended',
-  'the best bridge in any song',
+  'the best beat you know',
+  'the best hook you know',
+  'the best intro you know, first thirty seconds only',
   'your favourite song with a sample you can name',
-  'the best beat switch you know',
   'your favourite cover that beats the original',
+  'the best duet you know',
   'your favourite song under two minutes',
-  'the best song over six minutes, and worth every one',
   'your favourite live version of a song you know by heart',
-  'the best duet, two people who should always sing together',
-  'your favourite song that is one voice and one instrument',
-  'the best song with no words at all',
-  'your favourite song that changes key and you can hear it coming',
-  'the best last track on any album',
 
   /* ---- a moment, but anchored to a superlative so the two picks still compare.
      "a song for walking home at 2am" is a mood; "the BEST song for walking home
      at 2am" is a question with one answer each. ---- */
   'the best song for a long drive with nowhere to be',
-  'the best song for the exact moment a night starts',
+  'the best song for the start of a night out',
   'the best song for walking home at 2am',
   'the best song for a rainy afternoon and no plans',
-  'the best song for a kitchen at midnight',
-  'the best song for the last hour of a flight',
-  'the best song for the first warm day of the year',
   'the best song to cook to',
   'the best song to fall asleep to',
   'the first song on a playlist you would make for a stranger',
   'the best song you would be a bit embarrassed to play out loud',
   'the song you would defend in an argument',
+
+  /* ---- named artists, cluster three ---- */
+  'your favourite Calvin Harris song',
+  'your favourite Yeat song',
+  'the best song The Chainsmokers ever made',
+  'the best Drake verse, not the best Drake song',
 ];
 
 /**
