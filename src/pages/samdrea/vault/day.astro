@@ -57,6 +57,8 @@ import {
 } from '../../../lib/us/frames';
 import { lookupPlace } from '../../../lib/us/place';
 import { CARRY_DAYS, pickSlots } from '../../../lib/us/slots';
+import { getThreadsSafe, keyOf } from '../../../lib/us/comments';
+import { TEXT_MAX, thread } from '../../../lib/us/comment-thread';
 
 export const prerender = false;
 
@@ -121,6 +123,31 @@ const theirs = picked.theirs && stillFresh(picked.theirs.atMs, theirTz, nowMs) ?
 const mineFrom = mine ? picked.mineFrom : null;
 const theirsFrom = theirs ? picked.theirsFrom : null;
 
+/* ---- THE CONVERSATIONS UNDER THE TWO PHOTOGRAPHS ---------------------------
+
+   THE FRAME'S OWN DAY, NOT TODAY, and this is the same trap the place label a few
+   lines below already documents. pickSlots carries a photograph forward, so `mine`
+   may live on yesterday's hash — `mineFrom` is exactly that date when it does and
+   null when the frame is current. Filing a comment under `today` would attach it to
+   a day the photograph is not on: invisible immediately, and sitting on a day that
+   may later hold a different picture entirely.
+
+   ONE PIPELINE FOR BOTH, and only for frames that exist — a thread under an empty
+   slot is a conversation about nothing.
+
+   READS FAIL SOFT. `getThreadsSafe` returns empty threads and `reachable: false`
+   rather than throwing, because the photograph must render even when the store
+   cannot be reached, and "nobody has said anything" and "I could not ask" are
+   different sentences. Same distinction the hub makes with `storeReachable`. */
+const frameDate = (w: Who): string => (w === viewer ? (mineFrom ?? today) : (theirsFrom ?? today));
+const commentRefs = [
+  ...(mine ? [{ date: frameDate(viewer), whose: viewer }] : []),
+  ...(theirs ? [{ date: frameDate(them), whose: them }] : []),
+];
+const { threads, reachable: commentsReachable } = await getThreadsSafe(commentRefs);
+/** The thread under `w`'s photograph, oldest first. `{}` when there is none. */
+const threadOf = (w: Who) => thread(threads[keyOf({ date: frameDate(w), whose: w })] ?? {});
+
 /* ---- THE PLACE LABEL, RESOLVED LAZILY AND EXACTLY ONCE ----------------------
 
    This used to run inside /api/us/frame, right after the bytes were saved. Safe,
@@ -183,9 +210,37 @@ const ERRORS: Record<string, string> = {
   unauthorized: 'your session ran out. Answer the questions again and you are back in.',
   unconfigured: 'something is unplugged on my end. Not your fault.',
   'cross-site': 'that request came from somewhere I do not recognise.',
+  /* ---- the conversation under a photograph ----------------------------------
+     These arrive from /api/us/comment, which lands back on this page for the same
+     reason the upload does: one place that turns an outcome into a sentence, in her
+     language rather than in HTTP. A code with no entry here falls to the generic
+     line below, so a new refusal is never silent — but it is also never as useful
+     as one of these, which is why each one is spelled out. */
+  empty: 'there was nothing in the box.',
+  'too-long': `that is longer than the box holds. Trim it to ${TEXT_MAX} characters?`,
+  'thread-full': 'this one has as many comments as it can hold. Nothing is lost.',
+  'no-such-comment': "I can't find that one — it may already be gone, or it isn't yours to change.",
+  'bad-frame': 'that is not one of the two photographs.',
+  'bad-date': 'that is not a real day.',
+  'bad-action': "the server couldn't read that. Try again?",
+  'bad-request': "the server couldn't read that. Try again?",
 };
 const errText = errCode ? (ERRORS[errCode] ?? "that didn't go through. Try again?") : '';
 const posted = okCode === 'posted' && !errText;
+
+/* THE THREE THINGS A COMMENT CAN SUCCEED AT, each said out loud.
+
+   A 303 carrying `?ok=` proves the WRITE landed and nothing about whether the page
+   says so — the rule CLAUDE.md states after an empty timezone 500'd a page sitting
+   behind a redirect that reported success. So every code the endpoint can answer
+   with on the happy path has a sentence here, and `test:inline` plus a render is
+   what confirms it. */
+const COMMENT_OK: Record<string, string> = {
+  said: 'said.',
+  edited: 'changed it.',
+  removed: 'gone.',
+};
+const commentSaid = !errText ? (COMMENT_OK[okCode] ?? '') : '';
 
 /**
  * `?ok=maybe` — THE HONEST THIRD OUTCOME, and it only ever comes from the script.
@@ -319,6 +374,11 @@ const whoWord = (w: Who): string => words.of(w);
 
     {errText && <p class="notice" data-kind="bad" role="status">hm &mdash; {errText}</p>}
     {posted && <p class="notice" data-kind="ok" role="status">that's up.</p>}
+    {/* The comment outcomes, in the same slot and the same register as the upload's.
+        Mutually exclusive with `posted` by construction: `?ok=posted` comes from
+        frame.ts and `?ok=said|edited|removed` from comment.ts, and no response
+        carries two. */}
+    {commentSaid && <p class="notice" data-kind="ok" role="status">{commentSaid}</p>}
     {maybe && (
         <p class="notice" data-kind="warn" role="status">
             that took too long to confirm. Have a look below: if it's there, it worked.
@@ -369,6 +429,24 @@ const whoWord = (w: Who): string => words.of(w);
         <p class="fr-eyebrow" id="today-head">
             {wingDateLabel(today)} &middot; one each
         </p>
+
+        {/* ONE HONEST BANNER, above both threads it qualifies.
+
+            getThreadsSafe() returns EMPTY threads when the store cannot be read, and
+            an empty thread is indistinguishable from a photograph nobody has said
+            anything about yet. Without this the page would assert the second when the
+            truth is the first — the same lie the hub learned to stop telling, and the
+            one kind this wing cannot afford.
+
+            Above the pair rather than inside each thread: one true sentence once,
+            leaving both empty states exactly as written. The photographs themselves
+            are unaffected, which is the point of the read failing soft. */}
+        {commentRefs.length > 0 && !commentsReachable && (
+            <p class="cm-notice" role="status">
+                I can&rsquo;t reach what we&rsquo;ve said under these right now.
+                Nothing is lost &mdash; it just isn&rsquo;t answering.
+            </p>
+        )}
 
         <div class="fr-pair">
             {[viewer, them].map((w) => {
@@ -513,6 +591,112 @@ const whoWord = (w: Who): string => words.of(w);
                                     ? 'Nothing from you yet today.'
                                     : `Nothing from ${whoWord(w)} yet today.`}
                             </p>
+                        )}
+
+                        {/* ============================================================
+                            THE CONVERSATION UNDER THIS PHOTOGRAPH
+
+                            ONLY WHEN THERE IS A PHOTOGRAPH. A thread under an empty
+                            slot would be a conversation about nothing, and the empty
+                            slot is the most common state this page is in.
+
+                            EVERY PART OF IT IS A REAL FORM. No-JavaScript is the path
+                            this wing guarantees, and it is also the path most likely to
+                            be in use — a phone on a train with a blocked script. Add,
+                            edit and delete all work with nothing running: the endpoint
+                            answers 303 back to this frame's own fragment, so a post
+                            returns her to the photograph she was talking about rather
+                            than to the top of the page.
+
+                            BOTH OF THEM MAY COMMENT ON EITHER PHOTOGRAPH, which is why
+                            the form is not gated on `w === viewer` the way the posting
+                            form below is. The one thing that IS gated is edit and
+                            delete, per comment, on authorship.
+                            ============================================================ */}
+                        {f && f.url && (
+                            <div class="cm" data-cm-thread={w}>
+                                {threadOf(w).length > 0 && (
+                                    <ol class="cm-list">
+                                        {threadOf(w).map((cm) => (
+                                            <li class="cm-item" data-cm-mine={cm.by === viewer ? 'yes' : 'no'}>
+                                                <p class="cm-meta">
+                                                    <span class="cm-who">{whoWord(cm.by)}</span>
+                                                    {/* THE AUTHOR'S OWN CLOCK, like the caption above, and
+                                                        never a relative word: the wing day rolls at 21:00
+                                                        his time, so "yesterday" names a day he would call
+                                                        today. Same rule as fr-time. */}
+                                                    <span class="cm-when">
+                                                        {clockOf(cm.at, cm.by === 'her' ? HER_TZ : HIS_TZ)}
+                                                    </span>
+                                                    {cm.editedAt > 0 && (
+                                                        /* SAID OUT LOUD. An edit that leaves no trace would
+                                                           let either of them change what they "said" after
+                                                           it had been read and answered. */
+                                                        <span class="cm-edited">edited</span>
+                                                    )}
+                                                </p>
+                                                <p class="cm-text">{cm.text}</p>
+
+                                                {cm.by === viewer && (
+                                                    <details class="cm-own">
+                                                        <summary class="cm-own-summary">change this</summary>
+                                                        <form class="cm-form" method="post" action="/api/us/comment">
+                                                            <input type="hidden" name="action" value="edit">
+                                                            <input type="hidden" name="date" value={frameDate(w)}>
+                                                            <input type="hidden" name="whose" value={w}>
+                                                            <input type="hidden" name="id" value={cm.id}>
+                                                            <label class="cm-label" for={`cm-edit-${cm.id}`}>
+                                                                edit
+                                                            </label>
+                                                            <textarea
+                                                                class="cm-input"
+                                                                id={`cm-edit-${cm.id}`}
+                                                                name="text"
+                                                                rows="3"
+                                                                maxlength={TEXT_MAX}
+                                                            >{cm.text}</textarea>
+                                                            <button class="cm-go" type="submit">save it</button>
+                                                        </form>
+                                                        {/* ITS OWN FORM, so a delete is one deliberate press
+                                                            and can never be what a mistyped edit does. */}
+                                                        <form class="cm-form" method="post" action="/api/us/comment">
+                                                            <input type="hidden" name="action" value="delete">
+                                                            <input type="hidden" name="date" value={frameDate(w)}>
+                                                            <input type="hidden" name="whose" value={w}>
+                                                            <input type="hidden" name="id" value={cm.id}>
+                                                            <button class="cm-drop" type="submit">delete it</button>
+                                                        </form>
+                                                    </details>
+                                                )}
+                                            </li>
+                                        ))}
+                                    </ol>
+                                )}
+
+                                <form
+                                    class="cm-form cm-form--add"
+                                    method="post"
+                                    action={`/api/us/comment?whose=${w}`}
+                                    data-cm-add
+                                >
+                                    <input type="hidden" name="action" value="add">
+                                    <input type="hidden" name="date" value={frameDate(w)}>
+                                    <input type="hidden" name="whose" value={w}>
+                                    <label class="cm-label" for={`cm-new-${w}`}>
+                                        {threadOf(w).length > 0 ? 'say something back' : 'say something'}
+                                    </label>
+                                    <textarea
+                                        class="cm-input"
+                                        id={`cm-new-${w}`}
+                                        name="text"
+                                        rows="2"
+                                        maxlength={TEXT_MAX}
+                                        placeholder={w === viewer ? 'about your own picture' : ''}
+                                    ></textarea>
+                                    <button class="cm-go" type="submit" data-cm-go>leave it</button>
+                                    <p class="cm-status" data-cm-status role="status" aria-live="polite"></p>
+                                </form>
+                            </div>
                         )}
                     </figure>
                 );

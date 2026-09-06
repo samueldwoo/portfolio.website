@@ -81,11 +81,17 @@ import { countCommands, timer, trace } from './trace';
 /* ============================================================================
    THE VOCABULARY
 
-   Five events, and the list is closed. public/sw.js has the SAME five keys and
-   the sentence for each; the two files are a pair, and adding an event means
+   ~~Five~~ SIX events, and the list is closed. public/sw.js has the SAME six keys
+   and the sentence for each; the two files are a pair, and adding an event means
    editing both — the worker falls back to a content-free "Something new in [us]"
    for a key it does not recognise, so a half-applied change is quiet and wrong
-   rather than loud and wrong.
+   rather than loud and wrong. `comment` was added on 2026-09-06 and both files were
+   edited in the same commit, which is the only way this stays true.
+
+   NOTE WHAT `comment` DELIBERATELY DOES NOT SAY: it names neither the photograph nor
+   a word of what was written. "Sam said something about your picture" is the whole
+   sentence, and that is the rule this vocabulary exists to enforce rather than a
+   choice made once here.
    ========================================================================= */
 
 /**
@@ -98,7 +104,7 @@ import { countCommands, timer, trace } from './trace';
  *   sw.js     — `tag: 'us-<event>'` makes a second notification of the same kind
  *               REPLACE an undismissed one instead of stacking under it.
  */
-export const PUSH_EVENTS = ['thinking', 'song', 'photo', 'reaction', 'revealed'] as const;
+export const PUSH_EVENTS = ['thinking', 'song', 'photo', 'reaction', 'revealed', 'comment'] as const;
 
 export type PushEvent = (typeof PUSH_EVENTS)[number];
 

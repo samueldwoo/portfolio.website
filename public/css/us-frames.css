@@ -527,3 +527,190 @@
        the next reads as two values rather than one place. */
     white-space: nowrap;
 }
+
+/* ===========================================================================
+   THE CONVERSATION UNDER A PHOTOGRAPH
+
+   Sits INSIDE the <figure>, under the caption, so it is unambiguously about the
+   picture above it rather than about the day. `.fr-pair` is `align-items: start`,
+   so a long thread under one frame does not stretch the other — which is what
+   makes putting it here safe at all.
+
+   QUIET, AND SMALLER THAN THE CAPTION. The photographs are the only warm thing in
+   this wing (PLAN.md §4) and a conversation rendered as loudly as the picture
+   would compete with it. Nothing here is tinted; the only colour is the one the
+   room already uses for a link.
+   =========================================================================== */
+.cm {
+    margin: 14px 0 0;
+}
+
+.cm-notice {
+    font-family: var(--us-mono);
+    font-size: 0.72rem;
+    line-height: 1.5;
+    color: var(--concrete-3);
+    margin: 0 0 14px;
+}
+
+.cm-list {
+    list-style: none;
+    margin: 0 0 12px;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* A LEFT RULE RATHER THAN A BUBBLE. Bubbles imply a chat app and would put the two
+   of them on opposite sides of the frame, which is the ranking .fr-pair's own header
+   refuses. One rule, one column, oldest first. */
+.cm-item {
+    border-left: 2px solid var(--concrete-1);
+    padding-left: 10px;
+}
+
+/* WHOSE IT IS, BY WEIGHT AND NOT BY COLOUR ALONE. The rule brightens on your own
+   comments; the name is always there in words, so nothing depends on seeing it. */
+.cm-item[data-cm-mine='yes'] {
+    border-left-color: var(--concrete-2);
+}
+
+.cm-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 8px;
+    margin: 0 0 4px;
+    font-family: var(--us-mono);
+    font-size: 0.62rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--concrete-4);
+}
+
+.cm-who {
+    color: var(--chalk);
+}
+
+.cm-edited {
+    /* Said out loud, and deliberately not hidden behind a hover — a phone has no
+       hover, and this is the one piece of metadata that protects a record. */
+    font-style: normal;
+    color: var(--concrete-4);
+}
+
+.cm-text {
+    margin: 0;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    color: var(--chalk);
+    /* PARAGRAPHS SURVIVE. tidyComment keeps one blank line, so the stored text can
+       hold real breaks — without this they would collapse and the shape she typed
+       would be lost at the last possible moment. */
+    white-space: pre-wrap;
+    /* A pasted link with no spaces would otherwise force the grid track open. */
+    overflow-wrap: anywhere;
+}
+
+/* ---- her own comment's controls, behind one press ------------------------- */
+
+.cm-own {
+    margin-top: 6px;
+}
+
+.cm-own-summary {
+    cursor: pointer;
+    font-family: var(--us-mono);
+    font-size: 0.62rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--concrete-4);
+}
+
+.cm-own[open] .cm-own-summary {
+    color: var(--chalk);
+}
+
+/* ---- the forms ------------------------------------------------------------ */
+
+.cm-form {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 10px 0 0;
+}
+
+.cm-label {
+    font-family: var(--us-mono);
+    font-size: 0.62rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--concrete-4);
+}
+
+.cm-input {
+    width: 100%;
+    box-sizing: border-box;
+    font-family: inherit;
+    font-size: 0.9rem;
+    line-height: 1.45;
+    color: var(--chalk);
+    background: var(--machine);
+    border: 1px solid var(--concrete-2);
+    border-radius: 2px;
+    padding: 8px 10px;
+    /* Vertical only: horizontal resize inside a grid track fights the layout. */
+    resize: vertical;
+    /* 16px MINIMUM ON iOS, which is not a style choice. Safari zooms the whole page
+       when a focused input's text is under 16px, and it does not zoom back out —
+       so a 14px box costs her the layout for the rest of the visit. */
+    min-height: 44px;
+}
+
+@media (max-width: 640px) {
+    .cm-input { font-size: 1rem; }
+}
+
+.cm-input:focus-visible {
+    outline: 2px solid var(--blue-light);
+    outline-offset: 1px;
+}
+
+.cm-go,
+.cm-drop {
+    align-self: start;
+    font-family: var(--us-mono);
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--chalk);
+    background: var(--machine);
+    border: 1px solid var(--concrete-2);
+    border-radius: 2px;
+    /* 44px of touch target, the iOS minimum, even though the text is small. */
+    min-height: 44px;
+    padding: 0 16px;
+    cursor: pointer;
+}
+
+.cm-go[disabled] {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.cm-drop {
+    /* NOT RED. A delete here removes one sentence one of them wrote, on a page that
+       is a present — colouring it as a hazard would make the room feel like an admin
+       panel. It is quieter than `save it`, which is the honest weighting. */
+    color: var(--concrete-3);
+    border-color: var(--concrete-1);
+}
+
+.cm-status {
+    margin: 0;
+    font-family: var(--us-mono);
+    font-size: 0.68rem;
+    color: var(--concrete-3);
+    min-height: 1em;
+}

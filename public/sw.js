@@ -56,7 +56,7 @@
 
        { "e": "song", "a": "him" }
 
-   `e` is one of five event keys, `a` is one of two people. There is no field a
+   `e` is one of SIX event keys, `a` is one of two people. There is no field a
    sentence could travel in, so no bug in an endpoint can put one on a lock
    screen — not by passing the wrong variable, not by spreading a record into
    the payload, not by "temporarily" adding a body for debugging. The copy is
@@ -100,7 +100,12 @@ var TITLE = {
     reaction: { him: 'Sam reacted to your song', her: 'She reacted to your song' },
     /* Symmetric on purpose. A reveal is the one event that is not one person
        doing something to the other, so naming an actor would be wrong. */
-    revealed: { him: 'you both answered',        her: 'you both answered' }
+    revealed: { him: 'you both answered',        her: 'you both answered' },
+    /* NEITHER THE PICTURE NOR THE WORDS. Same rule as every line above: this says
+       what happened, never what was said. "about your picture" is safe because a
+       lock screen already implies there is a picture; the comment itself is not. */
+    comment:  { him: 'Sam said something about your picture',
+                her: 'She said something about your picture' }
 };
 
 /* Where a tap lands. Same-origin paths, hard-coded — never taken from the
@@ -112,7 +117,11 @@ var ROOM = {
     song:     '/samdrea/vault/today',
     photo:    '/samdrea/vault/day',
     reaction: '/samdrea/vault/today',
-    revealed: '/samdrea/vault#question'
+    revealed: '/samdrea/vault#question',
+    /* The day page, where both frames and both threads are. No fragment: which
+       frame was commented on is not in the payload, deliberately, and guessing
+       would land her on the wrong one half the time. */
+    comment:  '/samdrea/vault/day'
 };
 
 /* The hub. Where an unrecognised event goes, and where a tap goes when the
