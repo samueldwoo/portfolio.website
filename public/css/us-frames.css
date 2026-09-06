@@ -691,17 +691,57 @@
 
 /* ---- her own comment's controls, behind one press ------------------------- */
 
-/* Aligned to the MESSAGE, not to the gutter, so the controls hang under the words
-   they change rather than under the name. */
+/* UP BESIDE THE CLOCK, NOT ON A LINE OF ITS OWN.
+   ~~Aligned to the MESSAGE, so the controls hang under the words they change~~ was the
+   first placement and it spent a full-width row on one word. In a thread where half the
+   messages are yours that is a stub line under every second comment, and on a phone
+   that is most of what a scroll is made of.
+
+   The right-hand column already holds the one other thing about a message that is not
+   the message — the clock — so `edit` joins it there and the text column ends where the
+   text ends. It costs the narrow track a few pixels, since that track is sized by the
+   wider of a timestamp and this word.
+
+   OPEN, IT BREAKS OUT TO FULL WIDTH, which is the whole reason this works. A textarea
+   and two buttons cannot render in a 48px column, so `[open]` moves the grid-column —
+   collapsed it is a word in the margin, expanded it is a form across the item. Pure
+   CSS on a native `details`, so it still works with no script. */
 .cm-own {
+    grid-column: 3;
+    grid-row: 2;
+    justify-self: end;
+    margin-top: 2px;
+}
+
+.cm-own[open] {
     grid-column: 2 / -1;
+    justify-self: stretch;
     margin-top: 6px;
 }
 
+/* NARROW PHONES GET THE SAME IDEA WITH THE TRACKS THEY HAVE. There are only two columns
+   here and the clock is already alone in the second one, so `edit` cannot sit beside it —
+   it goes on the row below, pushed to the RIGHT EDGE, which lines it up under the clock
+   and keeps it out of the message column. iPhone widths land on both sides of the 380px
+   line (390 on a 15, 375 on an SE), so leaving this branch alone would have meant the
+   change never appeared on half the phones in the house. */
 @media (max-width: 380px) {
     .cm-own {
         grid-row: 3;
         grid-column: 1 / -1;
+        justify-self: end;
+        margin-top: 2px;
+    }
+
+    /* `grid-column` RESTATED, and leaving it out was a real bug rather than a tidy-up.
+       A media query adds no specificity, so `.cm-own[open]` outside this block (0,2,0)
+       beats `.cm-own` inside it (0,1,0) and its `2 / -1` won — which on a two-column
+       grid means column two ALONE. The open form rendered 216px wide starting 122px in,
+       with the whole left side of the item empty. Measured, not spotted by reading. */
+    .cm-own[open] {
+        grid-column: 1 / -1;
+        justify-self: stretch;
+        margin-top: 6px;
     }
 }
 
