@@ -70,12 +70,23 @@
    those are years a person already has in mind rather than years they have to work
    out.
 
-   ONLY GENRES BOTH OF THEM ACTUALLY LISTEN TO. Two rounds of cuts:
+   ONLY GENRES BOTH OF THEM ACTUALLY LISTEN TO. Three rounds of cuts:
    ~~amapiano · bossa nova · salsa or bachata · garage or jungle · drum and bass ·
    techno · trip hop · k-pop · metal~~ went first, then
    ~~gospel · reggae · disco · funk~~ — the second four not for being obscure but for
    being hard to answer QUICKLY. Everybody has heard funk and disco; far fewer people
    can name a favourite one on the spot, which is the only thing that matters here.
+
+   Then ~~soul~~, and dancehall and afrobeats collapsed into ONE prompt naming both.
+   The reason is the best one available: HE SAID HE CANNOT TELL THEM APART. Those are
+   two genuinely distinct traditions — dancehall is Jamaican out of reggae, afrobeats
+   is Nigerian and Ghanaian and only named around 2011 — and the distinction is real
+   and irrelevant, because a prompt is only as good as the listener can act on it. A
+   prompt that requires a genre lesson first is a prompt that gets skipped. Same for
+   soul against R&B: the honest line between them is era and production, pre-1980 and
+   live versus post-1980 and programmed, which is a fact about music history rather
+   than a question anybody wants at 1am. R&B stays because that is the word they
+   actually use.
 
    The phrasing trick propping the first batch up went with them: that pass hedged the
    far-out ones as "the best X you KNOW" rather than "your favourite X", so a shallow
@@ -86,6 +97,20 @@
    EDM and dubstep coming IN while funk went OUT is what that distinction looks like.
    Funk is the more canonical music by any measure; a dubstep song is the one a person
    can actually produce on demand. Broad and immediate beats broad and respected.
+
+   THE NAMED ARTIST IS NOW THE BACKBONE, AND FOUR SHAPES BEAT FOUR MORE NAMES. Each
+   rapper gets asked up to four different ways — the song, the best verse, the best
+   GUEST verse on somebody else record, and the best beat on one of their songs. That
+   is deliberate and it is not padding:
+
+     - It is where the comparison is sharpest. Two people naming their favourite Drake
+       song are answering as precisely the same question as this list can construct.
+     - A verse, a feature and a beat are three DIFFERENT questions about one artist,
+       and the answers rarely coincide. The best beat on a Drake song is usually not on
+       his best song, which is the argument the prompt is fishing for.
+     - The shapes only fit rappers. A "best verse" prompt about a producer is a
+       category error rather than a harder question, so the singers and the dance acts
+       get the song shape only, and NAMED_ARTISTS says which is which.
 
    RIGHT NOW BEATS ALL TIME, and that shape was missing entirely. Every other prompt
    asks somebody to search their memory and rank things, which is work. "your hype
@@ -198,6 +223,7 @@ export const SONG_WEEK_PROMPT = 'the song you played most this week, honestly';
  * safe if the allowlist is enforced.
  */
 export const NAMED_ARTISTS: readonly string[] = [
+  /* The rappers, who carry the song / verse / feature / beat shapes. */
   'Drake',
   'Travis Scott',
   'Future',
@@ -205,12 +231,16 @@ export const NAMED_ARTISTS: readonly string[] = [
   'Lil Wayne',
   'Gunna',
   'Kodak Black',
+  'Yeat',
+  'A$AP Ferg',
+  'BigXthaPlug',
+  /* Sings rather than raps, so it gets the song and feature shapes and no verse. */
   'PARTYNEXTDOOR',
+  /* Not rappers at all — the song shape only. See cluster four below. */
   'Daniel Caesar',
   'Joji',
   'Calvin Harris',
   'The Chainsmokers',
-  'Yeat',
 ];
 
 /**
@@ -257,12 +287,18 @@ export const SONG_PROMPTS: readonly string[] = [
   'the song you woke up with in your head',
   'your walking-around song this week',
 
-  /* ---- NAMED ARTISTS, cluster one. Only from NAMED_ARTISTS above. ---- */
+  /* ---- NAMED ARTISTS, cluster one. Only from NAMED_ARTISTS above, and FOUR SHAPES
+     per artist rather than one — see the header on why the shape carries more of the
+     weight than the name does. ---- */
   'your favourite Drake song',
+  'the best Drake verse, not the best Drake song',
+  'the best guest verse Drake ever did',
+  'the best beat on any Drake song',
+  'the Drake song you would play for somebody who says they hate Drake',
   'your favourite Travis Scott song',
-  'the best Future song, one pick only',
-  'your favourite Lil Wayne song',
-  'your favourite PARTYNEXTDOOR song',
+  'the best Travis Scott verse',
+  'the best beat on any Travis Scott song',
+  'the best feature on any Travis Scott song',
 
   /* ---- A GENRE ANYBODY CAN ANSWER. Kept deliberately broad — see the header on
      why the niche ones went. ---- */
@@ -270,11 +306,9 @@ export const SONG_PROMPTS: readonly string[] = [
   'your favourite R&B song',
   'your favourite pop song',
   'your favourite rock song',
-  'your favourite soul song',
   'your favourite country song, and yes you have one',
   'your favourite jazz song',
-  'your favourite dancehall song',
-  'your favourite afrobeats song',
+  'your favourite afrobeats or dancehall song',
   'your favourite house song',
   'your favourite EDM song',
   'your favourite dubstep song',
@@ -286,11 +320,19 @@ export const SONG_PROMPTS: readonly string[] = [
   'your favourite song to drive to',
 
   /* ---- named artists, cluster two ---- */
-  'your favourite 21 Savage song',
   'your favourite Gunna song',
+  'the best Gunna verse',
+  'the best beat on any Gunna song',
   'your favourite Kodak Black song',
-  'your favourite Daniel Caesar song',
-  'your favourite Joji song',
+  'the best Kodak Black verse',
+  'the best beat on any Kodak Black song',
+  'your favourite 21 Savage song',
+  'the best 21 Savage verse',
+  'the best guest verse 21 Savage ever did',
+  'your favourite Future song',
+  'the best Future verse',
+  'the best guest verse Future ever did',
+  'the best beat on any Future song',
 
   /* ---- they pick the artist, for the reason in the header ---- */
   'your favourite song by an artist you have never mentioned to me',
@@ -324,10 +366,24 @@ export const SONG_PROMPTS: readonly string[] = [
   'the song you would defend in an argument',
 
   /* ---- named artists, cluster three ---- */
-  'your favourite Calvin Harris song',
+  'your favourite Lil Wayne song',
+  'the best Lil Wayne verse',
+  'the best guest verse Lil Wayne ever did',
   'your favourite Yeat song',
+  'the best beat on any Yeat song',
+  'your favourite A$AP Ferg song',
+  'the best A$AP Ferg verse',
+  'your favourite BigXthaPlug song',
+  'your favourite PARTYNEXTDOOR song',
+  'the best guest verse PARTYNEXTDOOR ever did',
+
+  /* ---- named artists, cluster four: the ones who are not rappers, so only the
+     song shape. A "best verse" prompt about a producer or a singer is a category
+     error, not a harder question. ---- */
+  'your favourite Daniel Caesar song',
+  'your favourite Joji song',
+  'your favourite Calvin Harris song',
   'the best song The Chainsmokers ever made',
-  'the best Drake verse, not the best Drake song',
 ];
 
 /**
