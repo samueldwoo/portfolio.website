@@ -555,52 +555,70 @@
 
 .cm-list {
     list-style: none;
+    /* SPACING IS THE ONLY GROUPING DEVICE NOW, so it does more work than it did when
+       every message also carried a rule. 16px between messages against 2px inside
+       one is what makes a message read as a unit — see the Law of Proximity, and see
+       .cm-item below for what this replaced. */
     margin: 0 0 12px;
     padding: 0;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 16px;
 }
 
-/* A LEFT RULE RATHER THAN A BUBBLE. Bubbles imply a chat app and would put the two
-   of them on opposite sides of the frame, which is the ranking .fr-pair's own header
-   refuses. One rule, one column, oldest first. */
+/* A NAME IN A GUTTER, AND NOTHING DRAWN AT ALL.
+
+   ~~A LEFT RULE RATHER THAN A BUBBLE~~ was the first design and it failed on a real
+   phone for a reason the reasoning could not have caught. The rule was --concrete-1
+   for the other person's messages and --concrete-2 for your own — "whose it is, by
+   weight and not by colour alone" — but --concrete-1 measures 1.50:1 against the
+   page, so in practice HALF THE THREAD HAD NO VISIBLE MARK. Authorship rested
+   entirely on a word set in 0.62rem grey uppercase mono, which is the treatment this
+   sheet uses for machine metadata, so a conversation between two people read as a
+   system log.
+
+   Three columns instead: the name in its own left gutter, the message beside it, the
+   clock right-aligned. POSITION CARRIES AUTHORSHIP, which is the one channel that
+   cannot be too low-contrast to see, and it means nothing has to be drawn — no rule,
+   no bubble, no card. That matters more here than anywhere else on the page: PLAN.md
+   §4 says the photograph is the only warm thing in the room, and the thread sits
+   directly beneath one.
+
+   Bubbles and opposite-side alignment were offered and turned down again, for the
+   original reason — they imply a chat app and put the two of them on facing sides,
+   which is a ranking the frame pair refuses. */
 .cm-item {
-    border-left: 2px solid var(--concrete-1);
-    padding-left: 10px;
+    display: grid;
+    grid-template-columns: 3.5rem minmax(0, 1fr) auto;
+    column-gap: 10px;
+    row-gap: 2px;
+    align-items: start;
 }
 
-/* WHOSE IT IS, BY WEIGHT AND NOT BY COLOUR ALONE. The rule brightens on your own
-   comments; the name is always there in words, so nothing depends on seeing it. */
-.cm-item[data-cm-mine='yes'] {
-    border-left-color: var(--concrete-2);
-}
-
-.cm-meta {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 8px;
-    margin: 0 0 4px;
-    font-family: var(--us-mono);
-    font-size: 0.62rem;
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-    color: var(--concrete-4);
-}
-
+/* THE NAME, IN THE BODY FACE AND SENTENCE CASE, because it is a person rather than a
+   field. `capitalize` because whoWord() returns 'Sam' but a lowercase 'you', and
+   "Sam" beside "you" in the same column reads as a mistake. */
 .cm-who {
-    color: var(--chalk);
+    grid-column: 1;
+    margin: 0;
+    font-size: 0.82rem;
+    line-height: 1.55;
+    color: var(--chalk-dim);
+    text-transform: capitalize;
+    overflow-wrap: anywhere;
 }
 
-.cm-edited {
-    /* Said out loud, and deliberately not hidden behind a hover — a phone has no
-       hover, and this is the one piece of metadata that protects a record. */
-    font-style: normal;
+/* YOUR OWN NAME SITS BACK. Their name is the one being scanned for; yours is already
+   known. Both clear AA comfortably — --chalk-dim measures 14.86:1 against the page and
+   --concrete-4 measures 7.64:1, computed rather than eyeballed — and this is emphasis on
+   a LABEL rather than state on a control, which is the distinction .cm-drop got wrong
+   twice. The word itself still says who, so nothing depends on seeing the shade. */
+.cm-item[data-cm-mine='yes'] .cm-who {
     color: var(--concrete-4);
 }
 
 .cm-text {
+    grid-column: 2;
     margin: 0;
     font-size: 0.9rem;
     line-height: 1.5;
@@ -613,10 +631,78 @@
     overflow-wrap: anywhere;
 }
 
+/* ALIGNED TO THE LAST LINE OF THE MESSAGE, not the first. `align-self: end` is the
+   whole trick: on a one-line comment the clock sits beside it, and on a paragraph it
+   drops to the bottom instead of floating next to the opening words, so it reads as
+   "this is when that finished" rather than as a column of loose timestamps. */
+.cm-when {
+    grid-column: 3;
+    align-self: end;
+    margin: 0;
+    font-family: var(--us-mono);
+    font-size: 0.62rem;
+    line-height: 1.6;
+    color: var(--concrete-3);
+    text-align: right;
+}
+
+.cm-edited {
+    /* Said out loud, and deliberately not hidden behind a hover — a phone has no
+       hover, and this is the one piece of metadata that protects a record. Its own
+       line under the clock, since both live in the narrow third column. */
+    display: block;
+    font-style: normal;
+    color: var(--concrete-4);
+}
+
+/* ---- NARROW PHONES: TWO COLUMNS, NOT THREE ------------------------------------
+   At 320px the three tracks leave about 149px for the message, which is four or five
+   words a line. So under 380px the name and the clock share the first row and the
+   message spans the full width beneath them. The gutter is what goes, because the
+   gutter is the luxury — the name is still first and still full strength. */
+@media (max-width: 380px) {
+    .cm-item {
+        grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    /* EVERY ROW PINNED, and that is not belt-and-braces. Auto-placement fills forward
+       and NEVER BACKTRACKS: with only the columns named, `cm-text` spanning both tracks
+       takes row 2, and `cm-when` — which comes after it in the DOM — cannot return to
+       the empty cell at row 1 column 2, so it landed on a row of its own BELOW the
+       message. The clock read as an orphan line hanging off the bottom of every
+       comment. Naming the rows is what lets DOM order stay name, message, clock while
+       the layout puts the clock beside the name. */
+    .cm-who {
+        grid-row: 1;
+        grid-column: 1;
+    }
+
+    .cm-when {
+        grid-row: 1;
+        grid-column: 2;
+        align-self: start;
+    }
+
+    .cm-text {
+        grid-row: 2;
+        grid-column: 1 / -1;
+    }
+}
+
 /* ---- her own comment's controls, behind one press ------------------------- */
 
+/* Aligned to the MESSAGE, not to the gutter, so the controls hang under the words
+   they change rather than under the name. */
 .cm-own {
+    grid-column: 2 / -1;
     margin-top: 6px;
+}
+
+@media (max-width: 380px) {
+    .cm-own {
+        grid-row: 3;
+        grid-column: 1 / -1;
+    }
 }
 
 .cm-own-summary {
