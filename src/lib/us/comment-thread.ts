@@ -243,15 +243,20 @@ export type AddRefusal = 'thread-full' | 'too-long' | 'empty';
  * Ordered so the most specific answer wins: an empty comment is empty whether or
  * not the thread is full, and "trim it a little" is useless advice on a thread that
  * will not accept anything at all.
+ *
+ * TAKES A COUNT, NOT THE THREAD, and that is a store optimisation showing through
+ * the seam on purpose. It only ever read `.length`, and asking for the whole record
+ * meant `comments.ts` had to `HGETALL` an entire conversation — every word both of
+ * them had written under that photograph, across the wire — to compare one number
+ * against 80. `HLEN` answers it in one integer. Narrowing the parameter to what the
+ * function actually uses is what let the caller stop over-fetching, so the signature
+ * is the honest one rather than the convenient one.
  */
-export function addRefusal(
-  existing: Record<string, Comment>,
-  raw: unknown,
-): AddRefusal | null {
+export function addRefusal(held: number, raw: unknown): AddRefusal | null {
   const cleaned = tidyComment(raw);
   if (!cleaned) return 'empty';
   if (cleaned.length > TEXT_MAX) return 'too-long';
-  if (Object.keys(existing).length >= THREAD_MAX) return 'thread-full';
+  if (held >= THREAD_MAX) return 'thread-full';
   return null;
 }
 

@@ -103,23 +103,35 @@ console.log('\n  --- 3. the caps refuse; they never prune ---');
     const id = `4${String(i).padStart(7, '0')}-4444-4444-8444-444444444444`;
     full[id] = c(id, i % 2 ? 'her' : 'him', 1000 + i);
   }
-  is(`a thread of ${THREAD_MAX} is refused a new one`, addRefusal(full, 'xxxx') === 'thread-full', addRefusal(full, 'xxxx'));
+  /* addRefusal TAKES A COUNT, not the thread. The store passes HLEN — see the
+     signature's own comment on why fetching the whole conversation to take
+     `.length` of it was the thing worth removing. */
+  const held = Object.keys(full).length;
+  is(`a thread of ${THREAD_MAX} is refused a new one`, addRefusal(held, 'xxxx') === 'thread-full', addRefusal(held, 'xxxx'));
   /* THE POINT OF THE ASSERTION ABOVE: refusing must not have removed anything. */
   is('and refusing did not delete a single one', Object.keys(full).length === THREAD_MAX, Object.keys(full).length);
-  is('one short of the cap is accepted', addRefusal(Object.fromEntries(Object.entries(full).slice(1)), 'xxxx') === null);
+  is('one short of the cap is accepted', addRefusal(THREAD_MAX - 1, 'xxxx') === null);
+  /* THE BOUNDARY IS `>=`, so exactly the cap refuses and one under does not. Off by
+     one here means either an 81st comment or a thread that stops at 79. */
+  is('exactly the cap refuses', addRefusal(THREAD_MAX, 'xxxx') === 'thread-full');
+  is('an empty thread accepts', addRefusal(0, 'xxxx') === null);
 
-  is('an empty comment is refused as empty', addRefusal({}, '   ') === 'empty', addRefusal({}, '   '));
-  is('a non-string is refused as empty', addRefusal({}, null) === 'empty');
+  is('an empty comment is refused as empty', addRefusal(0, '   ') === 'empty', addRefusal(0, '   '));
+  is('a non-string is refused as empty', addRefusal(0, null) === 'empty');
   /* ORDER OF REASONS: empty beats full, because "the thread is full" is useless
      advice about a comment that does not exist. */
-  is('empty beats thread-full', addRefusal(full, '') === 'empty', addRefusal(full, ''));
+  is('empty beats thread-full', addRefusal(held, '') === 'empty', addRefusal(held, ''));
 
   /* THE LENGTH REFUSAL MUST BE REACHABLE. addRefusal measures the TIDIED text; if it
      measured the normalised (truncated) text this could never fire. */
   const long = 'x'.repeat(TEXT_MAX + 1);
-  is('one over the cap is refused as too-long', addRefusal({}, long) === 'too-long', addRefusal({}, long));
-  is('exactly the cap is accepted', addRefusal({}, 'x'.repeat(TEXT_MAX)) === null);
-  is('and too-long beats thread-full', addRefusal(full, long) === 'too-long', addRefusal(full, long));
+  is('one over the cap is refused as too-long', addRefusal(0, long) === 'too-long', addRefusal(0, long));
+  is('exactly the cap is accepted', addRefusal(0, 'x'.repeat(TEXT_MAX)) === null);
+  is('and too-long beats thread-full', addRefusal(held, long) === 'too-long', addRefusal(held, long));
+  /* AN UNREADABLE COUNT MUST REFUSE, NOT LET EVERYTHING THROUGH. comments.ts maps a
+     malformed HLEN to MAX_SAFE_INTEGER for exactly this, so the fail direction is
+     "this one is full" and never an unbounded thread. */
+  is('an absurd count still refuses', addRefusal(Number.MAX_SAFE_INTEGER, 'xxxx') === 'thread-full');
 }
 
 console.log('\n  --- 4. whitespace: paragraphs survive, padding does not ---');

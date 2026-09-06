@@ -211,8 +211,12 @@ export async function addComment(
   raw: unknown,
   nowMs: number = Date.now(),
 ): Promise<{ comment: Comment } | { refused: AddRefusal }> {
-  const existing = await getOne(ref);
-  const refusal = addRefusal(existing, raw);
+  /* HLEN, NOT HGETALL, and that is the whole of this optimisation. The cap needs a
+     COUNT; the previous version fetched the entire conversation to take `.length` of
+     it — every word both of them had written under that photograph, across the wire,
+     on every comment, to compare one number against 80. One command, one integer.
+     `addRefusal` takes a number now so this is the only shape the caller can pass. */
+  const refusal = addRefusal(await countComments(ref), raw);
   if (refusal) return { refused: refusal };
 
   const comment: Comment = {
@@ -276,7 +280,29 @@ export async function deleteComment(ref: ThreadRef, id: string, by: Who): Promis
   return true;
 }
 
-/** One thread, for the read-then-decide above. */
+/**
+ * How many comments are on one photograph. One command, one integer.
+ *
+ * COUNTS STORED FIELDS, WHICH IS NOT QUITE THE SAME AS PARSEABLE COMMENTS, and the
+ * difference is worth naming rather than hiding: `HLEN` includes a field that
+ * `parseComment` would drop (a hand-edit that broke the JSON), so the cap can refuse
+ * one comment earlier than the rendered thread suggests. That is the RIGHT direction
+ * — the cap exists to bound what the store holds, and an unparseable field still
+ * occupies it. The alternative, fetching and parsing everything to count what
+ * renders, is the over-fetch this replaced.
+ */
+async function countComments(ref: ThreadRef): Promise<number> {
+  if (commentsTier() === 'memory') {
+    return Object.keys(memory.get(THREAD_KEY(ref.date, ref.whose)) ?? {}).length;
+  }
+  const [raw] = await redis([['HLEN', THREAD_KEY(ref.date, ref.whose)]]);
+  const n = Math.floor(Number(raw));
+  // A malformed answer must not read as "empty" and let the cap through: treat an
+  // unreadable count as full, which refuses rather than over-fills.
+  return Number.isFinite(n) && n >= 0 ? n : Number.MAX_SAFE_INTEGER;
+}
+
+/** One thread, for the two mutations that must look a comment up by id. */
 async function getOne(ref: ThreadRef): Promise<Record<string, Comment>> {
   const all = await getThreads([ref]);
   return all[keyOf(ref)] ?? {};
