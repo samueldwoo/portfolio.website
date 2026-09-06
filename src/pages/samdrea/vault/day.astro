@@ -792,12 +792,25 @@ const whoWord = (w: Who): string => words.of(w);
                     data-fr-form
                 >
                     <div class="fr-field">
-                        <label class="fr-label" for="fr-photo">A photograph</label>
-                        {/* `capture` is absent on purpose: it forces the camera on
-                            some phones and skips the camera roll, and most of these
-                            will be something taken earlier in the day. */}
+                        {/* THE INPUT COMES FIRST AND THE LABEL SECOND, and that order is
+                            load-bearing rather than tidy. It is what lets
+                            `.fr-photo-input:valid + .fr-drop` show a CHOSEN state in pure
+                            CSS — the input is `required`, so `:valid` means a file is
+                            attached. That matters because it is the one piece of feedback
+                            that survives the script failing, and it is what replaces the
+                            UA's own "no file chosen" text that this design gives up.
+
+                            `capture` is still absent on purpose: it forces the camera on
+                            some phones and skips the camera roll, and most of these will
+                            be something taken earlier in the day.
+
+                            The input keeps its id, name, type and `required`. The upload
+                            script finds it with `input[type=file]` and the endpoint reads
+                            `photo`, so nothing either of them relies on moved — the rule
+                            in CLAUDE.md about deleting a field the scripts read applies
+                            just as much to restyling one. */}
                         <input
-                            class="fr-file"
+                            class="fr-photo-input"
                             type="file"
                             id="fr-photo"
                             name="photo"
@@ -805,6 +818,15 @@ const whoWord = (w: Who): string => words.of(w);
                             required
                             aria-describedby="fr-photo-hint"
                         >
+                        <label class="fr-drop" for="fr-photo">
+                            {/* `hidden` until the script has something to show. The
+                                attribute is enforced globally by us.css, so no author
+                                display can defeat it — see CLAUDE.md. */}
+                            <img class="fr-drop-thumb" data-fr-preview alt="" hidden>
+                            <span class="fr-drop-glyph" aria-hidden="true">+</span>
+                            <span class="fr-drop-line">A photograph</span>
+                            <span class="fr-drop-sub" data-fr-name>choose one from your camera roll</span>
+                        </label>
                         <p class="fr-hint" id="fr-photo-hint">
                             JPEG, PNG or WebP. It gets shrunk before it&rsquo;s sent,
                             so the size doesn&rsquo;t matter much.
@@ -904,6 +926,45 @@ const whoWord = (w: Who): string => words.of(w);
     var file = form.querySelector('input[type=file]');
     var go = form.querySelector('[data-fr-go]');
     var status = form.querySelector('[data-fr-status]');
+    /* DECLARED UP HERE WITH THE OTHERS, NOT INSIDE THE CALLBACK THAT USES THEM.
+       `var` is function-scoped, and the one time this file forgot that it cost four
+       verification passes and a real broken upload — see the `killer` entry in
+       CLAUDE.md. Same rule, applied before it can bite again. */
+    var preview = form.querySelector('[data-fr-preview]');
+    var pickName = form.querySelector('[data-fr-name]');
+    var previewUrl = '';
+    var PICK_IDLE = 'choose one from your camera roll';
+
+    /* ---- WHAT SHE PICKED, SHOWN BEFORE SHE COMMITS TO IT --------------------
+       A SEPARATE `change` LISTENER, deliberately not folded into the resize path.
+       shrink() runs on SUBMIT and is four bugs deep in this file's history; a preview
+       is a different job with a different lifetime, and hanging it off that chain
+       would mean one broken decode costs both. This one can fail on its own and the
+       upload still works.
+
+       The object URL is revoked on the NEXT pick rather than after load. Revoking it
+       while it is still the `src` of a displayed image is what blanks a preview, and
+       the leak is one URL per change on a page she is about to navigate away from. */
+    if (file) {
+        file.addEventListener('change', function () {
+            var picked = file.files && file.files[0];
+            if (previewUrl) {
+                URL.revokeObjectURL(previewUrl);
+                previewUrl = '';
+            }
+            if (!picked) {
+                if (preview) { preview.hidden = true; preview.removeAttribute('src'); }
+                if (pickName) pickName.textContent = PICK_IDLE;
+                return;
+            }
+            if (pickName) pickName.textContent = picked.name || 'ready to go up';
+            if (preview) {
+                previewUrl = URL.createObjectURL(picked);
+                preview.src = previewUrl;
+                preview.hidden = false;
+            }
+        });
+    }
 
     function say(text) { if (status) status.textContent = text || ''; }
 

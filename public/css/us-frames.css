@@ -227,7 +227,6 @@
    iOS Safari zooms the whole page when a focused input's text is
    under 16px, and the zoom does not undo itself. Everything else
    in the wing holds this floor too. */
-.fr-file,
 .fr-input {
     /* BORDER-BOX, and its absence was a page-level bug rather than a nicety.
        `width: 100%` + 14px of padding + a 1px border on a content-box input
@@ -249,121 +248,147 @@
 }
 
 /* ============================================================
-   THE FILE INPUT — THE UGLIEST THING ON EITHER SURFACE, AND THE
-   ONE PIECE OF THIS WING THAT WAS NOT DESIGNED AT ALL
+   THE PHOTOGRAPH PICKER — A ZONE, NOT A BUTTON
 
-   WHAT IT LOOKED LIKE. A box styled to look like a text field,
-   with the operating system's own "Choose File" button sitting
-   inside it: light grey, system font, system corner radius,
-   system border. Two boxes, one of them from a different design
-   language, nested. On a black industrial page it read as a
-   rendering fault. And the affordance lied in both directions —
-   the small grey rectangle looked like the only thing you could
-   press, while the large field-shaped box around it looked like
-   somewhere you could type.
+   ~~WHAT WAS REJECTED. The usual fix is to hide the input and point
+   a <label> at it. That is not available here and it is not a close
+   call: a visually hidden input is one CSS rule away from being an
+   unreachable input.~~ That was the earlier decision and this
+   reverses it, so the argument against it is answered rather than
+   dropped:
 
-   WHAT WAS REJECTED. The usual fix is to hide the input and point
-   a <label> at it, styled as a button. That is not available here
-   and it is not a close call: this form is a real multipart POST
-   with a real action because it is the one feature most likely to
-   be used from a phone with the script blocked, and a visually
-   hidden input is one CSS rule away from being an unreachable
-   input. The affordance must be the control, not a stand-in for
-   it.
+   THE FAILURE MODE IS ASYMMETRIC IN THE SAFE DIRECTION. The hiding
+   IS the CSS. If this sheet fails to load, the input is not hidden —
+   it renders as an ordinary visible file input with a label above
+   it, which is where the wing started. There is no state where the
+   rule that hides it survives and the rule that draws its
+   replacement does not, because they are eleven lines apart in the
+   same file.
 
-   WHAT IT IS NOW. ::file-selector-button, which styles the real
-   shadow button in place — no markup change, no JavaScript, no
-   label indirection, and nothing to fall back FROM. Where the
-   pseudo-element is unsupported the browser draws exactly what it
-   drew before, so the floor is today's rendering rather than a
-   broken one.
+   AND THE OLD APPROACH HAD A CEILING. ::file-selector-button can
+   style the button, but "CHOOSE FILE / no file chosen" lives in a UA
+   shadow tree we cannot write to, so the control could never say
+   anything of ours and could never hold a PREVIEW. Seeing the
+   photograph before committing to it is the entire point of the
+   redesign, and it is not reachable while the shadow tree owns the
+   box.
 
-   THE PLATE AROUND IT IS NO LONGER FIELD-SHAPED. It is taller than
-   a text input on purpose — 58px used against the note field's 47
-   — it holds the button in a visible gutter, and the UA's own "no
-   file chosen" text sits beside it already inheriting our mono face
-   and our --chalk-dim. So the whole control is ours and it stops
-   impersonating something you can type into.
+   WHAT REPLACES THE UA STATUS TEXT, and this is the part that keeps
+   the guarantee: `.fr-photo-input:valid + .fr-drop`. The input is
+   `required`, so `:valid` means a file is attached — a chosen state
+   in pure CSS, with no script and no shadow tree. The FILENAME is
+   the one thing that now needs the script, and it is the least of
+   what was there.
 
-   THE BUTTON IS 44px BY ITSELF. Chrome opens the picker from
-   anywhere in the input's box, but Safari activates only the
-   button — so sizing the plate would have been sizing the wrong
-   thing, and the button carries the floor on its own.
+   DASHED UNTIL CHOSEN, echoing .song[data-open] on the song page for
+   the same reason it does: dashed reads as a space waiting for
+   something, solid reads as an object that has arrived.
    ============================================================ */
-.fr-file {
-    /* 6px all round: the plate is a gutter for the button rather
-       than the text padding a field wants — and every pixel here is
-       a pixel the browser's own status text does not get. See the
-       WIDTH BUDGET note on the button below. */
-    padding: 6px;
-    min-height: 56px;
-    /* The plate keeps --machine from the shared rule above and the
-       button takes --machine-2, so the button reads as ON the plate
-       rather than as a lighter patch of it. That is the palette's
-       own elevation step and the same pairing the song page's
-       disclosure now uses. */
-    cursor: pointer;
+.fr-photo-input {
+    /* Clipped rather than `display: none`. A display-none file input
+       is skipped by some browsers' `required` validation focus, so the
+       "please choose a file" bubble would have nowhere to point. */
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    border: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
 }
 
-/* ============================================================
-   THE WIDTH BUDGET, WHICH IS WHY THIS BUTTON IS NOT ROOMIER
-
-   The browser prints its own status text — "No file chosen", then
-   the filename — to the RIGHT of this button, inside the same box,
-   and it truncates that text with a middle ellipsis when it does
-   not fit. There is no pseudo-element for it and no way to move
-   it to a second line, so the button's width is subtracted
-   directly from the readability of the one piece of state this
-   control reports.
-
-   The first version of this rule used 0.14em tracking and 18px of
-   side padding, which is the wing's normal setting for a mono
-   button. It measured 136px, and at 320px that left 116px for a
-   string that needs 134px: the empty state rendered as
-   "No fi…chosen", which looks like a rendering fault and is worse
-   than the system button it replaced.
-
-   So: 0.1em and 12px, measured at 116px including its margin,
-   which leaves ~144px against the 134px the string needs — about
-   9px of slack at 320px and ~73px at 390px. Tighter tracking than
-   the wing's default is the price of the browser owning half of
-   this control, and it is cheaper than a truncated status line.
-
-   The 16px on the input above is NOT available to trade here, even
-   though a file input never raises a keyboard and so never
-   triggers the iOS zoom that number exists for: the size is shared
-   by the button and the status text, and the status text is the
-   part that has to stay legible.
-   ============================================================ */
-.fr-file::file-selector-button {
-    appearance: none;
-    -webkit-appearance: none;
-    /* margin, not the plate's gap: flex/grid gaps do not reach
-       into a UA shadow tree, and the status text beside this is not
-       a sibling box we can space. `display: flex` on the input is
-       accepted by the cascade and changes nothing about the shadow
-       layout — verified, not assumed. */
-    margin: 0 10px 0 0;
-    min-height: 44px;
-    padding: 0 12px;
-    font-family: var(--us-mono);
-    font-size: 0.75rem;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--chalk);
-    background: var(--machine-2);
-    border: 1px solid var(--concrete-2);
+.fr-drop {
+    display: grid;
+    justify-items: center;
+    align-content: center;
+    gap: 4px;
+    box-sizing: border-box;
+    /* Bigger than any button, which is the point: this is the primary
+       act of the page and it should be the largest target on it. */
+    min-height: 108px;
+    padding: 18px 16px;
+    text-align: center;
+    background: var(--machine);
+    border: 1px dashed var(--concrete-2);
     border-radius: 2px;
     cursor: pointer;
 }
 
-.fr-file:hover::file-selector-button {
+.fr-drop-glyph {
+    font-family: var(--us-display);
+    font-size: 1.7rem;
+    line-height: 1;
+    font-weight: 300;
+    color: var(--concrete-4);
+}
+
+.fr-drop-line {
+    font-family: var(--us-mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--chalk-dim);
+}
+
+.fr-drop-sub {
+    font-family: var(--us-mono);
+    font-size: 0.68rem;
+    line-height: 1.4;
+    color: var(--concrete-3);
+    /* A filename can be long and has no spaces to break on. */
+    overflow-wrap: anywhere;
+}
+
+.fr-drop-thumb {
+    /* NO FIXED RATIO AND NO `cover`. She is checking she picked the
+       right photograph, so cropping it to a square is the one thing
+       this must not do. `height: auto` for the reason the album cover
+       on the song page had to learn the hard way — a sized box plus
+       object-fit is how you hide two thirds of an image. */
+    max-width: 100%;
+    max-height: 180px;
+    width: auto;
+    height: auto;
+    border-radius: 2px;
+    background: var(--void);
+}
+
+/* CHOSEN. Solid edge, and the invitation glyph goes — the zone has stopped
+   asking for something.
+
+   --blue-LIGHT, not --blue-brand, and that was measured rather than picked.
+   --blue-brand is 2.36:1 against --machine, under the 3:1 WCAG 1.4.11 asks of a
+   component boundary — and on this page the boundary IS the state, so a border
+   nobody can see is a state nobody can see. Same error the delete control made
+   twice with --concrete-1. --blue-light measures 4.72:1. */
+.fr-photo-input:valid + .fr-drop {
+    border-style: solid;
     border-color: var(--blue-light);
-    color: var(--chalk);
+}
+
+.fr-photo-input:valid + .fr-drop .fr-drop-glyph {
+    display: none;
+}
+
+.fr-photo-input:valid + .fr-drop .fr-drop-sub {
+    color: var(--chalk-dim);
+}
+
+/* Focus lands on the real input, which is clipped, so the ring has to
+   be drawn on the thing standing in front of it. */
+.fr-photo-input:focus-visible + .fr-drop {
+    outline: 2px solid var(--blue-light);
+    outline-offset: 2px;
+    border-color: var(--blue-light);
+}
+
+.fr-drop:hover {
+    border-color: var(--blue-light);
 }
 
 .fr-input:focus-visible,
-.fr-file:focus-visible,
 .fr-go:focus-visible {
     outline: 2px solid var(--blue-light);
     outline-offset: 2px;
@@ -374,8 +399,7 @@
    whole plate. This adds the border change the song page's fields
    already had, so a focused control is identifiable without
    relying on the ring alone. */
-.fr-input:focus-visible,
-.fr-file:focus-visible {
+.fr-input:focus-visible {
     border-color: var(--blue-light);
 }
 
