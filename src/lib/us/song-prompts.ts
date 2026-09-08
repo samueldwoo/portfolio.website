@@ -296,11 +296,9 @@ export const NAMED_ARTISTS: readonly string[] = [
   'Kanye',
   /* Proposed as adjacent to the names above: melodic rap and trap first, then the R&B
      side of what they post. One prompt each, so a wrong guess here costs one day. */
-  'Polo G',
   'Bryson Tiller',
   'Lil Baby',
   'Young Thug',
-  'Rod Wave',
   'Roddy Ricch',
   'Don Toliver',
   'Playboi Carti',
@@ -326,134 +324,121 @@ export const NAMED_ARTISTS: readonly string[] = [
  * thirteen consecutive days of "your favourite X song" is a quiz.
  */
 export const SONG_PROMPTS: readonly string[] = [
-  /* ---- AN ERA, NEVER A SINGLE YEAR. See the header: "your favourite song from
-     2005" is a trivia question, and the honest answer to it is usually "hold on".
-     A stretch of years is still narrow enough that two picks compare. ---- */
-  'your favourite song from the early 2000s',
-  'your favourite song from the late 2000s',
-  'your favourite song from the early 2010s',
-  'your favourite song from the late 2010s',
-  'your favourite song from the 2020s so far',
-  'your favourite song from the 90s',
-  'your favourite song from the 80s',
-  'the best song of the 2000s',
-  'the best song of the 2010s',
-  'the song that owned last summer',
-  'the best song of this year so far',
+  /* ---- THE ORDER IS THE SCHEDULE, AND IT IS INTERLEAVED ON PURPOSE ----------------
+     THIS ARRAY IS NO LONGER GROUPED BY CATEGORY, and losing that readability was the
+     price of fixing something a reader could not see but a user could: the categories
+     were contiguous, the rotation walks the list one day at a time, so being inside a
+     category MEANT being inside it for a fortnight. Fifteen of seventeen consecutive
+     days came out as "your favourite X song" — exactly the name quiz that three
+     separate artist clusters were supposed to prevent. Appending thirteen new artists
+     into one of those clusters defeated the intent, and nothing failed, because
+     grouping-by-theme and spacing-in-time are different properties and only one of them
+     was ever written down.
 
-  /* ---- RIGHT NOW AND LATELY, which is the easiest shape in the list and the most
-     comparable. Every other prompt asks somebody to search their memory; these ask
-     what is actually playing, so the answer is already in hand and both halves are
-     reporting the same kind of thing on the same day. ---- */
-  'your hype song right now',
-  'the rap song you have been playing a lot lately',
-  'the R&B song you have been playing a lot lately',
-  'the song you have had on repeat lately',
-  'the last song you added to a playlist',
-  'the last song you sent somebody',
-  'your shower song',
-  'the song you woke up with in your head',
+     So the artist prompts are dealt out evenly across the whole list — one every ~2.4
+     entries, never two in a row — and the other categories are round-robined against
+     each other so eras and genres do not clump either.
 
-  /* ---- NAMED ARTISTS, cluster one. Only from NAMED_ARTISTS above, and FOUR SHAPES
-     per artist rather than one — see the header on why the shape carries more of the
-     weight than the name does. ---- */
+     DO NOT RE-SORT THIS INTO GROUPS. `test:song-prompts` asserts the longest run of
+     artist-named prompts, so tidying it by theme fails the suite rather than quietly
+     bringing the quiz back. Appending is still safe: one new entry at the end cannot
+     create a run. Adding several artists in a row can, which is precisely the mistake
+     that was made here.
+     ------------------------------------------------------------------------------- */
   'your favourite Drake song',
+  'your favourite song from the early 2000s',
   'the best Drake verse',
-  'the best guest verse Drake ever did',
-  'the best beat on any Drake song',
-  'your favourite Travis Scott song',
-  'the best Travis Scott verse',
-  'the best beat on any Travis Scott song',
-  'the best feature on any Travis Scott song',
-
-  /* ---- A GENRE ANYBODY CAN ANSWER. Kept deliberately broad — see the header on
-     why the niche ones went. ---- */
   'your favourite rap song',
+  'your hype song right now',
+  'the best guest verse Drake ever did',
+  'the best song for a long drive',
+  'the best beat on any Drake song',
+  'the best beat in any song',
+  'your favourite Travis Scott song',
+  'your favourite song by an artist you have never mentioned to me',
+  'your favourite song from the late 2000s',
+  'the best Travis Scott verse',
   'your favourite R&B song',
+  'the best beat on any Travis Scott song',
+  'the rap song you have been playing a lot lately',
+  'the best feature on any Travis Scott song',
+  'the best song for the start of a night out',
+  'the best hook in any song',
+  'your favourite Gunna song',
+  'the best song by the artist you have played most this year',
+  'the best Gunna verse',
+  'your favourite song from the early 2010s',
   'your favourite pop song',
+  'the best guest verse Gunna ever did',
+  'the R&B song you have been playing a lot lately',
+  'the best beat on any Gunna song',
+  'the best song for walking home at 2am',
+  'your favourite Future song',
+  'your favourite song with a sample you can name',
+  'your favourite song by a band',
+  'the best Future verse',
+  'your favourite song from the late 2010s',
+  'the best guest verse Future ever did',
   'your favourite rock song',
+  'the best beat on any Future song',
+  'the song you have had on repeat lately',
+  'the best song for a rainy afternoon',
+  'the best intro on any song',
+  'your favourite cover that beats the original',
+  'your favourite Lil Wayne song',
+  'a song where the feature is better than the main artist',
+  'your favourite Yeat song',
+  'your favourite song from the 2020s so far',
   'your favourite country song',
+  'your favourite 21 Savage song',
+  'the last song you added to a playlist',
+  'your favourite Kodak Black song',
+  'the best song to cook to',
+  'your favourite A$AP Ferg song',
+  'the best duet',
+  'your favourite song from a movie',
+  'your favourite BigXthaPlug song',
+  'your favourite song from the 90s',
+  'your favourite PARTYNEXTDOOR song',
   'your favourite jazz song',
+  'your favourite Kanye song',
+  'the last song you sent somebody',
+  'the best song to fall asleep to',
+  'your favourite Young Thug song',
+  'your favourite song under two minutes',
+  'your favourite Lil Baby song',
+  'your favourite song from the 80s',
+  'your favourite Roddy Ricch song',
   'your favourite afrobeats or dancehall song',
+  'your shower song',
+  'your favourite Don Toliver song',
+  'the song you would be embarrassed to play out loud',
+  'your favourite Playboi Carti song',
+  'your favourite live version of a song',
+  'your favourite Lil Uzi Vert song',
+  'the best song of the 2000s',
   'your favourite house song',
+  'your favourite Kendrick Lamar song',
+  'the song you woke up with in your head',
+  'your favourite Bryson Tiller song',
+  'the song you would defend in an argument',
+  'the best song of the 2010s',
+  'your favourite Brent Faiyaz song',
   'your favourite EDM song',
+  'your favourite SZA song',
+  'the song that owned last summer',
+  'the best song The Weeknd ever made',
   'your favourite dubstep song',
+  'the best song of this year so far',
+  'your favourite Daniel Caesar song',
   'your favourite love song',
+  'your favourite Joji song',
   'your favourite sad song',
+  'your favourite Calvin Harris song',
   'your favourite slow song',
   'your favourite party song',
-  'your favourite song to drive to',
-
-  /* ---- named artists, cluster two: the other two who carry four shapes ---- */
-  'your favourite Gunna song',
-  'the best Gunna verse',
-  'the best guest verse Gunna ever did',
-  'the best beat on any Gunna song',
-  'your favourite Future song',
-  'the best Future verse',
-  'the best guest verse Future ever did',
-  'the best beat on any Future song',
-
-  /* ---- they pick the artist, for the reason in the header ---- */
-  'your favourite song by an artist you have never mentioned to me',
-  'the best song by the artist you have played most this year',
-  'your favourite song by a band',
-  'a song where the feature is better than the main artist',
-  'your favourite song from a movie',
-
-  /* ---- ONE PART of a song, so both answers are about the same thing ---- */
-  'the best beat in any song',
-  'the best hook in any song',
-  'the best intro on any song',
-  'your favourite song with a sample you can name',
-  'your favourite cover that beats the original',
-  'the best duet',
-  'your favourite song under two minutes',
-  'your favourite live version of a song',
-
-  /* ---- a moment, but anchored to a superlative so the two picks still compare.
-     "a song for walking home at 2am" is a mood; "the BEST song for walking home
-     at 2am" is a question with one answer each. ---- */
-  'the best song for a long drive',
-  'the best song for the start of a night out',
-  'the best song for walking home at 2am',
-  'the best song for a rainy afternoon',
-  'the best song to cook to',
-  'the best song to fall asleep to',
-  'the song you would be embarrassed to play out loud',
-  'the song you would defend in an argument',
-
-  /* ---- named artists, cluster three ---- */
-  'your favourite Lil Wayne song',
-  'your favourite Yeat song',
-  'your favourite 21 Savage song',
-  'your favourite Kodak Black song',
-  'your favourite A$AP Ferg song',
-  'your favourite BigXthaPlug song',
-  'your favourite PARTYNEXTDOOR song',
-  'your favourite Kanye song',
-  'your favourite Young Thug song',
-  'your favourite Lil Baby song',
-  'your favourite Polo G song',
-  'your favourite Rod Wave song',
-  'your favourite Roddy Ricch song',
-  'your favourite Don Toliver song',
-  'your favourite Playboi Carti song',
-  'your favourite Lil Uzi Vert song',
-  'your favourite Kendrick Lamar song',
-  'your favourite Bryson Tiller song',
-  'your favourite Brent Faiyaz song',
-  'your favourite SZA song',
-  'the best song The Weeknd ever made',
-
-  /* ---- named artists, cluster four: the ones who are not rappers. They were never
-     candidates for the verse and beat shapes even before the trim, because a "best
-     verse" prompt about a producer is a category error rather than a harder
-     question. ---- */
-  'your favourite Daniel Caesar song',
-  'your favourite Joji song',
-  'your favourite Calvin Harris song',
   'the best song The Chainsmokers ever made',
+  'your favourite song to drive to',
 ];
 
 /**

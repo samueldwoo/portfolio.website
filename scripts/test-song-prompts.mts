@@ -211,6 +211,38 @@ console.log('\n  --- 6. the list is fit for a PUBLIC repository, and for a bad d
       .map((w) => ({ prompt: p, word: w })),
   );
   is('every capitalised word is an approved artist or genre', offenders.length === 0, offenders);
+  /* ---- SPACING IN TIME, WHICH IS NOT THE SAME PROPERTY AS GROUPING BY THEME ------
+     THE ORDER OF THIS ARRAY IS A SCHEDULE. The rotation walks it one day at a time, so
+     a run of same-shaped entries is a run of same-shaped DAYS. The list was grouped by
+     category and read beautifully, and it served fifteen "your favourite X song" days
+     out of seventeen consecutive ones — a name quiz that three separate artist clusters
+     were supposed to prevent, defeated by appending thirteen new artists into one of
+     them. Nothing failed, because the intent lived in a comment.
+
+     So it is asserted instead. Two in a row is the ceiling: enough that appending a
+     name is still safe, tight enough that a theme-sorted list cannot pass. */
+  const isArtistPrompt = (p: string) => NAMED_ARTISTS.some((a) => p.includes(a));
+  let run = 0;
+  let longestRun = 0;
+  let runAt = '';
+  for (const p of SONG_PROMPTS) {
+    run = isArtistPrompt(p) ? run + 1 : 0;
+    if (run > longestRun) {
+      longestRun = run;
+      runAt = p;
+    }
+  }
+  is('no more than two artist prompts in a row', longestRun <= 2, { longestRun, endingAt: runAt });
+  /* And the artist prompts are spread across the WHOLE list rather than bunched at one
+     end, which a run check alone cannot see: three in the first half and thirty-seven in
+     the second passes "no long runs" and still gives one quiz month. */
+  const half = Math.floor(SONG_PROMPTS.length / 2);
+  const firstHalf = SONG_PROMPTS.slice(0, half).filter(isArtistPrompt).length;
+  const secondHalf = SONG_PROMPTS.slice(half).filter(isArtistPrompt).length;
+  is('artist prompts are spread across both halves of the rotation',
+    Math.abs(firstHalf - secondHalf) <= Math.ceil(SONG_PROMPTS.length / 10),
+    { firstHalf, secondHalf });
+
   /* The allowlist must not rot into permission for names nobody asks about. */
   const unused = NAMED_ARTISTS.filter((a) => !SONG_PROMPTS.some((p) => p.includes(a)));
   is('every approved artist is actually asked about', unused.length === 0, unused);
