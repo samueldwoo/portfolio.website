@@ -181,17 +181,36 @@ export function parseComment(raw: unknown): Comment | null {
 
   const id = typeof obj.id === 'string' ? obj.id : '';
   const text = normalizeComment(obj.text);
-  // No id or no text is not a comment. Everything else has a sane default.
-  if (!isCommentId(id) || !text) return null;
+  /* NO ID, NO TEXT, OR NO READABLE AUTHOR IS NOT A COMMENT. Everything else has a
+     sane default.
+
+     UNLIKE a list item, an unrecognised author is REFUSED rather than defaulted.
+     `parseItem` defaults to 'her' and says so, because losing a line to a mangled
+     field is the worse trade there. Here the author decides who may edit and delete
+     it, so guessing would hand one of them authority over the other's words.
+
+     THIS GUARD WAS DESCRIBED IN THIS FILE FOR A FORTNIGHT WITHOUT EXISTING — the
+     comment said "refused" and the code read `isWho(obj.by) ? obj.by : 'her'`, and
+     the suite's own section heading claimed the rule while asserting nothing about
+     it. So the cost of guessing is worth stating in full rather than left implied:
+     `day.astro` gates the edit and delete controls on `cm.by === viewer`, so the
+     default handed HER those controls over a record that may have been his — and
+     `editComment` writes `{...found, text}` back, which means one press would have
+     PERSISTED the guess and turned his comment into hers permanently. A rendering
+     mistake became a stored one.
+
+     What refusing costs, said out loud because it is a real cost: the record stays
+     in the hash, invisible, and neither of them can delete it through the page —
+     `mayChange` is asked about a comment that was looked up, and this one no longer
+     looks up. That is already true of every other field this function refuses on,
+     and `countComments` in `comments.ts` argues the same direction for the cap: an
+     unparseable field still occupies the store, and bounding the store is the job.
+     One stranded record beats one person silently rewriting the other's words. */
+  if (!isCommentId(id) || !text || !isWho(obj.by)) return null;
 
   return {
     id,
-    /* UNLIKE a list item, an unrecognised author is REFUSED rather than defaulted.
-       `parseItem` defaults to 'her' and says so, because losing a line to a mangled
-       field is the worse trade there. Here the author decides who may edit and
-       delete it, so guessing would hand one of them authority over the other's
-       words. A comment whose author cannot be read is not a comment. */
-    by: isWho(obj.by) ? obj.by : 'her',
+    by: obj.by,
     text,
     at: count(obj.at),
     editedAt: count(obj.editedAt),

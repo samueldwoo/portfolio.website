@@ -181,6 +181,38 @@ console.log('\n  --- 5. parsing is total, and a bad author is not guessed into p
   is('a string `at` is read', parseComment(JSON.stringify({ id: ID_A, by: 'her', text: 'x', at: '99' }))?.at === 99);
   is('editedAt defaults to 0', parseComment(JSON.stringify({ id: ID_A, by: 'her', text: 'x' }))?.editedAt === 0);
 
+  /* THE SECTION HEADING ABOVE PROMISED THIS AND NOTHING ASSERTED IT. `parseComment`
+     defaulted an unreadable author to 'her' for a fortnight while its own comment
+     said in caps that it refused to — and the gap was invisible because every
+     fixture in this suite carries a valid `by`, so the defaulted branch was never
+     once evaluated. A test that only ever exercises the happy field cannot see a
+     wrong default; the value has to be BROKEN on purpose.
+
+     Why it is worth this many cases: `day.astro` gates the edit and delete controls
+     on `cm.by === viewer`, so 'her' is not a harmless placeholder, it is a grant.
+     And `editComment` writes the parsed record back, so one press would have stored
+     the guess and made his comment hers for good. Each shape below is something a
+     hand-edit or a future field rename actually produces. */
+  const noAuthor = (by: unknown) => JSON.stringify({ id: ID_A, by, text: 'xxxx', at: 1 });
+  is('a MISSING author is null, not hers',
+    parseComment(JSON.stringify({ id: ID_A, text: 'xxxx', at: 1 })) === null,
+    parseComment(JSON.stringify({ id: ID_A, text: 'xxxx', at: 1 })));
+  is('an EMPTY-STRING author is null', parseComment(noAuthor('')) === null, parseComment(noAuthor('')));
+  /* `''` specifically, because CLAUDE.md records that this store writes empty
+     strings on purpose for "nobody told us" — so it is the likeliest wrong value
+     here, and the one a `??` guard would have waved through. */
+  is('an UNKNOWN word is null', parseComment(noAuthor('them')) === null, parseComment(noAuthor('them')));
+  is('the right word in the wrong CASE is null', parseComment(noAuthor('Her')) === null, parseComment(noAuthor('Her')));
+  is('a number author is null', parseComment(noAuthor(7)) === null, parseComment(noAuthor(7)));
+  is('a null author is null', parseComment(noAuthor(null)) === null, parseComment(noAuthor(null)));
+  is('an object author is null', parseComment(noAuthor({ who: 'her' })) === null, parseComment(noAuthor({ who: 'her' })));
+  is('a truthy non-Who is null', parseComment(noAuthor(true)) === null, parseComment(noAuthor(true)));
+  /* BOTH GOOD VALUES STILL PARSE. A guard that refuses everything would pass every
+     assertion above while emptying the thread — the same shape as the checker that
+     could not fail. Asserted from both sides, per CLAUDE.md. */
+  is('and `her` still parses', parseComment(noAuthor('her'))?.by === 'her', parseComment(noAuthor('her')));
+  is('and `him` still parses', parseComment(noAuthor('him'))?.by === 'him', parseComment(noAuthor('him')));
+
   is('isCommentId accepts a real uuid', isCommentId(ID_A));
   is('and refuses a path', !isCommentId('../../.env'));
   is('and refuses a number', !isCommentId(1));
