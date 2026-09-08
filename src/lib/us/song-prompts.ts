@@ -298,13 +298,15 @@ export const NAMED_ARTISTS: readonly string[] = [
      side of what they post. One prompt each, so a wrong guess here costs one day. */
   'Bryson Tiller',
   'Lil Baby',
-  'Young Thug',
-  'Roddy Ricch',
   'Don Toliver',
   'Playboi Carti',
   'Lil Uzi Vert',
   'Kendrick Lamar',
   'Brent Faiyaz',
+  'Rihanna',
+  'Chris Brown',
+  'Usher',
+  'Frank Ocean',
   'SZA',
   'The Weeknd',
   /* Not rappers at all, so they were never candidates for the verse and beat shapes
@@ -312,7 +314,6 @@ export const NAMED_ARTISTS: readonly string[] = [
   'Daniel Caesar',
   'Joji',
   'Calvin Harris',
-  'The Chainsmokers',
 ];
 
 /**
@@ -356,6 +357,7 @@ export const SONG_PROMPTS: readonly string[] = [
   'the best beat in any song',
   'your favourite Travis Scott song',
   'your favourite song by an artist you have never mentioned to me',
+  'your favourite Rihanna song',
   'your favourite song from the late 2000s',
   'the best Travis Scott verse',
   'your favourite R&B song',
@@ -375,6 +377,7 @@ export const SONG_PROMPTS: readonly string[] = [
   'the best song for walking home at 2am',
   'your favourite Future song',
   'your favourite song with a sample you can name',
+  'your favourite Chris Brown song',
   'your favourite song by a band',
   'the best Future verse',
   'your favourite song from the late 2010s',
@@ -396,6 +399,7 @@ export const SONG_PROMPTS: readonly string[] = [
   'the best song to cook to',
   'your favourite A$AP Ferg song',
   'the best duet',
+  'your favourite Usher song',
   'your favourite song from a movie',
   'your favourite BigXthaPlug song',
   'your favourite song from the 90s',
@@ -404,11 +408,9 @@ export const SONG_PROMPTS: readonly string[] = [
   'your favourite Kanye song',
   'the last song you sent somebody',
   'the best song to fall asleep to',
-  'your favourite Young Thug song',
   'your favourite song under two minutes',
   'your favourite Lil Baby song',
   'your favourite song from the 80s',
-  'your favourite Roddy Ricch song',
   'your favourite afrobeats or dancehall song',
   'your shower song',
   'your favourite Don Toliver song',
@@ -422,6 +424,7 @@ export const SONG_PROMPTS: readonly string[] = [
   'the song you woke up with in your head',
   'your favourite Bryson Tiller song',
   'the song you would defend in an argument',
+  'your favourite Frank Ocean song',
   'the best song of the 2010s',
   'your favourite Brent Faiyaz song',
   'your favourite EDM song',
@@ -437,7 +440,6 @@ export const SONG_PROMPTS: readonly string[] = [
   'your favourite Calvin Harris song',
   'your favourite slow song',
   'your favourite party song',
-  'the best song The Chainsmokers ever made',
   'your favourite song to drive to',
 ];
 
