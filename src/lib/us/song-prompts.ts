@@ -450,10 +450,42 @@ export const SONG_PROMPTS: readonly string[] = [
  * `list` is injectable so the rotation can be asserted against a known short list
  * rather than against whatever happens to be committed. Production never passes it.
  */
+/**
+ * ROTATION SLIP, IN WHOLE ROTATION DAYS.
+ *
+ * A dial for nudging the whole schedule without touching the array. Raising it by one
+ * makes every prompt land one rotation day LATER — tomorrow gets what today would have
+ * had, and so on down the list.
+ *
+ * WHY IT IS A NUMBER AND NOT A RE-SORT. The alternative is rotating the array itself,
+ * which fights two things that now live in it: the interleave that keeps artist prompts
+ * from bunching, and the two test guards that assert it. A slip leaves the order — and
+ * therefore both guards — completely alone.
+ *
+ * SET TO 1 ON 2026-09-08, because they had already posted that day's songs when the
+ * list changed underneath them and the next prompt was wanted for the following day
+ * instead. That is the whole reason this exists: the list is edited freely now, and an
+ * edit that removes an entry BEFORE today's index pulls the whole future forward by one,
+ * which lands a new question on a day already answered.
+ *
+ * SAFE BY THE SAME PROPERTY THAT MADE THE LIST EDITABLE: the prompt is copied onto the
+ * song record at post time, so nothing in the archive is relabelled by changing this.
+ * It only decides what is asked from here on.
+ *
+ * COUNTED IN ROTATION DAYS, NOT CALENDAR DAYS. Sunday serves the week prompt and does
+ * not consume an index, so one step here is one non-Sunday day — which is what "the next
+ * prompt lands tomorrow" actually means to somebody reading the page.
+ */
+const ROTATION_OFFSET = 1;
+
 export function songPromptFor(date: string, list: readonly string[] = SONG_PROMPTS): string {
   if (isSongWeekPrompt(date)) return SONG_WEEK_PROMPT;
   if (list.length === 0) return '';
-  const i = ((rotationIndex(dayNumber(date)) % list.length) + list.length) % list.length;
+  /* The double modulo is what makes a positive OFFSET safe: subtracting it can take the
+     index negative near the epoch, and `-1 % n` is `-1` in JavaScript, not `n - 1`. */
+  const i =
+    (((rotationIndex(dayNumber(date)) - ROTATION_OFFSET) % list.length) + list.length) %
+    list.length;
   return list[i] ?? '';
 }
 
